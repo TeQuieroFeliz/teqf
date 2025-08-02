@@ -15,7 +15,6 @@ function ExportToPdfComp({ event, subEvents }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const isAdminPath = pathname.includes('admin');
 
-
   const handleExportPDF = async ({ event, subEvents }: any) => {
     try {
       const response = await fetch('/api/generate-pdf', {
@@ -40,7 +39,6 @@ function ExportToPdfComp({ event, subEvents }: any) {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-
     } catch (error) {
       console.error('Export failed:', error);
       alert('Failed to export PDF. Please try again.');

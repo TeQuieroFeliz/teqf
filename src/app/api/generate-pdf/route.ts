@@ -1,21 +1,7 @@
 import { NextResponse } from 'next/server';
+import sharp from 'sharp';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { credential } from 'firebase-admin';
-import sharp from 'sharp';
-
-// Initialize Firebase Admin (do this once)
-if (!getApps().length) {
-  initializeApp({
-    credential: credential.cert({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  });
-}
 
 export async function POST(request: Request) {
   try {
@@ -87,10 +73,79 @@ export async function POST(request: Request) {
         currentY += 4;
       });
 
-      currentY += 3;
+      // Add subEvent colors right after metadata, before the table
+      if (subEvent.colors && subEvent.colors.length > 0) {
+        currentY += 4; // Extra space before colors
+        doc.setFont('helvetica', 'bold');
+        doc.text('Event Colors:', 14, currentY);
+        currentY += 4;
 
-      // ✅ **Robust Image Fetching**
-      // Fetches images and correctly identifies their type (JPEG, PNG, etc.).
+        doc.setFont('helvetica', 'normal');
+        const colorSquareSize = 5;
+        const startX = 20; // Indent slightly from the left
+        let currentX = startX;
+        const maxWidth = pageWidth - 20;
+        const borderWidth = 0.3; // Border width in mm
+
+        // First pass to calculate needed height
+        let neededHeight = colorSquareSize;
+        let lineWidth = 0;
+
+        subEvent.colors.forEach((colorObj: any) => {
+          const colorWidth =
+            colorSquareSize + 10 + colorObj.colorCode.length * 1.5;
+          if (lineWidth + colorWidth > maxWidth - startX) {
+            neededHeight += colorSquareSize + 3;
+            lineWidth = colorWidth;
+          } else {
+            lineWidth += colorWidth;
+          }
+        });
+
+        // Check if we need a new page
+        if (currentY + neededHeight > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          currentY = 15;
+        }
+
+        // Draw colors
+        subEvent.colors.forEach((colorObj: any) => {
+          const colorWidth =
+            colorSquareSize + 10 + colorObj.colorCode.length * 1.5;
+
+          if (currentX + colorWidth > maxWidth) {
+            currentX = startX;
+            currentY += colorSquareSize + 3;
+          }
+
+          // Draw color square with border
+          doc.setDrawColor(0, 0, 0); // Black border
+          doc.setLineWidth(borderWidth);
+
+          // First draw the filled rectangle
+          doc.setFillColor(colorObj.colorCode);
+          doc.rect(currentX, currentY, colorSquareSize, colorSquareSize, 'F');
+
+          // Then draw the border rectangle
+          doc.rect(currentX, currentY, colorSquareSize, colorSquareSize, 'S');
+
+          // Draw color code text
+          doc.setTextColor(0, 0, 0);
+          doc.text(
+            colorObj.colorCode,
+            currentX + colorSquareSize + 2,
+            currentY + colorSquareSize / 2 + 1
+          );
+
+          currentX += colorWidth;
+        });
+
+        currentY += colorSquareSize + 6; // Space after colors
+      }
+
+      currentY += 3; // Space before table
+
+      // Image fetching and table generation remains the same...
       const images: ({ data: string; format: string } | null)[] =
         await Promise.all(
           (subEvent.items || []).map(async (item: any) => {
@@ -108,15 +163,12 @@ export async function POST(request: Request) {
               let finalImageBuffer: Buffer;
               let finalImageFormat: 'PNG' | 'JPEG' | 'WEBP';
 
-              // ✅ Check if the image is an SVG and convert it
               if (contentType === 'image/svg+xml') {
                 finalImageBuffer = await sharp(Buffer.from(buffer))
                   .png()
                   .toBuffer();
                 finalImageFormat = 'PNG';
-              }
-              // Handle other supported types
-              else if (
+              } else if (
                 ['image/jpeg', 'image/png', 'image/webp'].includes(
                   contentType || ''
                 )
@@ -126,9 +178,7 @@ export async function POST(request: Request) {
                   | 'PNG'
                   | 'JPEG'
                   | 'WEBP';
-              }
-              // If unsupported, skip it
-              else {
+              } else {
                 console.warn(`Unsupported image type: ${contentType}`);
                 return null;
               }
@@ -143,8 +193,6 @@ export async function POST(request: Request) {
           })
         );
 
-      // ✅ **Reordered Table Body**
-      // An empty placeholder is added for the image at the second position.
       const itemRows = (subEvent.items || []).map((item: any, i: number) => {
         const colorsDisplay = (item.colors || [])
           .map((color: any) => `${color.name} (${color.quantity})`)
@@ -165,8 +213,6 @@ export async function POST(request: Request) {
 
       autoTable(doc, {
         startY: currentY,
-        // ✅ **Reordered Table Head**
-        // 'Image' column is now second.
         head: [
           [
             '#',
@@ -203,8 +249,6 @@ export async function POST(request: Request) {
         alternateRowStyles: {
           fillColor: [248, 248, 248],
         },
-        // ✅ **Updated Column Styles**
-        // Column indices and widths are adjusted for the new layout.
         columnStyles: {
           0: { cellWidth: 8, halign: 'center' }, // #
           1: { cellWidth: 22, halign: 'center' }, // Image
@@ -216,11 +260,9 @@ export async function POST(request: Request) {
           7: { cellWidth: 15 }, // Type
           8: { cellWidth: 32 }, // Description
         },
-        // ✅ **Set Row Height for Images**
-        // This hook ensures enough space is allocated for each row with an image, preventing cutoff.
-        didParseCell: function (data) {
+        didParseCell: function (data: any) {
           const imageColumnIndex = 1;
-          const imageRowHeight = 22; // Height in mm, should be >= image size
+          const imageRowHeight = 22;
 
           if (
             data.column.index === imageColumnIndex &&
@@ -231,10 +273,8 @@ export async function POST(request: Request) {
             data.row.height = imageRowHeight;
           }
         },
-        // ✅ **Draw Larger, Clearer Images**
-        // Draws a larger image (20mm) centered in the cell.
-        didDrawCell: function (data) {
-          const imageColumnIndex = 1; // New index for the Image column
+        didDrawCell: function (data: any) {
+          const imageColumnIndex = 1;
 
           if (
             data.column.index === imageColumnIndex &&
@@ -247,7 +287,7 @@ export async function POST(request: Request) {
 
             const cellWidth = data.cell.width;
             const cellHeight = data.cell.height;
-            const imgSize = 16; // Increased image size
+            const imgSize = 16;
 
             const imgX = data.cell.x + (cellWidth - imgSize) / 2;
             const imgY = data.cell.y + (cellHeight - imgSize) / 2;

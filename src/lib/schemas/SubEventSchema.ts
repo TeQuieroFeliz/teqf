@@ -9,8 +9,10 @@ export const SubEventFormSchema = z
     address: z.string().min(5, 'Address must be at least 5 characters.'),
     startTime: z.string({ error: 'Start time is required.' }),
     finishTime: z.string({ error: 'Finish time is required.' }),
-    colorName: z.string().optional(),
-    colorCode: z.string().optional(),
+    colors: z
+      .array(z.object({ colorCode: z.string().min(3, 'Color is required') }))
+      .min(3, 'Atleast enter 3 colors')
+      .max(6, 'Max limit is 6'),
   })
   .refine(
     (data) => {
@@ -45,8 +47,7 @@ export type SubEventDb = {
   startTime: string; // e.g. "01:30 PM"
   finishTime: string; // e.g. "10:30 PM"
   eventId: string;
-  colorCode?: string;
-  colorName?: string;
+  colors: { colorCode: string }[];
   items: Item[];
 };
 

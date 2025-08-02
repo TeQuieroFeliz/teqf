@@ -219,7 +219,7 @@ export default function ProductForm({
 
           {/* Colors */}
           <div className="space-y-4">
-            <FormLabel>Colors</FormLabel>
+            <FormLabel>Colors Pallete</FormLabel>
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-2">
                 <FormField

@@ -39,7 +39,7 @@ export default function AdminSidebar() {
   );
 
   return (
-    <>
+    <div>
       {/* Mobile Top Bar */}
       <div className="lg:hidden p-2 border-b">
         <Sheet open={open} onOpenChange={setOpen}>
@@ -62,12 +62,12 @@ export default function AdminSidebar() {
       </div>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block lg:w-64 bg-white border-r min-h-screen">
+      <aside className="hidden lg:block lg:w-64 bg-white border-r min-h-screen relative">
         <div className="p-4">
           <h2 className="text-xl font-bold mb-4">Admin Menu</h2>
           <NavLinks />
         </div>
       </aside>
-    </>
+    </div>
   );
 }

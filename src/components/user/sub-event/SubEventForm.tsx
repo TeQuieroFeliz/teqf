@@ -1,8 +1,8 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CalendarIcon, ClockIcon, PlusCircle } from 'lucide-react';
+import { CalendarIcon, ClockIcon, Minus, PlusCircle } from 'lucide-react';
 import moment from 'moment';
-import { useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { addSubEvent } from '@/actions/sub-event/addSubEvent';
@@ -73,11 +73,18 @@ export function SubEventForm({ products, subEvent }: Props) {
       startTime: subEvent?.startTime || '',
       finishTime: subEvent?.finishTime || '',
       date: subEvent && subEvent.date ? new Date(subEvent.date) : undefined,
-      colorName: subEvent?.colorName || '',
-      colorCode: subEvent?.colorCode || '#FFFFFF',
+      colors: subEvent?.colors || [
+        { colorCode: '#fff' },
+        { colorCode: '#fff' },
+        { colorCode: '#fff' },
+      ],
     },
   });
 
+  const { append, fields, remove } = useFieldArray({
+    control: form.control,
+    name: 'colors',
+  });
   useEffect(() => {
     if (subEvent) {
       setItems(subEvent.items);
@@ -88,6 +95,7 @@ export function SubEventForm({ products, subEvent }: Props) {
         address: subEvent.address,
         startTime: subEvent.startTime,
         finishTime: subEvent.finishTime,
+        colors: subEvent.colors,
         date: subEvent.date ? new Date(subEvent.date) : undefined,
       });
     }
@@ -313,62 +321,88 @@ export function SubEventForm({ products, subEvent }: Props) {
                   )}
                 />
                 {/* Color Picker */}
-                <div className="flex-1/2">
-                  <FormLabel className="text-base">Color</FormLabel>
-                  <div className="flex items-center mt-1.5 justify-center gap-2">
-                    <FormField
-                      control={form.control}
-                      name="colorName"
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormLabel className="sr-only">Color Name</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Color name"
-                              {...field}
-                              onBlur={handleBlur}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="colorCode"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="sr-only">Color Code</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="size-10 rounded-md border cursor-pointer"
-                                    style={{ backgroundColor: field.value }}
-                                  />
-                                  <Input
-                                    className="w-24"
-                                    placeholder="#FFFFFF"
-                                    {...field}
-                                    onBlur={handleBlur}
-                                  />
-                                </div>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto">
-                              <HexColorPicker
-                                color={field.value}
-                                onChange={field.onChange}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                <div className="flex-1/2 ">
+                  <FormLabel className="text-base">Color Palette</FormLabel>
+                  <div className="flex items-center justify-start gap-2 flex-wrap mt-1.5">
+                    <div className="flex items-center  justify-start gap-2 flex-wrap">
+                      {fields.map((field, index) => (
+                        <div key={field.id} className="flex items-center gap-2">
+                          <FormField
+                            control={form.control}
+                            name={`colors.${index}.colorCode`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="sr-only">
+                                  Color Code
+                                </FormLabel>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <FormControl>
+                                      <div
+                                        className="size-10 rounded-md border flex items-start justify-end cursor-pointer relative"
+                                        style={{
+                                          backgroundColor: field.value,
+                                        }}
+                                      >
+                                        {fields.length > 3 && (
+                                          <Button
+                                            type="button"
+                                            variant="destructive"
+                                            className="absolute size-5 border-2 border-white items-center justify-center flex"
+                                            size={'icon'}
+                                            onClick={() => {
+                                              remove(index);
+                                            }}
+                                          >
+                                            <Minus size={3} />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </FormControl>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto">
+                                    <HexColorPicker
+                                      color={field.value}
+                                      onChange={field.onChange}
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {fields.length < 6 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => append({ colorCode: '#ffffff' })}
+                      >
+                        Add Color
+                      </Button>
+                    )}
+                    {subEvent && (
+                      <Button
+                        disabled={isEditing}
+                        type="button"
+                        variant="outline"
+                        className="bg-blue-500 hover:bg-blue-600 text-white hover:text-white"
+                        onClick={async () => {
+                          await handleEdit();
+                          toast.success('Colors has been updated');
+                        }}
+                      >
+                        Update
+                      </Button>
+                    )}
                   </div>
+                  {form.formState.errors.colors?.root?.message && (
+                    <p className="text-red-600 text-sm">
+                      {form.formState.errors.colors?.root?.message}
+                    </p>
+                  )}
                 </div>
               </div>
 
