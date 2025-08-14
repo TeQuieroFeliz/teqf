@@ -41,11 +41,11 @@ export default function AdminSidebar() {
   return (
     <div>
       {/* Mobile Top Bar */}
-      <div className="lg:hidden p-2 border-b">
+      <div className="lg:hidden p-2 w-10">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <button>
-              <Menu className="w-6 h-6" />
+              <Menu className="w-6 h-6 fixed top-[93px] left-2" />
             </button>
           </SheetTrigger>
           <SheetContent
@@ -62,8 +62,8 @@ export default function AdminSidebar() {
       </div>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block lg:w-64 bg-white border-r min-h-screen relative">
-        <div className="p-4">
+      <aside className="hidden lg:block lg:w-64 relative bg-white border-r min-h-screen ">
+        <div className="p-4 fixed top-[86px] left-0 h-fit w-64">
           <h2 className="text-xl font-bold mb-4">Admin Menu</h2>
           <NavLinks />
         </div>

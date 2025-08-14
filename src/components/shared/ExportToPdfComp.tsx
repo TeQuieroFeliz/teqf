@@ -70,7 +70,7 @@ function ExportToPdfComp({ event, subEvents }: any) {
           type="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="font-bold text-lg md:text-4xl max-w-lg p-2 border rounded-lg"
+          className="font-bold text-lg md:text-4xl max-w-lg md:h-16 p-2 border rounded-lg"
         />
       ) : (
         <h1 className="font-bold text-lg md:text-4xl">{event.title}</h1>

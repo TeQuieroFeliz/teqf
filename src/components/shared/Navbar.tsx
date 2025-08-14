@@ -6,7 +6,7 @@ import Image from 'next/image';
 
 function Navbar() {
   return (
-    <div className="px-4 py-2 flex items-center justify-between bg-slate-800 text-slate-100">
+    <div className="px-4 py-2 fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-slate-800/90 backdrop-blur-md text-slate-100">
       <Link
         href="/"
         className="font-semibold text-xl md:text-2xl flex items-center justify-center gap-x-1"

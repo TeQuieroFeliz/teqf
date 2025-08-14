@@ -50,7 +50,7 @@ function LoginForm() {
   };
 
   return (
-    <Card className="max-w-sm mx-auto">
+    <Card className="max-w-sm mx-auto mt-14">
       <CardHeader>
         <CardTitle className="font-semibold text-center text-2xl">
           Login Form

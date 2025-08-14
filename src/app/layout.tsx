@@ -38,7 +38,7 @@ export default function RootLayout({
           <Providers>
             <div className="flex flex-col min-h-screen justify-between">
               <Navbar />
-              <div className="overflow-x-hidden">
+              <div className="overflow-x-hidden pt-[86px]">
                 <main>{children}</main>
               </div>
               <Footer />

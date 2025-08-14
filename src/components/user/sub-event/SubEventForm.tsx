@@ -232,12 +232,12 @@ export function SubEventForm({ products, subEvent }: Props) {
     <Card>
       <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
         <CardTitle className="text-xl sm:text-2xl">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2 items-center justify-between">
             <span>
               {subEvent ? 'Sub Event Form' : 'Create New Sub Event Form'}
             </span>
             {subEvent && (
-              <div className="self-end sm:self-auto">
+              <div>
                 <DeleteSubEventDialog subEventId={subEvent.id} />
               </div>
             )}
@@ -313,6 +313,7 @@ export function SubEventForm({ products, subEvent }: Props) {
                             }}
                             disabled={(date) => date < new Date()}
                             captionLayout="dropdown"
+                            endMonth={new Date(2027, 11)}
                           />
                         </PopoverContent>
                       </Popover>

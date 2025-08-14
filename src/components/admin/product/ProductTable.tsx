@@ -40,12 +40,35 @@ export function ProductTable({
   const [data, setData] = useState<ProductType[]>(resolvedProducts);
   const [nameFilter, setNameFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [filteredData, setFilteredData] =
+    useState<ProductType[]>(resolvedProducts);
 
   useEffect(() => {
     if (resolvedProducts) {
       setData(resolvedProducts);
     }
   }, [resolvedProducts]);
+
+  useEffect(() => {
+    let result = resolvedProducts;
+
+    // Apply name filter
+    if (nameFilter) {
+      const searchLower = nameFilter.toLowerCase();
+      result = result.filter((product) =>
+        product.name.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      result = result.filter(
+        (product) => product.categoryName === categoryFilter
+      );
+    }
+
+    setFilteredData(result);
+  }, [nameFilter, categoryFilter, resolvedProducts]);
 
   const uniqueCategories = [
     'all',
@@ -114,25 +137,25 @@ export function ProductTable({
   ];
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
+    // getFilteredRowModel: getFilteredRowModel(),
     state: {
       globalFilter: `${nameFilter} ${categoryFilter}`,
     },
     initialState: { pagination: { pageSize: 10 } },
-    globalFilterFn: (row, columnId, filterValue) => {
-      const [name, category] = filterValue.split(' ');
-      const productName = row.getValue<string>('name').toLowerCase();
-      const productCategory = row.getValue<string>('categoryName');
+    // globalFilterFn: (row, columnId, filterValue) => {
+    //   const [name, category] = filterValue.split(' ');
+    //   const productName = row.getValue<string>('name').toLowerCase();
+    //   const productCategory = row.getValue<string>('categoryName');
 
-      const nameMatch = productName.includes(name.toLowerCase());
-      const categoryMatch = category === 'all' || productCategory === category;
+    //   const nameMatch = productName.includes(name.toLowerCase());
+    //   const categoryMatch = category === 'all' || productCategory === category;
 
-      return nameMatch && categoryMatch;
-    },
+    //   return nameMatch && categoryMatch;
+    // },
   });
 
   return (
