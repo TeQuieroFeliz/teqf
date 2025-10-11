@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from '@/firebase/server';
-import { getUser } from './get-user';
+import { getUserById } from './get-user';
 import { cookies } from 'next/headers';
 
 export const setToken = async ({
@@ -18,7 +18,7 @@ export const setToken = async ({
       return;
     }
 
-    const userRecordFromDB = await getUser(verifiedToken.uid);
+    const userRecordFromDB = await getUserById(verifiedToken.uid);
     if (!userRecordFromDB.user) {
       console.log({ error: 'User is not found in DB' });
       return;
