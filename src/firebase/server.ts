@@ -6,7 +6,7 @@ import { Firestore, getFirestore } from 'firebase-admin/firestore';
 const serviceAccount = {
   type: 'service_account',
   universe_domain: 'googleapis.com',
-  project_id: 'tequierofeliz23',
+  project_id: process.env.FIREBASE_PROJECT_ID,
   private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
   private_key: process.env.FIREBASE_PRIVATE_KEY,
   client_email: process.env.FIREBASE_CLIENT_EMAIL,
