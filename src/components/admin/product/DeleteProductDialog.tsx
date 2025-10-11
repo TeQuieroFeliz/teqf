@@ -24,9 +24,9 @@ function DeleteProductDialog({ productId }: { productId: string }) {
       </DialogTrigger>
       <DialogContent aria-describedby={undefined}>
         <DialogTitle className="text-lg font-semibold">
-          Delete Category
+          Delete Product
         </DialogTitle>
-        <p>Are you sure you want to delete this category?</p>
+        <p>Are you sure you want to delete this product?</p>
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="ghost" onClick={() => setIsOpen(false)}>
             Cancel
@@ -36,12 +36,12 @@ function DeleteProductDialog({ productId }: { productId: string }) {
             variant="destructive"
             onClick={() => {
               startTransition(async () => {
-                const token = await auth.currentUser?.getIdToken();
-                if (!token) {
-                  toast.error('Token not found');
+                const userId = auth.currentUser?.id;
+                if (!userId) {
+                  toast.error('User ID not found');
                   return;
                 }
-                await deleteProduct(productId, token);
+                await deleteProduct(productId, userId);
                 setIsOpen(false);
               });
             }}

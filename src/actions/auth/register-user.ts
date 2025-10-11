@@ -21,11 +21,14 @@ export const registerUser = async (formData: RegisterFormType) => {
       email,
       password,
     });
-    await auth.setCustomUserClaims(userRecord.uid, { role: 'CLIENT' });
-    await firestore
-      .collection('users')
-      .doc(userRecord.uid)
-      .set({ name, email, role: 'CLIENT', createdAt: new Date() });
+    await firestore.collection('users').doc(userRecord.uid).set({
+      name,
+      email,
+      role: 'client',
+      status: 'pending',
+      avatar: '',
+      createdAt: new Date(),
+    });
   } catch (error: any) {
     console.log(error);
     return {

@@ -6,6 +6,7 @@ import Footer from '@/components/shared/Footer';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthContextProvider } from '@/context/AuthContext';
 import Providers from '@/lib/Providers';
+import 'react-quill/dist/quill.snow.css';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -22,6 +23,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Te Quiero Feliz',
   description: 'Te Quiero Feliz',
+  icons: {
+    icon: '/favicon.png',
+  },
 };
 
 export default function RootLayout({

@@ -26,7 +26,8 @@ import Image from 'next/image';
 import { toast } from 'sonner';
 import { CatHoverCard } from './CatHoverCard';
 import { isUniqueCategoryFunc } from '@/lib/utils';
-import { Info } from 'lucide-react';
+import { Eye, Info } from 'lucide-react';
+import ImageCarouselDialog from '../admin/product/ImageCarouselDialog';
 
 // CHANGED: Define an interface for the Item that includes an optional top-level quantity
 interface ItemWithQuantity extends Item {
@@ -65,7 +66,17 @@ export function ItemsTableUserSide({
   const descriptionsRef = useRef<{ [productId: string]: string }>({});
   // CHANGED: Added a ref to store quantities for products without colors
   const quantitiesRef = useRef<{ [productId: string]: number }>({});
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalImages, setModalImages] = useState<string[]>([]);
+  const openImageModal = (images: string[]) => {
+    setModalImages(images);
+    setModalOpen(true);
+  };
 
+  const closeImageModal = () => {
+    setModalOpen(false);
+    setModalImages([]);
+  };
   // CHANGED: This effect now syncs all three refs based on the parent `items` prop
   useEffect(() => {
     setData(items);
@@ -149,17 +160,33 @@ export function ItemsTableUserSide({
     {
       accessorKey: 'image',
       header: 'Image',
-      cell: ({ row }) => (
-        <div className="size-18 relative m-auto">
-          <Image
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            src={row.original.image || ''}
-            alt={row.original.name || ''}
-            className="object-cover absolute rounded-md"
-            fill
-          />
-        </div>
-      ),
+      cell: ({ row }) => {
+        const images = [].concat(
+          (row as any)?.original?.images ?? (row as any)?.original?.image ?? []
+        );
+
+        const hasMultiple = images?.length > 1;
+        const firstImage = images?.[0] || '/placeholder.png';
+        return (
+          <div className="relative w-24 h-24 size-10 group">
+            <Image
+              src={firstImage}
+              alt={row.original.name || ''}
+              fill
+              className="object-cover rounded-md absolute"
+            />
+
+            {hasMultiple && (
+              <div
+                className="absolute top-1 right-2  opacity-100 transition-opacity cursor-pointer bg-black/70 text-white rounded-full p-2 text-sm flex items-center justify-center"
+                onClick={() => openImageModal(images)}
+              >
+                <Eye size={15} />
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'name',
@@ -170,18 +197,19 @@ export function ItemsTableUserSide({
       header: 'Category',
       cell: ({ row }) => {
         const product = row.original;
-        const isUniqueCategory = isUniqueCategoryFunc(product.categoryId);
+        const isUniqueCategory =
+          product.type || product.description || product.size;
 
         if (isUniqueCategory) {
           return (
             <CatHoverCard
-              categoryName={product.categoryName}
+              categoryName={product?.categoryName}
               type={product.type}
-              note={product.note}
+              note={product.description}
               size={product.size}
             >
               <span className=" cursor-pointer flex items-center justify-start gap-2">
-                {product.categoryName}{' '}
+                {product?.categoryName}{' '}
                 <Info size={13} className="text-amber-500" />
               </span>
             </CatHoverCard>
@@ -189,7 +217,7 @@ export function ItemsTableUserSide({
         }
 
         // Return regular text for non-unique categories
-        return <span>{product.categoryName}</span>;
+        return <span>{product?.categoryName}</span>;
       },
     },
     {
@@ -275,6 +303,14 @@ export function ItemsTableUserSide({
             )}
           </div>
         );
+      },
+    },
+    {
+      accessorKey: 'estPrice',
+      header: 'EST Price',
+      cell: ({ row }) => {
+        const product = row.original;
+        return <p>{product?.estPrice && `${product?.estPrice} USD`}</p>;
       },
     },
     {
@@ -409,6 +445,32 @@ export function ItemsTableUserSide({
     initialState: { pagination: { pageSize: 5 } },
   });
 
+  // NEW: Function to calculate the total estimated price
+  const calculateTotalEstimate = () => {
+    return items.reduce((total, item: any) => {
+      // Safely parse estPrice. Assume 0 if not a valid number.
+      const pricePerUnit = parseFloat(item.estPrice?.toString() || '0');
+      let totalQuantity = 0;
+
+      // Calculate total quantity
+      if (item.colors && item.colors.length > 0) {
+        // Sum quantities from all colors
+        totalQuantity = item.colors.reduce(
+          (sum: any, color: any) => sum + (color.quantity || 0),
+          0
+        );
+      } else if (item.quantity !== undefined) {
+        // Use the simple top-level quantity
+        totalQuantity = item.quantity;
+      }
+
+      // Calculate item total and add to grand total
+      return total + pricePerUnit * totalQuantity;
+    }, 0);
+  };
+
+  const totalEstimate = calculateTotalEstimate();
+
   return (
     <div className="w-full">
       <div className="rounded-md border mt-3 overflow-x-auto w-[290px] md:w-full">
@@ -440,7 +502,7 @@ export function ItemsTableUserSide({
                     <TableCell
                       key={cell.id}
                       className={`px-3 py-4 text-xs sm:text-sm border ${
-                        cell.column.id === 'image'
+                        cell.column.id === 'images' // Changed from 'image'
                           ? 'align-middle'
                           : 'align-top'
                       }`}
@@ -464,6 +526,23 @@ export function ItemsTableUserSide({
               </TableRow>
             )}
           </TableBody>
+          {/* NEW: Total Estimate Row */}
+          {items.length > 0 && (
+            // Using TableBody for the total row for consistent styling
+            <TableBody>
+              <TableRow className="bg-gray-100 dark:bg-gray-700 font-bold border-t-2 border-gray-300">
+                <TableCell
+                  colSpan={columns.length}
+                  className="px-3 py-4 text-sm whitespace-nowrap border border-b-0 text-center"
+                >
+                  Total Estimated Price:{' '}
+                  <span className="text-green-600">
+                    ${totalEstimate.toFixed(2)}
+                  </span>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          )}
         </Table>
       </div>
 
@@ -496,6 +575,11 @@ export function ItemsTableUserSide({
           </div>
         </div>
       )}
+      <ImageCarouselDialog
+        open={modalOpen}
+        images={modalImages}
+        onClose={closeImageModal}
+      />
     </div>
   );
 }

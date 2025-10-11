@@ -8,7 +8,8 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import React, { useEffect, useState } from 'react';
+import ImageCarouselDialog from '@/components/admin/product/ImageCarouselDialog';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ import { ProductType } from '@/lib/schemas/ProductSchema';
 import Image from 'next/image';
 import DeleteProductDialog from './DeleteProductDialog';
 import EditProductDialog from './EditProductDialog';
+import { ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 
 export function ProductTable({
   products: resolvedProducts,
@@ -39,9 +41,23 @@ export function ProductTable({
 }) {
   const [data, setData] = useState<ProductType[]>(resolvedProducts);
   const [nameFilter, setNameFilter] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
   const [filteredData, setFilteredData] =
     useState<ProductType[]>(resolvedProducts);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalImages, setModalImages] = useState<string[]>([]);
+
+  const openImageModal = (images: string[]) => {
+    setModalImages(images);
+    setModalOpen(true);
+  };
+
+  const closeImageModal = () => {
+    setModalOpen(false);
+    setModalImages([]);
+  };
 
   useEffect(() => {
     if (resolvedProducts) {
@@ -63,33 +79,88 @@ export function ProductTable({
     // Apply category filter
     if (categoryFilter !== 'all') {
       result = result.filter(
-        (product) => product.categoryName === categoryFilter
+        (product) => product?.categoryName === categoryFilter
       );
     }
 
-    setFilteredData(result);
-  }, [nameFilter, categoryFilter, resolvedProducts]);
+    // Apply type filter
+    if (typeFilter !== 'all') {
+      result = result.filter((product) => product?.type === typeFilter);
+    }
 
-  const uniqueCategories = [
-    'all',
-    ...Array.from(new Set(resolvedProducts.map((p) => p.categoryName))),
-  ];
+    // Apply location filter
+    if (locationFilter !== 'all') {
+      result = result.filter((product) => product?.location === locationFilter);
+    }
+
+    setFilteredData(result);
+  }, [
+    nameFilter,
+    categoryFilter,
+    locationFilter,
+    resolvedProducts,
+    typeFilter,
+  ]);
+
+  const { uniqueCategories, uniqueLocations, uniqueTypes } = useMemo(() => {
+    const categories = [
+      'all',
+      ...Array.from(
+        new Set(resolvedProducts.map((p) => p?.categoryName))
+      ).filter(Boolean),
+    ];
+    const locations = [
+      'all',
+      ...Array.from(new Set(resolvedProducts.map((p) => p?.location))).filter(
+        Boolean
+      ),
+    ];
+    const types = [
+      'all',
+      ...Array.from(new Set(resolvedProducts.map((p) => p?.type))).filter(
+        Boolean
+      ),
+    ];
+    return {
+      uniqueCategories: categories,
+      uniqueLocations: locations,
+      uniqueTypes: types,
+    };
+  }, [resolvedProducts]);
 
   const columns: ColumnDef<ProductType>[] = [
     {
       accessorKey: 'image',
       header: 'Image',
-      cell: ({ row }) => (
-        <div className="size-10 relative">
-          <Image
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            src={row.original.image || ''}
-            alt={row.original.name || ''}
-            className="object-cover absolute rounded-md"
-            fill
-          />
-        </div>
-      ),
+      cell: ({ row }) => {
+        const images = [].concat(
+          (row as any)?.original?.images ?? (row as any)?.original?.image ?? []
+        );
+
+        const hasMultiple = images?.length > 1;
+        const firstImage = images?.[0] || '/placeholder.png';
+
+        return (
+          <div className="relative w-24 h-24 size-10 group">
+            <Image
+              src={firstImage}
+              alt={row.original.name || ''}
+              fill
+              sizes="(max-width: 768px) 48px, 96px"
+              className="object-cover rounded-md"
+            />
+
+            {hasMultiple && (
+              <div
+                className="absolute top-1 right-2 transition-opacity cursor-pointer bg-black/70 text-white rounded-full p-2 text-sm flex items-center justify-center"
+                onClick={() => openImageModal(images)}
+              >
+                <Eye size={17} />
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'name',
@@ -98,6 +169,10 @@ export function ProductTable({
     {
       accessorKey: 'categoryName',
       header: 'Category',
+    },
+    {
+      accessorKey: 'location',
+      header: 'Location',
     },
     {
       accessorKey: 'colors',
@@ -121,6 +196,18 @@ export function ProductTable({
       },
     },
     {
+      accessorKey: 'estPrice',
+      header: 'EST Price',
+      cell: ({ row }) => {
+        const product = row.original;
+        return <p>{product?.estPrice && `${product?.estPrice} USD`}</p>;
+      },
+    },
+    {
+      accessorKey: 'quantity',
+      header: 'QTY',
+    },
+    {
       accessorKey: 'action',
       header: 'Actions',
       id: 'actions',
@@ -141,21 +228,10 @@ export function ProductTable({
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    // getFilteredRowModel: getFilteredRowModel(),
     state: {
-      globalFilter: `${nameFilter} ${categoryFilter}`,
+      globalFilter: `${nameFilter} ${categoryFilter} ${typeFilter}`,
     },
-    initialState: { pagination: { pageSize: 10 } },
-    // globalFilterFn: (row, columnId, filterValue) => {
-    //   const [name, category] = filterValue.split(' ');
-    //   const productName = row.getValue<string>('name').toLowerCase();
-    //   const productCategory = row.getValue<string>('categoryName');
-
-    //   const nameMatch = productName.includes(name.toLowerCase());
-    //   const categoryMatch = category === 'all' || productCategory === category;
-
-    //   return nameMatch && categoryMatch;
-    // },
+    initialState: { pagination: { pageSize: 10 } }, // Set initial page size here
   });
 
   return (
@@ -179,6 +255,38 @@ export function ProductTable({
             {uniqueCategories.map((category) => (
               <SelectItem key={category} value={category}>
                 {category === 'all' ? 'All Categories' : category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {uniqueTypes.length > 1 && (
+          <Select
+            value={typeFilter}
+            onValueChange={(value) => setTypeFilter(value)}
+          >
+            <SelectTrigger className="w-full sm:w-44 text-sm">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {uniqueTypes.map((type: any) => (
+                <SelectItem key={type} value={type} className="capitalize">
+                  {type === 'all' ? 'All Types' : type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Select
+          value={locationFilter}
+          onValueChange={(value) => setLocationFilter(value)}
+        >
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Filter by location" />
+          </SelectTrigger>
+          <SelectContent>
+            {uniqueLocations.map((loc) => (
+              <SelectItem key={Math.random()} value={loc}>
+                {loc === 'all' ? 'All Locations' : loc}
               </SelectItem>
             ))}
           </SelectContent>
@@ -234,7 +342,7 @@ export function ProductTable({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-sm sm:text-base"
+                  className="h-24 text-center text-sm "
                 >
                   No results found
                 </TableCell>
@@ -245,31 +353,65 @@ export function ProductTable({
       </div>
 
       {/* Pagination Section */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4 px-1">
-        <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-          {table.getFilteredRowModel().rows.length} items
+      <div className="flex items-center justify-between space-x-2 py-4">
+        <div className="text-sm text-muted-foreground">
+          {table.getFilteredRowModel().rows.length} row(s) found.
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            className="h-8 px-3 text-xs sm:text-sm"
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            className="h-8 px-3 text-xs sm:text-sm"
-          >
-            Next
-          </Button>
+        <div className="flex items-center space-x-6 lg:space-x-8">
+          <div className="flex items-center space-x-2">
+            <p className="text-sm font-medium">Rows per page</p>
+            <Select
+              value={`${table.getState().pagination.pageSize}`}
+              onValueChange={(value) => {
+                table.setPageSize(Number(value));
+              }}
+            >
+              <SelectTrigger className="h-8 w-[70px]">
+                <SelectValue
+                  placeholder={table.getState().pagination.pageSize}
+                />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {[10, 25, 50, 100].map((pageSize) => (
+                  <SelectItem key={pageSize} value={`${pageSize}`}>
+                    {pageSize}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+            Page {table.getState().pagination.pageIndex + 1} of{' '}
+            {table.getPageCount()}
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <span className="sr-only">Go to previous page</span>
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              <span className="sr-only">Go to next page</span>
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
+
+      <ImageCarouselDialog
+        open={modalOpen}
+        images={modalImages}
+        onClose={closeImageModal}
+      />
     </div>
   );
 }

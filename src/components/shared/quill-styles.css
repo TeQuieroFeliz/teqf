@@ -1,0 +1,26 @@
+/* Make editor ~4 rows tall (adjust min-height if you want a different number of rows) */
+.quill-wrapper .ql-editor {
+  min-height: 6rem; /* ~4 rows (adjust as needed) */
+  padding: 0.5rem 0.75rem;
+}
+
+/* Remove border and box-shadow from the Quill container (snow theme) */
+.quill-wrapper .ql-container {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important; /* optional: remove rounded corners */
+}
+
+/* If toolbar has borders you also want to remove */
+.quill-wrapper .ql-toolbar {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* Remove outline on focus if desired (optional) */
+.quill-wrapper .ql-container:focus,
+.quill-wrapper .ql-editor:focus {
+  outline: none;
+  box-shadow: none !important;
+}

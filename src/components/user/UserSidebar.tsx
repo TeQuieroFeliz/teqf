@@ -11,8 +11,10 @@ import {
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 
-const navItems = [{ name: 'Dashboard', href: '/user-dashboard' }];
-
+const navItems = [
+  { name: 'Dashboard', href: '/user-dashboard' },
+  // { name: 'Products', href: '/user-dashboard/products' },
+];
 export default function UserSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -47,7 +49,7 @@ export default function UserSidebar() {
           <SheetContent
             aria-describedby={undefined}
             side="left"
-            className="w-64"
+            className="w-[235px]"
           >
             <SheetTitle className="text-xl font-bold px-4 pt-3">
               User Menu
@@ -58,7 +60,7 @@ export default function UserSidebar() {
       </div>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block lg:w-64 bg-white border-r min-h-screen">
+      <aside className="hidden lg:block lg:w-[235px] bg-white border-r min-h-screen">
         <div className="p-4">
           <h2 className="text-xl font-bold mb-4">User Menu</h2>
           <NavLinks />

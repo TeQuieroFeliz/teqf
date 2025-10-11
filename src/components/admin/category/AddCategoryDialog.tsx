@@ -11,9 +11,10 @@ import CategoryForm from '@/components/admin/category/CategoryForm';
 import { addCategory } from '@/actions/category/category-crud';
 import { toast } from 'sonner';
 import { useAuthContext } from '@/context/AuthContext';
+import { getUserById } from '@/actions/auth/get-user';
 
 function AddCategoryDialog() {
-  const auth = useAuthContext();
+  const { currentUser } = useAuthContext();
   const [open, setOpen] = useState(false);
   return (
     <div className="flex justify-between items-center">
@@ -28,12 +29,11 @@ function AddCategoryDialog() {
           </DialogTitle>
           <CategoryForm
             onSubmitAction={async (formData: any) => {
-              const token = await auth.currentUser?.getIdToken();
-              if (!token) {
-                toast.error('Token not found');
+              if (!currentUser?.id) {
+                toast.error('User ID not found');
                 return;
               }
-              await addCategory(formData, token);
+              await addCategory(formData, currentUser.id);
             }}
             closeDialog={() => {
               setOpen(false);

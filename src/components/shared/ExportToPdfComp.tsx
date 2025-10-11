@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import SendEmailComp from './SendEmailComp';
 import { usePathname } from 'next/navigation';
+import { SendEmailDialog } from './SendEmailDialog';
 
 function ExportToPdfComp({ event, subEvents }: any) {
   const [text, setText] = useState('');
@@ -54,8 +55,7 @@ function ExportToPdfComp({ event, subEvents }: any) {
   useEffect(() => {
     if (text.trim().length) {
       const timeout = setTimeout(async () => {
-        const token = await auth.currentUser!.getIdToken();
-        await editEventt(event.id, { title: text }, token);
+        await editEventt(event.id, { title: text });
       }, 1000);
 
       return () => {
@@ -65,7 +65,7 @@ function ExportToPdfComp({ event, subEvents }: any) {
   }, [text, event.id, auth.currentUser]);
   return (
     <div className="flex md:flex-row flex-col items-center justify-between gap-2 mb-5">
-      {auth.currentUser?.uid === event.userId ? (
+      {auth.currentUser?.id === event.userId ? (
         <input
           type="text"
           value={text}
@@ -78,8 +78,9 @@ function ExportToPdfComp({ event, subEvents }: any) {
 
       {!!subEvents.length && (
         <div className="flex items-center justify-center gap-2">
-          {auth.currentUser?.uid === event.userId && !isAdminPath && (
-            <SendEmailComp event={event} subEvents={subEvents} />
+          {auth.currentUser?.id === event.userId && !isAdminPath && (
+            // <SendEmailComp event={event} subEvents={subEvents} />
+            <SendEmailDialog event={event} subEvents={subEvents} />
           )}
 
           <Button

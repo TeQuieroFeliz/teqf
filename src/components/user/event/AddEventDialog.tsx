@@ -12,11 +12,13 @@ import { toast } from 'sonner';
 import EventForm from './EventForm';
 import { addEvent } from '@/actions/event/event-crud';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 
 function AddEventDialog() {
   const queryClient = useQueryClient();
   const auth = useAuthContext();
   const [open, setOpen] = useState(false);
+  const router = useRouter();
   return (
     <div className="flex justify-between items-center">
       <h1 className="text-2xl font-bold">Events</h1>
@@ -28,15 +30,16 @@ function AddEventDialog() {
           <DialogTitle className="text-lg font-semibold">Add Event</DialogTitle>
           <EventForm
             onSubmitAction={async (formData: any) => {
-              const token = await auth.currentUser?.getIdToken();
-              if (!token) {
-                toast.error('Token not found');
+              const userId = auth.currentUser?.id;
+              if (!userId) {
+                toast.error('User ID not found');
                 return;
               }
-              await addEvent(formData, token);
-              await queryClient.invalidateQueries({
-                queryKey: ['events', auth.currentUser?.uid],
-              });
+              await addEvent(formData, userId);
+              // await queryClient.invalidateQueries({
+              //   queryKey: ['events', auth.currentUser?.id],
+              // });
+              // router.refresh();
             }}
             closeDialog={() => {
               setOpen(false);

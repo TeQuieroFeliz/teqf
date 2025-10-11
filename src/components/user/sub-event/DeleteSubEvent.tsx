@@ -1,4 +1,7 @@
-import { deleteSubEvent } from '@/actions/sub-event/deleteSubEvent';
+'use client';
+
+import { useDeleteSubEvent } from '@/actions/sub-event/sub-event-rc/deleteSubEventRc';
+import { useGetSubEvents } from '@/actions/sub-event/sub-event-rc/getSubEventRc';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -8,14 +11,56 @@ import {
 } from '@/components/ui/dialog';
 import { useAuthContext } from '@/context/AuthContext';
 import { Trash } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
-function DeleteSubEventDialog({ subEventId }: { subEventId: string }) {
+function DeleteSubEventDialog({
+  subEventId,
+  handleOnDeleteWithFilter,
+}: {
+  subEventId: string;
+  handleOnDeleteWithFilter?: (subEventId: string) => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
-  const auth = useAuthContext();
-  const [isPending, startTransition] = useTransition();
+  const { currentUser } = useAuthContext();
+  const params = useParams();
+  const eventId = params?.id as string;
+  const router = useRouter();
+
+  const { deleteSubEventMutation, deleteSubEventLoading } =
+    useDeleteSubEvent(eventId);
+  // const { refetchSubevents } = useGetSubEvents(eventId);
+
+  const handleDelete = async () => {
+    if (!currentUser) {
+      toast.error('User not found');
+      return;
+    }
+
+    try {
+      await deleteSubEventMutation(subEventId);
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      handleOnDeleteWithFilter && handleOnDeleteWithFilter(subEventId);
+      setIsOpen(false);
+      // await refetchSubevents();
+      // router.refresh();
+
+      // Optional: Perform scroll animation after success
+      setTimeout(() => {
+        const scrollHeight = document.documentElement.scrollHeight;
+        const scrollToPosition = scrollHeight - window.innerHeight - 350;
+        window.scrollTo({
+          top: Math.max(0, scrollToPosition),
+          behavior: 'smooth',
+        });
+      }, 500);
+    } catch (error) {
+      // The `onError` in your hook will show a toast,
+      // but you could add other logic here if needed.
+      console.error('Failed to delete sub-event:', error);
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -34,31 +79,13 @@ function DeleteSubEventDialog({ subEventId }: { subEventId: string }) {
             Cancel
           </Button>
           <Button
-            disabled={isPending}
+            disabled={deleteSubEventLoading}
             variant="destructive"
-            onClick={() => {
-              startTransition(async () => {
-                const token = await auth.currentUser?.getIdToken();
-                if (!token) {
-                  toast.error('Token not found');
-                  return;
-                }
-                await deleteSubEvent(subEventId, token);
-                setTimeout(() => {
-                  const scrollHeight = document.documentElement.scrollHeight;
-                  const scrollToPosition =
-                    scrollHeight - window.innerHeight - 350;
-
-                  window.scrollTo({
-                    top: Math.max(0, scrollToPosition), // Ensure we don't get negative values
-                    behavior: 'smooth',
-                  });
-                }, 1000);
-                setIsOpen(false);
-              });
+            onClick={async () => {
+              await handleDelete();
             }}
           >
-            Delete
+            {deleteSubEventLoading ? 'Deleting...' : 'Delete'}
           </Button>
         </div>
       </DialogContent>

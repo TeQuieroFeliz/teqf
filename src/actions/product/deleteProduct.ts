@@ -1,18 +1,29 @@
 'use server';
 
-import { auth, firestore } from '@/firebase/server';
+import { firestore } from '@/firebase/server';
+import { requireRole } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
 
-export const deleteProduct = async (id: string, token: string) => {
-  const verifiedToken = await auth.verifyIdToken(token);
+export const deleteProduct = async (id: string, userId: string) => {
+  const { error, message } = await requireRole(userId, ['admin', 'manager']);
 
-  if (verifiedToken.role !== 'ADMIN') {
-    return { error: true, message: 'Unauthorized' };
+  if (error) {
+    return { error, message };
   }
 
   try {
     await firestore.collection('products').doc(id).delete();
     revalidatePath('/admin-dashboard/products');
+  } catch (error) {
+    console.log(error);
+    return { error: true, message: 'Some thing went wrong' };
+  }
+};
+
+export const deleteProductUserSide = async (id: string) => {
+  try {
+    await firestore.collection('products-user').doc(id).delete();
+    revalidatePath('/user-dashboard/products');
   } catch (error) {
     console.log(error);
     return { error: true, message: 'Some thing went wrong' };

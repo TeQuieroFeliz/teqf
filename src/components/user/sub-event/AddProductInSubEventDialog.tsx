@@ -12,6 +12,7 @@ import { ProductType } from '@/lib/schemas/ProductSchema';
 import { Item } from '@/lib/schemas/SubEventSchema';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
+import AddProductUserSideDialog from '../products/AddProductUserSideDialog';
 
 type Props = {
   products: ProductType[];
@@ -36,7 +37,12 @@ function AddProductInSubEventDialog({
         </Button>
       </DialogTrigger>
       <DialogContent aria-describedby={undefined} className="md:!max-w-5xl">
-        <DialogTitle className="text-lg font-semibold">Add Product</DialogTitle>
+        <div className="flex items-center justify-between pr-5">
+          <DialogTitle className="text-lg font-semibold">
+            Add Product
+          </DialogTitle>
+          <AddProductUserSideDialog />
+        </div>
         <div>
           <ProductTableUserSide
             products={products}

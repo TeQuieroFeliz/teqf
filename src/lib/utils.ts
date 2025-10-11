@@ -1,3 +1,4 @@
+import { getUserById } from '@/actions/auth/get-user';
 import { clsx, type ClassValue } from 'clsx';
 import moment from 'moment';
 import { twMerge } from 'tailwind-merge';
@@ -29,3 +30,21 @@ export const isUniqueCategoryFunc = (categoryValue: string) => {
     categoryValue === 'Platoform'
   );
 };
+
+type Roles = 'admin' | 'client' | 'manager';
+
+export const requireRole = async (id: string, allowed: Roles[]) => {
+  const { user } = await getUserById(id);
+  if (!user) {
+    return { error: true, message: 'User not found' };
+  }
+
+  if (!allowed.includes(user.role)) {
+    return { error: true, message: 'Unauthorized' };
+  }
+
+  return { error: false, message: 'Authorized' };
+};
+
+// NOTE:
+// 1. "products" table don't has userId whereas "products-user" table has userId

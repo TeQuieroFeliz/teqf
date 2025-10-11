@@ -15,56 +15,48 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 function AuthButtons() {
-  const auth = useAuthContext();
+  const { currentUser, logout } = useAuthContext();
   const router = useRouter();
-  const isAdmin = auth.customClaims?.role === 'ADMIN';
-
+  const isAdmin =
+    currentUser?.role === 'admin' || currentUser?.role === 'manager';
   return (
     <div>
       <div>
-        {!!auth?.currentUser && (
+        {currentUser && (
           <DropdownMenu>
             <DropdownMenuTrigger>
               <Avatar>
-                {!!auth.currentUser.photoURL && (
+                {!!currentUser.avatar && (
                   <Image
-                    src={auth.currentUser.photoURL || ''}
-                    alt={`${auth.currentUser.displayName} avatar`}
+                    src={currentUser.avatar || ''}
+                    alt={`${currentUser.name} avatar`}
                     width={70}
                     height={70}
                   />
                 )}
                 <AvatarFallback className="text-sky-950">
-                  {
-                    (auth.currentUser.displayName ||
-                      auth.currentUser.email)?.[0]
-                  }
+                  {(currentUser.name || currentUser.email)?.[0]}
                 </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuLabel>
-                <div>{auth.currentUser.displayName}</div>
-                <div className="font-normal text-xs">
-                  {auth.currentUser.email}
-                </div>
-                <div className=" text-xs italic font-semibold">
-                  {auth.customClaims?.role}
+                <div>{currentUser.name}</div>
+                <div className="font-normal text-xs">{currentUser.email}</div>
+                <div className=" text-xs italic font-semibold uppercase">
+                  {currentUser?.role?.toLowerCase()}
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {isAdmin ? (
-                <DropdownMenuItem asChild>
-                  <Link href="/admin-dashboard">Admin Dashboard</Link>
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem asChild>
-                  <Link href="/user-dashboard">Dashboard</Link>
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem asChild>
+                <Link href={isAdmin ? '/admin-dashboard' : '/user-dashboard'}>
+                  Dashboard
+                </Link>
+              </DropdownMenuItem>
+
               <DropdownMenuItem
                 onClick={async () => {
-                  await auth.logout();
+                  await logout();
                   router.refresh();
                 }}
               >
@@ -73,7 +65,7 @@ function AuthButtons() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {!auth?.currentUser && (
+        {!currentUser && (
           <div className="flex gap-2 items-center">
             <Link
               href="/login"

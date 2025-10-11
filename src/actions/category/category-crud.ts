@@ -1,7 +1,8 @@
 'use server';
 
-import { auth, firestore } from '@/firebase/server';
+import { firestore } from '@/firebase/server';
 import { categorySchema } from '@/lib/schemas/CategorySchema';
+import { requireRole } from '@/lib/utils';
 import { revalidatePath } from 'next/cache';
 
 const categoriesRef = firestore.collection('categories');
@@ -12,20 +13,22 @@ export async function getCategories() {
   return snapshot.docs.map((doc) => ({
     id: doc.id,
     title: doc.data().title as string,
+    createdAt: doc.data()?.createdAt?.toDate?.()?.toISOString(),
   }));
 }
 
-export async function addCategory(formData: FormData, token: string) {
-  const verifiedToken = await auth.verifyIdToken(token);
+export async function addCategory(formData: FormData, userId: string) {
+  const { error, message } = await requireRole(userId, ['admin', 'manager']);
 
-  if (verifiedToken.role !== 'ADMIN') {
-    return { error: true, message: 'Unauthorized' };
+  if (error) {
+    return { error, message };
   }
 
   const data = categorySchema.parse({ title: formData.get('title') });
 
   await categoriesRef.add({
     title: data.title,
+    createdAt: new Date(),
   });
 
   revalidatePath('/admin-dashboard/category');
@@ -34,12 +37,12 @@ export async function addCategory(formData: FormData, token: string) {
 export async function editCategory(
   id: string,
   formData: FormData,
-  token: string
+  userId: string
 ) {
-  const verifiedToken = await auth.verifyIdToken(token);
+  const { error, message } = await requireRole(userId, ['admin', 'manager']);
 
-  if (verifiedToken.role !== 'ADMIN') {
-    return { error: true, message: 'Unauthorized' };
+  if (error) {
+    return { error, message };
   }
 
   const data = categorySchema.parse({ title: formData.get('title') });
@@ -51,11 +54,11 @@ export async function editCategory(
   revalidatePath('/admin-dashboard/category');
 }
 
-export async function deleteCategory(id: string, token: string) {
-  const verifiedToken = await auth.verifyIdToken(token);
+export async function deleteCategory(id: string, userId: string) {
+  const { error, message } = await requireRole(userId, ['admin', 'manager']);
 
-  if (verifiedToken.role !== 'ADMIN') {
-    return { error: true, message: 'Unauthorized' };
+  if (error) {
+    return { error, message };
   }
 
   await categoriesRef.doc(id).delete();

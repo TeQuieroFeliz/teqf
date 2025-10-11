@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useTransition } from 'react';
 import { categorySchema } from '@/lib/schemas/CategorySchema';
 import { eventSchema } from '@/lib/schemas/EventSchema';
+import { useRouter } from 'next/navigation';
 
 type FormData = z.infer<typeof eventSchema>;
 
@@ -30,6 +31,7 @@ export default function EventForm({
   });
 
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   const onSubmit = (data: FormData) => {
     startTransition(async () => {
@@ -37,6 +39,7 @@ export default function EventForm({
       formData.append('title', data.title);
       await onSubmitAction(formData as any);
       closeDialog();
+      router.refresh();
     });
   };
 

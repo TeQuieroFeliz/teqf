@@ -1,7 +1,12 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { Auth, getAuth } from 'firebase/auth';
+import { Auth, getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { FirebaseStorage, getStorage } from 'firebase/storage';
-import { Firestore, getFirestore } from 'firebase/firestore';
+import {
+  Firestore,
+  getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,12 +27,12 @@ if (!currentApps.length) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   storage = getStorage(app);
-  db = getFirestore(app);
+  db = initializeFirestore(app, { localCache: memoryLocalCache() });
 } else {
   const app = currentApps[0];
   auth = getAuth(app);
   storage = getStorage(app);
-  db = getFirestore(app);
+  db = initializeFirestore(app, { localCache: memoryLocalCache() });
 }
 
 export { auth, storage, db };

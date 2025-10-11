@@ -1,5 +1,4 @@
 'use client';
-
 import {
   ColumnDef,
   flexRender,
@@ -8,7 +7,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react'; // Added useMemo
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -33,7 +32,8 @@ import { Item } from '@/lib/schemas/SubEventSchema';
 import { Checkbox } from '@/components/ui/checkbox';
 import { isUniqueCategoryFunc } from '@/lib/utils';
 import { CatHoverCard } from './CatHoverCard';
-import { Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Info } from 'lucide-react';
+import ImageCarouselDialog from '../admin/product/ImageCarouselDialog';
 
 type ColorSelection = {
   [colorCode: string]: {
@@ -48,6 +48,7 @@ type ProductColorSelection = {
 };
 
 // Define an interface for the Item that includes an optional top-level quantity
+
 interface ItemWithQuantity extends Item {
   quantity?: number;
 }
@@ -67,8 +68,26 @@ export function ProductTableUserSide({
   const [data, setData] = useState<ProductType[]>(resolvedProducts);
   const [nameFilter, setNameFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  // START: ADDED TYPE FILTER STATE
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  // END: ADDED TYPE FILTER STATE
+
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [, forceRender] = useState({});
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalImages, setModalImages] = useState<string[]>([]);
+  const openImageModal = (images: string[]) => {
+    setModalImages(images);
+    setModalOpen(true);
+  };
+
+  const closeImageModal = () => {
+    setModalOpen(false);
+    setModalImages([]);
+  };
 
   const descriptionsRef = useRef<{ [productId: string]: string }>(
     items.reduce(
@@ -89,14 +108,15 @@ export function ProductTableUserSide({
             quantity: color.quantity || 1,
             checked: true,
           };
+
           return colorAcc;
         }, {} as ColorSelection);
       }
+
       return acc;
     }, {} as ProductColorSelection)
   );
 
-  // CHANGED: Added a ref to store quantities for products without colors
   const quantitiesRef = useRef<{ [productId: string]: number }>(
     items.reduce(
       (acc, item) => {
@@ -129,7 +149,6 @@ export function ProductTableUserSide({
   ) => {
     const prevProductColors = selectedColorsRef.current[productId] || {};
     const prevColorData = prevProductColors[colorCode];
-
     selectedColorsRef.current[productId] = {
       ...prevProductColors,
       [colorCode]: {
@@ -138,6 +157,7 @@ export function ProductTableUserSide({
         checked: !prevColorData?.checked,
       },
     };
+
     forceRender({});
   };
 
@@ -152,7 +172,6 @@ export function ProductTableUserSide({
     }
   };
 
-  // CHANGED: Added a handler for quantity changes on items without colors
   const handleSimpleQuantityChange = (productId: string, value: string) => {
     const newQuantity = Number(value);
     if (newQuantity >= 1) {
@@ -160,26 +179,64 @@ export function ProductTableUserSide({
     }
   };
 
-  const uniqueCategories = [
-    'all',
-    ...Array.from(new Set(resolvedProducts.map((p) => p.categoryName))),
-  ];
-
+  // START: GENERATE UNIQUE OPTIONS FOR FILTERS (using useMemo for performance)
+  const { uniqueCategories, uniqueLocations, uniqueTypes } = useMemo(() => {
+    const categories = [
+      'all',
+      ...Array.from(
+        new Set(resolvedProducts.map((p) => p?.categoryName))
+      ).filter(Boolean),
+    ];
+    const locations = [
+      'all',
+      ...Array.from(new Set(resolvedProducts.map((p) => p?.location))).filter(
+        Boolean
+      ),
+    ];
+    const types = [
+      'all',
+      ...Array.from(new Set(resolvedProducts.map((p) => p?.type))).filter(
+        Boolean
+      ),
+    ];
+    return {
+      uniqueCategories: categories,
+      uniqueLocations: locations,
+      uniqueTypes: types,
+    };
+  }, [resolvedProducts]);
+  // END: GENERATE UNIQUE OPTIONS FOR FILTERS
   const columns: ColumnDef<ProductType>[] = [
     {
       accessorKey: 'image',
       header: 'Image',
-      cell: ({ row }) => (
-        <div className="size-18 relative m-auto">
-          <Image
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            src={row.original.image || ''}
-            alt={row.original.name || ''}
-            className="object-cover absolute rounded-md"
-            fill
-          />
-        </div>
-      ),
+      cell: ({ row }) => {
+        const images = [].concat(
+          (row as any)?.original?.images ?? (row as any)?.original?.image ?? []
+        );
+
+        const hasMultiple = images?.length > 1;
+        const firstImage = images?.[0] || '/placeholder.png';
+        return (
+          <div className="relative w-24 h-24 size-10 group">
+            <Image
+              src={firstImage}
+              alt={row.original.name || ''}
+              fill
+              className="object-cover rounded-md"
+            />
+
+            {hasMultiple && (
+              <div
+                className="absolute top-1 right-2  opacity-100 transition-opacity cursor-pointer bg-black/70 text-white rounded-full p-2 text-sm flex items-center justify-center"
+                onClick={() => openImageModal(images)}
+              >
+                <Eye size={15} />
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'name',
@@ -190,37 +247,32 @@ export function ProductTableUserSide({
       header: 'Category',
       cell: ({ row }) => {
         const product = row.original;
-        const isUniqueCategory = isUniqueCategoryFunc(product.categoryId);
-
+        const isUniqueCategory =
+          product.type || product.description || product.size;
         if (isUniqueCategory) {
           return (
             <CatHoverCard
-              categoryName={product.categoryName}
+              categoryName={product?.categoryName}
               type={product.type}
-              note={product.note}
+              note={product.description}
               size={product.size}
             >
               <span className=" cursor-pointer flex items-center justify-start gap-2">
-                {product.categoryName}{' '}
+                {product?.categoryName}
                 <Info size={13} className="text-amber-500" />
               </span>
             </CatHoverCard>
           );
         }
-
-        // Return regular text for non-unique categories
-        return <span>{product.categoryName}</span>;
+        return <span>{product?.categoryName}</span>;
       },
     },
     {
       accessorKey: 'colors',
       header: 'Colors & Quantity',
-      // CHANGED: Updated cell renderer to handle both cases
       cell: ({ row }) => {
         const product = row.original;
         const hasColors = product.colors && product.colors.length > 0;
-
-        // Case 1: Product has NO colors, show only quantity input
         if (!hasColors) {
           return (
             <div className="flex flex-col gap-2">
@@ -243,9 +295,9 @@ export function ProductTableUserSide({
           );
         }
 
-        // Case 2: Product HAS colors, show color selection UI
         const productSelectedColors =
           selectedColorsRef.current[product.id] || {};
+
         return (
           <div className="space-y-2">
             {product.colors.map((color) => {
@@ -293,6 +345,18 @@ export function ProductTableUserSide({
       },
     },
     {
+      accessorKey: 'estPrice',
+      header: 'EST Price',
+      cell: ({ row }) => {
+        const product = row.original;
+        return <p>{product?.estPrice && `${product?.estPrice} USD`}</p>;
+      },
+    },
+    {
+      accessorKey: 'location',
+      header: 'Location',
+    },
+    {
       id: 'description',
       header: 'Description',
       cell: ({ row }) => {
@@ -316,7 +380,6 @@ export function ProductTableUserSide({
         const alreadyInArrayCheck = !!items.find(
           (val) => val.id === product.id
         );
-
         const handleItems = (item: ItemWithQuantity) => {
           setItems((prev) => {
             const alreadyInArray = prev.find((val) => val.id === item.id);
@@ -352,7 +415,6 @@ export function ProductTableUserSide({
 
         const handleAddClick = () => {
           let newItem: ItemWithQuantity;
-
           if (hasColors) {
             const selectedColorsForProduct = getSelectedColors();
             if (selectedColorsForProduct.length === 0) {
@@ -362,6 +424,7 @@ export function ProductTableUserSide({
               }));
               return;
             }
+
             clearError(product.id);
             newItem = {
               ...product,
@@ -392,12 +455,11 @@ export function ProductTableUserSide({
           handleItems({ ...product, colors: [] });
           delete selectedColorsRef.current[product.id];
           delete descriptionsRef.current[product.id];
-          delete quantitiesRef.current[product.id]; // CHANGED: Clean up quantity ref
+          delete quantitiesRef.current[product.id];
         };
 
         const handleEditClick = () => {
           let updatedItem: ItemWithQuantity;
-
           if (hasColors) {
             const selectedColorsForProduct = getSelectedColors();
             if (selectedColorsForProduct.length === 0) {
@@ -407,6 +469,7 @@ export function ProductTableUserSide({
               }));
               return;
             }
+
             clearError(product.id);
             updatedItem = {
               ...product,
@@ -456,6 +519,7 @@ export function ProductTableUserSide({
                 >
                   Edit
                 </Button>
+
                 <Button
                   onClick={handleRemoveClick}
                   variant={'destructive'}
@@ -478,55 +542,155 @@ export function ProductTableUserSide({
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     state: {
-      globalFilter: `${nameFilter} ${categoryFilter}`,
+      // START: UPDATED GLOBAL FILTER STATE
+      globalFilter: JSON.stringify({
+        name: nameFilter,
+        category: categoryFilter,
+        location: locationFilter,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        type: typeFilter, // Added type filter to state
+      }),
+      // END: UPDATED GLOBAL FILTER STATE
     },
+
     initialState: { pagination: { pageSize: 10 } },
+    // START: UPDATED GLOBAL FILTER FUNCTION
     globalFilterFn: (row, columnId, filterValue) => {
-      const [name, category] = filterValue.split(' ');
+      const filters = JSON.parse(filterValue);
       const productName = row.getValue<string>('name').toLowerCase();
       const productCategory = row.getValue<string>('categoryName');
-      const nameMatch = productName.includes(name.toLowerCase());
-      const categoryMatch = category === 'all' || productCategory === category;
-      return nameMatch && categoryMatch;
+      const productLocation = row.getValue<string>('location');
+      const productPrice = parseFloat(row.getValue<string>('estPrice'));
+      const productType = (row.original as any)?.type; // Get product type
+
+      // Existing filters
+      const nameMatch = productName.includes(filters.name.toLowerCase());
+      const categoryMatch =
+        filters?.category === 'all' || productCategory === filters?.category;
+      const locationMatch =
+        filters?.location === 'all' || productLocation === filters?.location;
+
+      // Price filter
+      const minPriceFilter = filters.minPrice
+        ? parseFloat(filters.minPrice)
+        : null;
+      const maxPriceFilter = filters.maxPrice
+        ? parseFloat(filters.maxPrice)
+        : null;
+      const minMatch =
+        minPriceFilter === null ||
+        isNaN(minPriceFilter) ||
+        (!isNaN(productPrice) && productPrice >= minPriceFilter);
+      const maxMatch =
+        maxPriceFilter === null ||
+        isNaN(maxPriceFilter) ||
+        (!isNaN(productPrice) && productPrice <= maxPriceFilter);
+      const priceMatch = minMatch && maxMatch;
+
+      // New type filter
+      const typeMatch = filters.type === 'all' || productType === filters.type;
+
+      return (
+        nameMatch && categoryMatch && locationMatch && priceMatch && typeMatch
+      );
     },
+    // END: UPDATED GLOBAL FILTER FUNCTION
     meta: {
       forceRender,
     },
   });
-
   return (
     <div className="w-full overflow-x-auto">
       {/* Filter Controls */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:py-4 sm:space-x-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 sm:py-4">
+        {/* Search by name */}
         <Input
-          placeholder="Filter products..."
+          placeholder="Search products..."
           value={nameFilter}
           onChange={(event) => setNameFilter(event.target.value)}
-          className="w-full sm:max-w-sm text-sm sm:text-base"
+          className="w-full sm:max-w-xs text-sm"
         />
+
+        {/* Category filter */}
         <Select
           value={categoryFilter}
           onValueChange={(value) => setCategoryFilter(value)}
         >
-          <SelectTrigger className="w-full sm:w-[180px] text-sm sm:text-base">
-            <SelectValue placeholder="Filter category" />
+          <SelectTrigger className="w-full sm:w-44 text-sm">
+            <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
             {uniqueCategories.map((category) => (
               <SelectItem
                 key={category}
                 value={category}
-                className="text-sm sm:text-base"
+                className="capitalize"
               >
                 {category === 'all' ? 'All Categories' : category}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        {/* Type filter (only if more than 1) */}
+        {uniqueTypes.length > 1 && (
+          <Select
+            value={typeFilter}
+            onValueChange={(value) => setTypeFilter(value)}
+          >
+            <SelectTrigger className="w-full sm:w-44 text-sm">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {uniqueTypes.map((type: any) => (
+                <SelectItem key={type} value={type} className="capitalize">
+                  {type === 'all' ? 'All Types' : type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Location filter */}
+        <Select
+          value={locationFilter}
+          onValueChange={(value) => setLocationFilter(value)}
+        >
+          <SelectTrigger className="w-full sm:w-44 text-sm">
+            <SelectValue placeholder="Location" />
+          </SelectTrigger>
+          <SelectContent>
+            {uniqueLocations.map((loc) => (
+              <SelectItem key={loc} value={loc} className="capitalize">
+                {loc === 'all' ? 'All Locations' : loc}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Price range */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Input
+            type="number"
+            placeholder="Min (USD)"
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            className="w-full !sm:w-28 text-sm"
+          />
+          <span className="text-muted-foreground">–</span>
+          <Input
+            type="number"
+            placeholder="Max (USD)"
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            className="w-full !sm:w-28 text-sm"
+          />
+        </div>
       </div>
 
       {/* Table */}
-      <div className="rounded-md border mt-3 overflow-x-auto w-[300px] sm:w-[350px] md:w-full">
+      <div className="rounded-md border mt-3 overflow-x-auto w-[300px] sm:w-[350px] md:w-[955px]">
         <Table className="w-full">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -547,6 +711,7 @@ export function ProductTableUserSide({
               </TableRow>
             ))}
           </TableHeader>
+
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
@@ -559,7 +724,7 @@ export function ProductTableUserSide({
                     <TableCell
                       key={cell.id}
                       className={`px-3 py-4 text-xs sm:text-sm border ${
-                        cell.column.id === 'image'
+                        cell.column.id === 'images'
                           ? 'align-middle'
                           : 'align-top'
                       }`}
@@ -576,7 +741,7 @@ export function ProductTableUserSide({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-sm sm:text-base"
+                  className="h-24 text-center text-sm "
                 >
                   No results found
                 </TableCell>
@@ -585,34 +750,65 @@ export function ProductTableUserSide({
           </TableBody>
         </Table>
       </div>
-
       {/* Pagination */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 py-4">
-        <div className="text-xs sm:text-sm text-muted-foreground">
-          Showing {table.getRowModel().rows.length} of{' '}
-          {table.getFilteredRowModel().rows.length} items
+      <div className="flex items-center justify-between space-x-2 py-4">
+        <div className="text-sm text-muted-foreground">
+          {table.getFilteredRowModel().rows.length} row(s) found.
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            className="text-xs sm:text-sm px-3 py-1 h-8"
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            className="text-xs sm:text-sm px-3 py-1 h-8"
-          >
-            Next
-          </Button>
+        <div className="flex items-center space-x-6 lg:space-x-8">
+          <div className="flex items-center space-x-2">
+            <p className="text-sm font-medium">Rows per page</p>
+            <Select
+              value={`${table.getState().pagination.pageSize}`}
+              onValueChange={(value) => {
+                table.setPageSize(Number(value));
+              }}
+            >
+              <SelectTrigger className="h-8 w-[70px]">
+                <SelectValue
+                  placeholder={table.getState().pagination.pageSize}
+                />
+              </SelectTrigger>
+              <SelectContent side="top">
+                {[10, 25, 50, 100].map((pageSize) => (
+                  <SelectItem key={pageSize} value={`${pageSize}`}>
+                    {pageSize}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+            Page {table.getState().pagination.pageIndex + 1} of{' '}
+            {table.getPageCount()}
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <span className="sr-only">Go to previous page</span>
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              <span className="sr-only">Go to next page</span>
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
+      <ImageCarouselDialog
+        open={modalOpen}
+        images={modalImages}
+        onClose={closeImageModal}
+      />
     </div>
   );
 }

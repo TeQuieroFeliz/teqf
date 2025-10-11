@@ -4,13 +4,8 @@ import { getSubEventsClient } from '@/actions/sub-event/getSubEventClient';
 import ExportToPdfComp from '@/components/shared/ExportToPdfComp';
 import SubEventDetailPage from '@/components/user/sub-event/SubEventDetailPage';
 import { cookies } from 'next/headers';
-
+export const dynamic = 'force-dynamic';
 async function EventDetailPage({ params }: any) {
-  const cookiesStore = await cookies();
-  const token = cookiesStore.get('firebaseAuthToken')?.value;
-  if (!token) {
-    return;
-  }
   const { id } = await params;
   const event = await getSingleEvent(id);
   const products = await getProducts();
@@ -30,6 +25,7 @@ async function EventDetailPage({ params }: any) {
                   products={products}
                   key={subEvent.id}
                   subEvent={subEvent}
+                  handleOnDeleteWithFilter={() => {}}
                 />
               ))}
             </div>

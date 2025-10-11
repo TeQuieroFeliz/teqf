@@ -1,19 +1,20 @@
-'use client';
+"use client";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { useState } from 'react';
-import ProductForm from './ProductForm';
-import { ProductSchemaType } from '@/lib/schemas/ProductSchema';
-import { imageUpload } from '@/lib/imageUpload';
-import { useAuthContext } from '@/context/AuthContext';
-import { toast } from 'sonner';
-import { addProduct } from '@/actions/product/addProduct';
+} from "@/components/ui/dialog";
+import { useState } from "react";
+import ProductForm from "./ProductForm";
+import { ProductSchemaType } from "@/lib/schemas/ProductSchema";
+import { imageUpload } from "@/lib/imageUpload";
+import { useAuthContext } from "@/context/AuthContext";
+import { toast } from "sonner";
+import { addProduct } from "@/actions/product/addProduct";
+import { multipleImageUpload } from "@/lib/imageUpload";
 
 function AddProductDialog() {
   const [open, setOpen] = useState(false);
@@ -22,24 +23,31 @@ function AddProductDialog() {
   const handleSubmit = async (formData: ProductSchemaType) => {
     try {
       if (!currentUser) {
-        toast.error('User not found');
-        return;
-      }
-      let imageUrl: string = '';
-      try {
-        imageUrl = (await imageUpload(formData.image, currentUser)) as string;
-      } catch (error) {
-        toast.error('Image not uploaded');
+        toast.error("User not found");
         return;
       }
 
-      const res = await addProduct({ ...formData, image: imageUrl });
+      let imageUrls: string[] = [];
+      try {
+        imageUrls = await multipleImageUpload(
+          formData.images as File[],
+          currentUser
+        );
+      } catch (error) {
+        toast.error("Images not uploaded");
+        return;
+      }
+
+      const res = await addProduct({ ...formData, images: imageUrls });
       if (res?.error) {
         toast.error(res.message);
         return;
       }
+
+      toast.success("Product added successfully ✅");
     } catch (error) {
       console.log(error);
+      toast.error("Something went wrong");
     } finally {
       setOpen(false);
     }

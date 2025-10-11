@@ -1,17 +1,13 @@
 'use server';
 
 import { firestore } from '@/firebase/server';
-
-type Res = {
-  id: string;
-  role: 'ADMIN' | 'CLIENT';
-};
+import { UserType } from '@/lib/types';
 
 type GetUserResponse =
   | { error: true; message: string; user: null }
-  | { error: false; message?: string; user: Res };
+  | { error: false; message?: string; user: UserType };
 
-export const getUser = async (id: string): Promise<GetUserResponse> => {
+export const getUserById = async (id: string): Promise<GetUserResponse> => {
   if (!id) {
     return { error: true, message: 'User ID not found', user: null };
   }
@@ -20,6 +16,17 @@ export const getUser = async (id: string): Promise<GetUserResponse> => {
   if (!res.exists) {
     return { error: true, message: 'User not found', user: null };
   }
-  const user = { id: res.id, role: res.data()!.role } as Res;
+  const { role, status, createdAt } = res.data() as UserType;
+  const user = {
+    id: res.id,
+    ...res.data(),
+    role: role?.toLowerCase() ?? 'client',
+    status: status
+      ? status
+      : role === 'admin' || role === 'manager'
+        ? 'approved'
+        : 'pending',
+    createdAt: createdAt?.toDate?.().toISOString(),
+  } as UserType;
   return { error: false, user };
 };

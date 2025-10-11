@@ -10,20 +10,32 @@ import {
 } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
+import { useAuthContext } from '@/context/AuthContext';
 
 const navItems = [
   { name: 'Dashboard', href: '/admin-dashboard' },
   { name: 'Category', href: '/admin-dashboard/category' },
   { name: 'Products', href: '/admin-dashboard/products' },
+  { name: 'Products by Users', href: '/admin-dashboard/users-products' },
+  { name: 'Users', href: '/admin-dashboard/users' },
+  { name: 'Cities', href: '/admin-dashboard/location' },
 ];
 
 export default function AdminSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { currentUser } = useAuthContext();
+
+  const filteredNavItems = navItems.filter((item) => {
+    if (item.name === 'Users' && currentUser?.role !== 'admin') {
+      return false;
+    }
+    return true;
+  });
 
   const NavLinks = ({ onClick }: { onClick?: () => void }) => (
     <div className="space-y-2 p-4 lg:p-0">
-      {navItems.map(({ name, href }) => (
+      {filteredNavItems.map(({ name, href }) => (
         <Link
           key={href}
           href={href}
@@ -62,8 +74,8 @@ export default function AdminSidebar() {
       </div>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:block lg:w-64 relative bg-white border-r min-h-screen ">
-        <div className="p-4 fixed top-[86px] left-0 h-fit w-64">
+      <aside className="hidden lg:block lg:w-[235px] relative bg-white border-r min-h-screen ">
+        <div className="p-4 fixed top-[86px] left-0 h-fit w-[235px]">
           <h2 className="text-xl font-bold mb-4">Admin Menu</h2>
           <NavLinks />
         </div>

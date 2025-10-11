@@ -4,7 +4,7 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function sendEventSummaryEmail({ event, subEvents }: any) {
+export async function sendEventSummaryEmail({ to, event, subEvents }: any) {
   try {
     const emailSubject = `✨ Event Summary: ${event.title}`;
 
@@ -30,7 +30,7 @@ export async function sendEventSummaryEmail({ event, subEvents }: any) {
                 <div class="item-name">${item.name}</div>
                 ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
               </td>
-              <td>${item.categoryName}</td>
+              <td>${item?.categoryName}</td>
               <td class="color-chips">${colorChips}</td>
             </tr>
           `;
@@ -162,7 +162,7 @@ export async function sendEventSummaryEmail({ event, subEvents }: any) {
             <tr>
               <td>${i + 1}</td>
               <td>${item.name}</td>
-              <td>${item.categoryName}</td>
+              <td>${item?.categoryName}</td>
               <td>${colorChips}</td>
             </tr>`;
             })
@@ -197,10 +197,9 @@ export async function sendEventSummaryEmail({ event, subEvents }: any) {
   </body>
   </html>
 `;
-
     const { data, error } = await resend.emails.send({
       from: process.env.COMPANY_EMAIL!,
-      to: [process.env.COMPANY_EMAIL!],
+      to: [to],
       subject: emailSubject,
       html: emailHtml,
     });

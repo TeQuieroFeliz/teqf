@@ -1,15 +1,14 @@
 'use client';
-import { removeToken } from '@/actions/auth/remove-token';
-import { setToken } from '@/actions/auth/set-token';
+import { getUserById } from '@/actions/auth/get-user';
 import { auth } from '@/firebase/client';
-import { ParsedToken, signInWithEmailAndPassword, User } from 'firebase/auth';
+import { UserType } from '@/lib/types';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-type ParsedTokenType = ParsedToken & { role: string };
-
 type AuthContextType = {
-  currentUser: User | null;
-  customClaims: ParsedTokenType | null;
+  isLoading: boolean;
+  currentUser: UserType | null;
+  setCurrentUser: React.Dispatch<React.SetStateAction<UserType | null>>;
   logout: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
 };
@@ -21,25 +20,21 @@ export const AuthContextProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [customClaims, setCustomClaims] = useState<ParsedTokenType | null>(
-    null
-  );
+  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      setCurrentUser(user ?? null);
-      if (user) {
-        const tokenResult = await user.getIdTokenResult();
-        const token = tokenResult.token;
-        const refreshToken = user.refreshToken;
-        const claims = tokenResult.claims;
-        setCustomClaims((claims as ParsedTokenType) ?? null);
-        if (token && refreshToken) {
-          await setToken({ token, refreshToken });
+      try {
+        if (user) {
+          const { user: userFromDB } = await getUserById(user.uid);
+          setCurrentUser(userFromDB);
+        } else {
+          setCurrentUser(null);
         }
-      } else {
-        await removeToken();
-        setCustomClaims(null);
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setIsLoading(false);
       }
     });
 
@@ -58,7 +53,7 @@ export const AuthContextProvider = ({
 
   return (
     <AuthContext.Provider
-      value={{ currentUser, logout, signInWithEmail, customClaims }}
+      value={{ currentUser,setCurrentUser, logout, signInWithEmail, isLoading }}
     >
       {children}
     </AuthContext.Provider>

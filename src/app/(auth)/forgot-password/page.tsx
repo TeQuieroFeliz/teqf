@@ -9,7 +9,7 @@ import {
 
 export default function ForgotPassword() {
   return (
-    <Card className="max-w-sm mx-auto">
+    <Card className="max-w-sm mx-auto mt-24">
       <CardHeader>
         <CardTitle className="text-3xl font-bold">Forgot Password</CardTitle>
         <CardDescription>

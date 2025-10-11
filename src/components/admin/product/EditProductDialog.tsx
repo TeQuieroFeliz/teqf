@@ -1,37 +1,42 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
-import { useState } from 'react';
-import ProductForm from './ProductForm';
-import { ProductSchemaType, ProductType } from '@/lib/schemas/ProductSchema';
-import { imageUpload } from '@/lib/imageUpload';
-import { useAuthContext } from '@/context/AuthContext';
-import { toast } from 'sonner';
 import { editProduct } from '@/actions/product/editProduct';
-import { DialogTitle } from '@radix-ui/react-dialog';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { useAuthContext } from '@/context/AuthContext';
+import { multipleImageUpload } from '@/lib/imageUpload';
+import { ProductSchemaType, ProductType } from '@/lib/schemas/ProductSchema';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import ProductForm from './ProductForm';
 
 function EditProductDialog({ defaultValues }: { defaultValues: ProductType }) {
   const [open, setOpen] = useState(false);
   const { currentUser } = useAuthContext();
 
   const handleSubmit = async (formData: ProductSchemaType) => {
+    console.log({ formData });
     try {
       if (!currentUser) {
         toast.error('User not found');
         return;
       }
-      const imageUrl =
-        typeof formData.image === 'object'
-          ? await imageUpload(formData.image, currentUser)
-          : formData.image;
+      const imageUrl = await multipleImageUpload(
+        formData.images as File[],
+        currentUser
+      );
       if (!imageUrl) {
         toast.error('Image not found');
         return;
       }
 
       const res = await editProduct(
-        { ...formData, image: imageUrl },
+        { ...formData, images: imageUrl },
         defaultValues.id
       );
       if (res?.error) {
@@ -57,12 +62,16 @@ function EditProductDialog({ defaultValues }: { defaultValues: ProductType }) {
             onSubmitAction={handleSubmit}
             defaultValues={{
               name: defaultValues.name,
-              category: defaultValues.categoryId,
-              image: defaultValues.image,
+              category: defaultValues?.categoryId,
+              images: defaultValues.images,
               colors: defaultValues?.colors,
               type: defaultValues?.type,
               size: defaultValues?.size,
               note: defaultValues?.note,
+              location: defaultValues?.location,
+              description: defaultValues?.description,
+              estPrice: defaultValues?.estPrice?.toString(),
+              quantity: defaultValues?.quantity?.toString(),
             }}
           />
         </DialogContent>

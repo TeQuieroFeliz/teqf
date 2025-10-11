@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     for (let index = 0; index < subEvents.length; index++) {
       const subEvent = subEvents[index];
 
-      if (currentY > doc.internal.pageSize.height - 30 && index > 0) {
+      if (currentY > doc.internal.pageSize.height - 40 && index > 0) {
         doc.addPage();
         currentY = 15;
       } else if (index > 0) {
@@ -75,25 +75,26 @@ export async function POST(request: Request) {
 
       // Add subEvent colors right after metadata, before the table
       if (subEvent.colors && subEvent.colors.length > 0) {
-        currentY += 4; // Extra space before colors
+        currentY += 4;
         doc.setFont('helvetica', 'bold');
         doc.text('Event Colors:', 14, currentY);
         currentY += 4;
 
         doc.setFont('helvetica', 'normal');
         const colorSquareSize = 5;
-        const startX = 20; // Indent slightly from the left
+        const startX = 20;
         let currentX = startX;
         const maxWidth = pageWidth - 20;
-        const borderWidth = 0.3; // Border width in mm
+        const borderWidth = 0.3;
 
-        // First pass to calculate needed height
         let neededHeight = colorSquareSize;
         let lineWidth = 0;
 
         subEvent.colors.forEach((colorObj: any) => {
           const colorWidth =
-            colorSquareSize + 10 + colorObj.colorCode.length * 1.5;
+            colorSquareSize +
+            10 +
+            (colorObj.colorCode || colorObj.code || '').length * 1.5;
           if (lineWidth + colorWidth > maxWidth - startX) {
             neededHeight += colorSquareSize + 3;
             lineWidth = colorWidth;
@@ -102,64 +103,57 @@ export async function POST(request: Request) {
           }
         });
 
-        // Check if we need a new page
         if (currentY + neededHeight > doc.internal.pageSize.height - 20) {
           doc.addPage();
           currentY = 15;
         }
 
-        // Draw colors
         subEvent.colors.forEach((colorObj: any) => {
-          const colorWidth =
-            colorSquareSize + 10 + colorObj.colorCode.length * 1.5;
+          const colorCode = colorObj.colorCode || colorObj.code;
+          const colorWidth = colorSquareSize + 10 + colorCode.length * 1.5;
 
           if (currentX + colorWidth > maxWidth) {
             currentX = startX;
             currentY += colorSquareSize + 3;
           }
 
-          // Draw color square with border
-          doc.setDrawColor(0, 0, 0); // Black border
+          doc.setDrawColor(0, 0, 0);
           doc.setLineWidth(borderWidth);
-
-          // First draw the filled rectangle
-          doc.setFillColor(colorObj.colorCode);
+          doc.setFillColor(colorCode);
           doc.rect(currentX, currentY, colorSquareSize, colorSquareSize, 'F');
-
-          // Then draw the border rectangle
           doc.rect(currentX, currentY, colorSquareSize, colorSquareSize, 'S');
-
-          // Draw color code text
           doc.setTextColor(0, 0, 0);
           doc.text(
-            colorObj.colorCode,
+            colorCode,
             currentX + colorSquareSize + 2,
             currentY + colorSquareSize / 2 + 1
           );
-
           currentX += colorWidth;
         });
 
-        currentY += colorSquareSize + 6; // Space after colors
+        currentY += colorSquareSize + 6;
       }
 
-      currentY += 3; // Space before table
+      currentY += 3;
 
-      // Image fetching and table generation remains the same...
       const images: ({ data: string; format: string } | null)[] =
         await Promise.all(
           (subEvent.items || []).map(async (item: any) => {
-            if (!item.image) return null;
+            let imageUrl: string | null = null;
+            if (Array.isArray(item.images) && item.images.length > 0) {
+              imageUrl = item.images[0];
+            } else if (typeof item.image === 'string') {
+              imageUrl = item.image;
+            }
+            if (!imageUrl) return null;
 
             try {
-              const response = await fetch(item.image);
+              const response = await fetch(imageUrl);
               if (!response.ok) return null;
-
               const contentType = response.headers
                 .get('content-type')
                 ?.toLowerCase();
               const buffer = await response.arrayBuffer();
-
               let finalImageBuffer: Buffer;
               let finalImageFormat: 'PNG' | 'JPEG' | 'WEBP';
 
@@ -179,12 +173,9 @@ export async function POST(request: Request) {
                   | 'JPEG'
                   | 'WEBP';
               } else {
-                console.warn(`Unsupported image type: ${contentType}`);
                 return null;
               }
-
               const base64 = `data:image/${finalImageFormat.toLowerCase()};base64,${finalImageBuffer.toString('base64')}`;
-
               return { data: base64, format: finalImageFormat };
             } catch (error) {
               console.error('Failed to fetch or process image:', error);
@@ -193,40 +184,60 @@ export async function POST(request: Request) {
           })
         );
 
-      const itemRows = (subEvent.items || []).map((item: any, i: number) => {
-        const colorsDisplay = (item.colors || [])
-          .map((color: any) => `${color.name} (${color.quantity})`)
-          .join('\n');
+      let subEventTotal = 0;
 
-        return [
-          i + 1,
-          '', // Image placeholder
-          item.name,
-          item.categoryName,
-          item.quantity,
-          item.size || '',
-          colorsDisplay,
-          item.type || '',
-          item.description || '',
-        ];
+      const itemRows = (subEvent.items || []).map((item: any) => {
+        let itemTotalQuantity = 0;
+        if (Array.isArray(item.colors) && item.colors.length > 0) {
+          itemTotalQuantity = item.colors.reduce((sum: number, color: any) => {
+            const colorQty = parseInt(color.quantity, 10);
+            return sum + (isNaN(colorQty) ? 0 : colorQty);
+          }, 0);
+        } else {
+          const itemQty = parseInt(item.quantity, 10);
+          itemTotalQuantity = isNaN(itemQty) ? 0 : itemQty;
+        }
+
+        const price = parseFloat(item.estPrice);
+        if (!isNaN(price) && itemTotalQuantity > 0) {
+          subEventTotal += price * itemTotalQuantity;
+        }
+
+        let desc = item.name || '';
+        if (item.colors && item.colors.length > 0) {
+          const colorsStr = item.colors
+            .map((color: any) => `${color.quantity} in ${color.name}`)
+            .join(', ');
+          desc += ` (${colorsStr})`;
+        }
+        if (item.description) {
+          desc += ` - ${item.description}`;
+        }
+
+        const formattedPrice = item.estPrice
+          ? `$${parseFloat(item.estPrice).toFixed(2)}`
+          : 'N/A';
+
+        return [itemTotalQuantity, '', desc, formattedPrice];
       });
 
       autoTable(doc, {
         startY: currentY,
-        head: [
+        head: [['Quantity', 'Image', 'Description', 'Est. Price USD']],
+        body: itemRows,
+        foot: [
           [
-            '#',
-            'Image',
-            'Item Name',
-            'Category',
-            'Quantity',
-            'Size',
-            'Color + Quantity',
-            'Type',
-            'Description',
+            {
+              content: 'Total Estimated Price:',
+              colSpan: 3,
+              styles: { halign: 'right', fontStyle: 'bold', fontSize: 9 },
+            },
+            {
+              content: `$${subEventTotal.toFixed(2)}`,
+              styles: { halign: 'center', fontStyle: 'bold', fontSize: 9 },
+            },
           ],
         ],
-        body: itemRows,
         theme: 'grid',
         styles: {
           font: 'helvetica',
@@ -244,54 +255,41 @@ export async function POST(request: Request) {
           fontStyle: 'bold',
           halign: 'center',
           fontSize: 9,
-          cellPadding: 2,
+        },
+        footStyles: {
+          fillColor: [230, 230, 230],
+          textColor: 33,
         },
         alternateRowStyles: {
           fillColor: [248, 248, 248],
         },
         columnStyles: {
-          0: { cellWidth: 8, halign: 'center' }, // #
-          1: { cellWidth: 22, halign: 'center' }, // Image
-          2: { cellWidth: 30 }, // Item Name
-          3: { cellWidth: 20 }, // Category
-          4: { cellWidth: 15, halign: 'center' }, // Quantity
-          5: { cellWidth: 15 }, // Size
-          6: { cellWidth: 25 }, // Color + Qty
-          7: { cellWidth: 15 }, // Type
-          8: { cellWidth: 32 }, // Description
+          0: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 28, halign: 'center' },
+          2: { cellWidth: 100 },
+          3: { cellWidth: 30, halign: 'center' },
         },
         didParseCell: function (data: any) {
-          const imageColumnIndex = 1;
           const imageRowHeight = 22;
-
           if (
-            data.column.index === imageColumnIndex &&
+            data.column.index === 1 &&
             data.row.section === 'body' &&
-            data.row.index < images.length &&
             images[data.row.index]
           ) {
             data.row.height = imageRowHeight;
           }
         },
         didDrawCell: function (data: any) {
-          const imageColumnIndex = 1;
-
           if (
-            data.column.index === imageColumnIndex &&
+            data.column.index === 1 &&
             data.row.section === 'body' &&
-            data.row.index < images.length &&
             images[data.row.index]
           ) {
             const imgObject = images[data.row.index];
             if (!imgObject) return;
-
-            const cellWidth = data.cell.width;
-            const cellHeight = data.cell.height;
             const imgSize = 16;
-
-            const imgX = data.cell.x + (cellWidth - imgSize) / 2;
-            const imgY = data.cell.y + (cellHeight - imgSize) / 2;
-
+            const imgX = data.cell.x + (data.cell.width - imgSize) / 2;
+            const imgY = data.cell.y + (data.cell.height - imgSize) / 2;
             try {
               doc.addImage(
                 imgObject.data,
@@ -306,8 +304,7 @@ export async function POST(request: Request) {
             }
           }
         },
-        didDrawPage: function (data: any) {
-          currentY = data?.cursor?.y + 8;
+        didDrawPage: function () {
           doc.setFontSize(8);
           doc.setTextColor(150);
           doc.text(
@@ -320,7 +317,7 @@ export async function POST(request: Request) {
       });
     }
 
-    // Footer
+    // Final Footer
     doc.setFontSize(8);
     doc.setTextColor(150);
     doc.text(
@@ -334,9 +331,7 @@ export async function POST(request: Request) {
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${
-          event.title || 'event'
-        }.pdf"`,
+        'Content-Disposition': `attachment; filename="${event.title || 'event'}.pdf"`,
       },
     });
   } catch (error) {

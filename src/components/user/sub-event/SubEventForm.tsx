@@ -40,29 +40,43 @@ import {
   SubEventFormSchema,
 } from '@/lib/schemas/SubEventSchema';
 import { cn, generateTimeSlots } from '@/lib/utils';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import AddProductInSubEventDialog from './AddProductInSubEventDialog';
 import DeleteSubEventDialog from './DeleteSubEvent';
 import { HexColorPicker } from 'react-colorful';
+import { getSubEvents } from '@/actions/sub-event/getSubEvents';
+import { useAddSubEvent } from '@/actions/sub-event/sub-event-rc/addSubEventRc';
+import { useGetSubEvents } from '@/actions/sub-event/sub-event-rc/getSubEventRc';
+import { useEditSubEvent } from '@/actions/sub-event/sub-event-rc/editSubEventRc';
 
 type Props = {
   products: ProductType[];
   subEvent?: SubEventDBWithId;
   formId?: string;
   hideSubmitButton?: boolean;
+  handleOnDeleteWithFilter?: (subEventId: string) => void;
 };
 
 const timeSlots = generateTimeSlots();
 
-export function SubEventForm({ products, subEvent }: Props) {
+export function SubEventForm({
+  products,
+  subEvent,
+  handleOnDeleteWithFilter,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [lastValues, setLastValues] = useState<any | null>(null);
   const auth = useAuthContext();
   const params = useParams();
+  const eventId = params.id as string;
+  const router = useRouter();
+  const { addSubEventMutation, addSubEventLoading } = useAddSubEvent(eventId);
+  const { refetchSubevents } = useGetSubEvents(eventId);
+  const { editSubEventMutation } = useEditSubEvent(eventId);
 
   const form = useForm<z.infer<typeof SubEventFormSchema>>({
     resolver: zodResolver(SubEventFormSchema),
@@ -120,29 +134,27 @@ export function SubEventForm({ products, subEvent }: Props) {
       }
 
       setIsEditing(true);
-
       const finalValues = {
         ...currentValues,
-        eventId: params.id as string,
+        eventId,
         items: updatedItems ? updatedItems : items,
       };
 
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        toast.error('Token not found');
+      const user = auth.currentUser;
+      if (!user) {
+        toast.error('User not found');
         setIsEditing(false);
         return;
       }
 
       try {
-        const res = await editSubEvent({
+        const { error, message } = await editSubEventMutation({
           formData: finalValues,
-          token,
           id: subEvent.id,
         });
 
-        if (res?.error) {
-          toast.error(res.message);
+        if (error) {
+          toast.error(message);
         } else {
           // Update lastValues with the successfully saved values
           setLastValues({
@@ -154,9 +166,19 @@ export function SubEventForm({ products, subEvent }: Props) {
         toast.error('An error occurred while saving changes');
       } finally {
         setIsEditing(false);
+        router.refresh();
       }
     },
-    [subEvent, items, lastValues, form, params.id, auth.currentUser]
+    [
+      subEvent,
+      form,
+      items,
+      eventId,
+      auth.currentUser,
+      lastValues,
+      editSubEventMutation,
+      router,
+    ]
   );
 
   // Handle blur events for input fields
@@ -188,44 +210,40 @@ export function SubEventForm({ products, subEvent }: Props) {
   );
 
   async function handleAdd(values: z.infer<typeof SubEventFormSchema>) {
-    if (!items.length) {
-      toast.error('Error!', {
-        description: 'Add at least one item to create event',
-      });
-      return;
+    try {
+      if (!items.length) {
+        toast.error('Error!', {
+          description: 'Add at least one item to create event',
+        });
+        return;
+      }
+
+      const finalValues = {
+        ...values,
+        eventId,
+        items,
+      };
+
+      const user = auth.currentUser;
+      if (!user) {
+        toast.error('User not found');
+        return;
+      }
+      await addSubEventMutation(finalValues);
+      await refetchSubevents();
+      form.reset();
+      setItems([]);
+      setTimeout(() => {
+        const scrollHeight = document.documentElement.scrollHeight;
+        const scrollToPosition = scrollHeight - window.innerHeight - 350;
+        window.scrollTo({
+          top: Math.max(0, scrollToPosition), // Ensure we don't get negative values
+          behavior: 'smooth',
+        });
+      }, 1000);
+    } catch (error) {
+      console.log(error);
     }
-
-    const finalValues = {
-      ...values,
-      eventId: params.id as string,
-      items,
-    };
-
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) {
-      toast.error('Token not found');
-      return;
-    }
-
-    const res = await addSubEvent(finalValues, token);
-
-    if (res?.error) {
-      toast.error(res.message);
-      return;
-    }
-
-    toast.success(res.message);
-    form.reset();
-    setItems([]);
-    setTimeout(() => {
-      const scrollHeight = document.documentElement.scrollHeight;
-      const scrollToPosition = scrollHeight - window.innerHeight - 350;
-
-      window.scrollTo({
-        top: Math.max(0, scrollToPosition), // Ensure we don't get negative values
-        behavior: 'smooth',
-      });
-    }, 1000);
   }
 
   return (
@@ -238,7 +256,10 @@ export function SubEventForm({ products, subEvent }: Props) {
             </span>
             {subEvent && (
               <div>
-                <DeleteSubEventDialog subEventId={subEvent.id} />
+                <DeleteSubEventDialog
+                  subEventId={subEvent.id}
+                  handleOnDeleteWithFilter={handleOnDeleteWithFilter}
+                />
               </div>
             )}
           </div>
@@ -246,7 +267,11 @@ export function SubEventForm({ products, subEvent }: Props) {
       </CardHeader>
       <CardContent className="px-4 py-3 sm:px-6 sm:py-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(subEvent ? handleEdit : handleAdd)}>
+          <form
+            onSubmit={async (e) => {
+              await form.handleSubmit(subEvent ? handleEdit : handleAdd)(e);
+            }}
+          >
             <fieldset
               className="space-y-6 sm:space-y-8"
               disabled={form.formState.isSubmitting}
@@ -323,7 +348,7 @@ export function SubEventForm({ products, subEvent }: Props) {
                 />
                 {/* Color Picker */}
                 <div className="flex-1/2 ">
-                  <FormLabel className="text-base">Color Palette</FormLabel>
+                  <FormLabel className="text-base">Colors Available</FormLabel>
                   <div className="flex items-center justify-start gap-2 flex-wrap mt-1.5">
                     <div className="flex items-center  justify-start gap-2 flex-wrap">
                       {fields.map((field, index) => (
@@ -557,6 +582,7 @@ export function SubEventForm({ products, subEvent }: Props) {
               {!subEvent && (
                 <div className="text-center">
                   <Button
+                    disabled={addSubEventLoading}
                     type="submit"
                     className="w-full gap-2 px-4 py-5 text-base sm:text-lg font-medium sm:px-6 sm:py-6"
                     variant="default"

@@ -28,7 +28,7 @@ export const SubEventFormSchema = z
 export type Item = {
   id: string;
   name: string;
-  image: string;
+  images: string[];
   categoryId: string;
   categoryName: string;
   colors?: {
@@ -37,6 +37,7 @@ export type Item = {
     quantity: number;
   }[];
   description?: string;
+  estPrice?: number;
 };
 
 export type SubEventDb = {

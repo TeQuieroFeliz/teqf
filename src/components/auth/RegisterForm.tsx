@@ -27,9 +27,16 @@ import { registerUser } from '@/actions/auth/register-user';
 import { useAuthContext } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth, db } from '@/firebase/client';
+import { Separator } from '../ui/separator';
+import { FcGoogle } from 'react-icons/fc';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { handleGoogleSignIn } from '@/actions/auth/google-auth';
+import { getUserById } from '@/actions/auth/get-user';
 
 function RegisterForm() {
-  const auth = useAuthContext();
+  const { signInWithEmail, setCurrentUser } = useAuthContext();
   const router = useRouter();
   const form = useForm<RegisterFormType>({
     resolver: zodResolver(RegisterFormSchema),
@@ -53,7 +60,7 @@ function RegisterForm() {
       toast.success('Registered!', {
         description: `${formData.name} registered successfully`,
       });
-      await auth.signInWithEmail(formData.email, formData.password);
+      await signInWithEmail(formData.email, formData.password);
       router.refresh();
     } catch (error) {
       console.log(error);
@@ -61,18 +68,18 @@ function RegisterForm() {
   };
 
   return (
-    <Card className="max-w-sm mx-auto">
+    <Card className="max-w-sm mx-auto my-5 shadow-md rounded-2xl">
       <CardHeader>
         <CardTitle className="font-semibold text-center text-2xl">
-          Registeration Form
+          Registration Form
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(formSubmit)}>
+          <form onSubmit={form.handleSubmit(formSubmit)} className="space-y-4">
             <fieldset
               disabled={form.formState.isSubmitting}
-              className="space-y-3 flex flex-col"
+              className="space-y-4"
             >
               <FormField
                 control={form.control}
@@ -81,12 +88,13 @@ function RegisterForm() {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} type="text" />
+                      <Input {...field} type="text" placeholder="John Doe" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="email"
@@ -94,12 +102,17 @@ function RegisterForm() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input {...field} type="email" />
+                      <Input
+                        {...field}
+                        type="email"
+                        placeholder="you@example.com"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="password"
@@ -107,35 +120,80 @@ function RegisterForm() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input {...field} type="password" />
+                      <Input
+                        {...field}
+                        type="password"
+                        placeholder="••••••••"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="confirmPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ConfirmPassword</FormLabel>
+                    <FormLabel>Confirm Password</FormLabel>
                     <FormControl>
-                      <Input {...field} type="password" />
+                      <Input
+                        {...field}
+                        type="password"
+                        placeholder="••••••••"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <Button type="submit" className="w-full">
-                Submit
+                Register
               </Button>
             </fieldset>
           </form>
         </Form>
+
+        {/* Separator */}
+        <div className="relative">
+          <Separator className="my-6" />
+          <span className="absolute inset-x-0 -top-3 mx-auto w-fit bg-white px-2 text-sm text-muted-foreground">
+            OR
+          </span>
+        </div>
+
+        {/* Google Sign-in */}
+        <Button
+          variant="outline"
+          onClick={async () => {
+            const { userId } = await handleGoogleSignIn();
+            if (userId) {
+              const { user: userFromDB } = await getUserById(userId);
+              setCurrentUser(userFromDB);
+              router.push('/status');
+            }
+            router.refresh();
+          }}
+          className="w-full flex items-center justify-center gap-2"
+          type="button"
+        >
+          <FcGoogle size={20} />
+          Continue with Google
+        </Button>
+
+        {/* Login link */}
+        <div className="text-center text-sm text-muted-foreground">
+          Already have an account?{' '}
+          <Link
+            href="/login"
+            className="font-medium text-primary hover:underline"
+          >
+            Login
+          </Link>
+        </div>
       </CardContent>
-      <Button asChild variant="link">
-        <Link href="/login">Already have an account?</Link>
-      </Button>
     </Card>
   );
 }

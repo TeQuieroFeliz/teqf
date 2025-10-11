@@ -28,3 +28,29 @@ export const addProduct = async (formData: ProductSchemaType) => {
     };
   }
 };
+
+export const addProductUserSide = async (
+  formData: ProductSchemaType,
+  userId: string
+) => {
+  const validation = productSchemaForServer.safeParse(formData);
+  if (!userId) {
+    return { error: true, message: 'User not found' };
+  }
+  if (!validation.success) {
+    return { error: true, message: 'Validations failed' };
+  }
+
+  try {
+    await firestore
+      .collection('products-user')
+      .add({ ...formData, userId, addedByAdmin: false, createdAt: new Date() });
+    revalidatePath('/user-dashboard/products');
+  } catch (error: any) {
+    console.log(error);
+    return {
+      error: true,
+      message: error.message || 'Something went wrong while adding product',
+    };
+  }
+};

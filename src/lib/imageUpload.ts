@@ -5,11 +5,15 @@ import {
   ref,
   uploadBytesResumable,
 } from 'firebase/storage';
+import { UserType } from './types';
 
-export const imageUpload = async (image: File, user: User): Promise<string> => {
+export const imageUpload = async (
+  image: File,
+  user: UserType
+): Promise<string> => {
   try {
     const storage = getStorage();
-    const fileName = `${user.uid}-${new Date().getTime()}-${image.name}`;
+    const fileName = `${user.id}-${new Date().getTime()}-${image.name}`;
     const storageRef = ref(storage, 'images/' + fileName);
 
     const uploadTask = uploadBytesResumable(storageRef, image);
@@ -40,5 +44,28 @@ export const imageUpload = async (image: File, user: User): Promise<string> => {
   } catch (error) {
     console.error('Image upload failed:', error);
     throw error;
+  }
+};
+
+export const multipleImageUpload = async (
+  images: File[],
+  user: UserType
+): Promise<string[]> => {
+  try {
+    return Promise.all(
+      images?.map((img) => {
+        if (
+          typeof img === 'string' &&
+          (img as string).startsWith('https://firebasestorage.googleapis.com/')
+        ) {
+          return img as string;
+        } else {
+          return imageUpload(img, user);
+        }
+      })
+    );
+  } catch (err) {
+    console.error('Multiple image upload failed:', err);
+    throw err;
   }
 };
