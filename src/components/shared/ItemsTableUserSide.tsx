@@ -473,7 +473,7 @@ export function ItemsTableUserSide({
 
   return (
     <div className="w-full">
-      <div className="rounded-md border mt-3 overflow-x-auto w-[290px] md:w-full">
+      <div className="rounded-md border mt-3 overflow-x-auto w-[290px] md:w-[calc(100vw-335px)]">
         <Table>
           <TableHeader className="bg-gray-50 dark:bg-gray-800">
             {table.getHeaderGroups().map((headerGroup) => (
