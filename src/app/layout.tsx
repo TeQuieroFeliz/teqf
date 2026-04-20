@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import Navbar from '@/components/shared/Navbar';
-import Footer from '@/components/shared/Footer';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthContextProvider } from '@/context/AuthContext';
 import Providers from '@/lib/Providers';
@@ -40,12 +38,8 @@ export default function RootLayout({
       >
         <AuthContextProvider>
           <Providers>
-            <div className="flex flex-col min-h-screen justify-between">
-              <Navbar />
-              <div className="overflow-x-hidden pt-[86px]">
-                <main>{children}</main>
-              </div>
-              <Footer />
+            <div className="overflow-x-hidden">
+              <main>{children}</main>
             </div>
           </Providers>
         </AuthContextProvider>

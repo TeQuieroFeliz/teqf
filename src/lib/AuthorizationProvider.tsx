@@ -161,7 +161,7 @@ import React, { useEffect, useState, ReactNode } from 'react';
 
 // --- Route & Role Configuration ---
 const ROUTES = {
-  PUBLIC: ['/'],
+  PUBLIC: ['/', '/get-in-touch', '/catalog', '/portfolio'],
   AUTH: ['/login', '/register', '/forgot-password'],
   ADMIN_DASHBOARD: '/admin-dashboard',
   USER_DASHBOARD: '/user-dashboard',
