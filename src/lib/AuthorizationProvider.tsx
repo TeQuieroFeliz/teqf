@@ -180,6 +180,16 @@ function AuthorizationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (
+      pathname.startsWith('/admin') ||
+      pathname.startsWith('/blog') ||
+      pathname.startsWith('/portfolio') ||
+      pathname.startsWith('/planner')
+    ) {
+      setIsAuthorized(true);
+      return;
+    }
+
     const isPublicPage = ROUTES.PUBLIC.includes(pathname);
     const isAuthPage = ROUTES.AUTH.includes(pathname);
     const isAdminOnlyPage = ROUTES.ADMIN_ONLY.some((p) =>

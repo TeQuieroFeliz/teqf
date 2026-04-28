@@ -1,0 +1,63 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Public read access for all images
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+
+    // Articles folder - allow authenticated admins to upload
+    match /articles/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid in getAdminUids();
+    }
+
+    // General images folder - allow authenticated users
+    match /images/{fileName} {
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Portfolio images — no size limit, authenticated users only
+    match /portfolio/{projectId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // User profiles/avatars
+    match /users/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth.uid == userId;
+      allow delete: if request.auth.uid == userId;
+    }
+
+    // Furniture catalog images — public read, authenticated write
+    match /furniture/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Flower catalog images — public read, authenticated write
+    match /flowers/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Planner event documents (regulations, layouts) — authenticated only
+    match /planner-events/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+
+    // Planner profile avatars — authenticated only
+    match /planner-avatars/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+  }
+}
