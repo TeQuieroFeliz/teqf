@@ -3,8 +3,8 @@ import { getApps } from 'firebase-admin/app';
 import { Auth, getAuth } from 'firebase-admin/auth';
 import { Firestore, getFirestore } from 'firebase-admin/firestore';
 
-let firestore: Firestore | undefined;
-let auth: Auth | undefined;
+let firestore = undefined as unknown as Firestore;
+let auth = undefined as unknown as Auth;
 
 const hasCredentials =
   process.env.FIREBASE_PROJECT_ID &&

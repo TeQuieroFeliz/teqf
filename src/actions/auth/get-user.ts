@@ -12,6 +12,7 @@ export const getUserById = async (id: string): Promise<GetUserResponse> => {
     return { error: true, message: 'User ID not found', user: null };
   }
 
+  if (!firestore) return { error: true, message: 'Database non disponibile', user: null };
   const res = await firestore.collection('users').doc(id).get();
   if (!res.exists) {
     return { error: true, message: 'User not found', user: null };
