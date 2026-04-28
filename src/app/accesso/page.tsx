@@ -8,7 +8,9 @@ import { Loader2 } from 'lucide-react';
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const from = params.get('from') ?? '/';
+  const rawFrom = params.get('from') ?? '/';
+  const BLOCKED = ['/login', '/register', '/forgot-password', '/accesso'];
+  const from = BLOCKED.some(p => rawFrom.startsWith(p)) ? '/' : rawFrom;
 
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const COOKIE = 'site_auth';
-const SKIP = ['/accesso', '/api/site-auth'];
+const SKIP = ['/accesso', '/api/site-auth', '/login', '/register', '/forgot-password'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
