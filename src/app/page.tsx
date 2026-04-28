@@ -185,7 +185,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-8">
 
           {/* ── Logo ── */}
-          <div className="flex items-center gap-3 shrink-0">
+          <Link href="/" className="flex items-center gap-3 shrink-0" style={{ textDecoration: 'none' }}>
             <Image
               src="/logo.png"
               alt="Te Quiero Feliz"
@@ -219,7 +219,7 @@ export default function HomePage() {
                 {t.nav.tagline}
               </span>
             </div>
-          </div>
+          </Link>
 
           {/* ── Center nav links ── */}
           <nav className="hidden md:flex items-center gap-7">
@@ -637,39 +637,48 @@ export default function HomePage() {
 
           {/* Stats cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {t.about.stats.map((s, i) => (
-              <div
-                key={i}
-                className="rounded-2xl p-6 flex flex-col gap-2 text-center"
-                style={{
-                  backgroundColor: "rgba(232,196,180,0.06)",
-                  border: "1px solid rgba(232,196,180,0.15)",
-                }}
-              >
-                <span
+            {t.about.stats.map((s, i) => {
+              const isXanath = s.label.toLowerCase().includes('xanath');
+              const Tag = isXanath ? 'a' : 'div';
+              return (
+                <Tag
+                  key={i}
+                  {...(isXanath ? { href: 'https://www.xanathbanuelos.com', target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  className="rounded-2xl p-6 flex flex-col gap-2 text-center"
                   style={{
-                    fontFamily: "var(--font-display)",
-                    color: "var(--tqf-gold)",
-                    fontSize: "2.5rem",
-                    fontWeight: 300,
-                    lineHeight: 1,
+                    backgroundColor: "rgba(232,196,180,0.06)",
+                    border: "1px solid rgba(232,196,180,0.15)",
+                    textDecoration: 'none',
+                    cursor: isXanath ? 'pointer' : 'default',
+                    transition: isXanath ? 'opacity 0.2s' : undefined,
                   }}
+                  {...(isXanath ? { onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.opacity = '0.8'; }, onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.opacity = '1'; } } : {})}
                 >
-                  {s.value}
-                </span>
-                <span
-                  style={{
-                    color: "var(--tqf-cipria)",
-                    fontSize: "0.7rem",
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {s.label}
-                </span>
-              </div>
-            ))}
+                  <span
+                    style={{
+                      fontFamily: "var(--font-display)",
+                      color: "var(--tqf-gold)",
+                      fontSize: "2.5rem",
+                      fontWeight: 300,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {s.value}
+                  </span>
+                  <span
+                    style={{
+                      color: "var(--tqf-cipria)",
+                      fontSize: "0.7rem",
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {s.label}
+                  </span>
+                </Tag>
+              );
+            })}
           </div>
         </div>
       </section>

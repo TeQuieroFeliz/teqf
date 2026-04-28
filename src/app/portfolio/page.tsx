@@ -11,7 +11,6 @@ const content = {
       tagline: "LUXURY FLORAL & EVENT DESIGN",
       planner: "Planner Area",
       links: [
-        { href: "/catalog", label: "Catalog" },
         { href: "/portfolio", label: "Portfolio" },
         { href: "/#about", label: "About Us" },
       ],
@@ -49,7 +48,6 @@ const content = {
       tagline: "DISEÑO FLORAL DE LUJO & PRODUCCIÓN DE EVENTOS",
       planner: "Área Planner",
       links: [
-        { href: "/catalog", label: "Catálogo" },
         { href: "/portfolio", label: "Portafolio" },
         { href: "/#about", label: "Nosotros" },
       ],
@@ -87,7 +85,6 @@ const content = {
       tagline: "DESIGN FLOREALE DI LUSSO & PRODUZIONE EVENTI",
       planner: "Area Planner",
       links: [
-        { href: "/catalog", label: "Catalogo" },
         { href: "/portfolio", label: "Portfolio" },
         { href: "/#about", label: "Chi Siamo" },
       ],
