@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const COOKIE = 'site_auth';
-const SKIP = ['/login', '/api/site-auth'];
+const SKIP = ['/accesso', '/api/site-auth'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,7 +18,7 @@ export function middleware(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone();
-  url.pathname = '/login';
+  url.pathname = '/accesso';
   url.searchParams.set('from', pathname);
   return NextResponse.redirect(url);
 }

@@ -80,7 +80,7 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
+export default function AccessoPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4"
@@ -111,10 +111,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Divider */}
         <div className="w-full h-px" style={{ background: 'var(--tqf-beige-border)' }} />
 
-        {/* Heading */}
         <div className="text-center">
           <h1 style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontSize: '1.25rem', fontWeight: 300 }}>
             Accesso riservato
@@ -124,7 +122,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Form */}
         <Suspense>
           <LoginForm />
         </Suspense>
