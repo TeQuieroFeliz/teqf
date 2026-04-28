@@ -639,44 +639,33 @@ export default function HomePage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {t.about.stats.map((s, i) => {
               const isXanath = s.label.toLowerCase().includes('xanath');
-              const Tag = isXanath ? 'a' : 'div';
-              return (
-                <Tag
-                  key={i}
-                  {...(isXanath ? { href: 'https://www.xanathbanuelos.com', target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  className="rounded-2xl p-6 flex flex-col gap-2 text-center"
-                  style={{
-                    backgroundColor: "rgba(232,196,180,0.06)",
-                    border: "1px solid rgba(232,196,180,0.15)",
-                    textDecoration: 'none',
-                    cursor: isXanath ? 'pointer' : 'default',
-                    transition: isXanath ? 'opacity 0.2s' : undefined,
-                  }}
-                  {...(isXanath ? { onMouseEnter: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.opacity = '0.8'; }, onMouseLeave: (e: React.MouseEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.opacity = '1'; } } : {})}
-                >
-                  <span
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      color: "var(--tqf-gold)",
-                      fontSize: "2.5rem",
-                      fontWeight: 300,
-                      lineHeight: 1,
-                    }}
-                  >
+              const inner = (
+                <>
+                  <span style={{ fontFamily: "var(--font-display)", color: "var(--tqf-gold)", fontSize: "2.5rem", fontWeight: 300, lineHeight: 1 }}>
                     {s.value}
                   </span>
-                  <span
-                    style={{
-                      color: "var(--tqf-cipria)",
-                      fontSize: "0.7rem",
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      lineHeight: 1.4,
-                    }}
-                  >
+                  <span style={{ color: "var(--tqf-cipria)", fontSize: "0.7rem", letterSpacing: "0.1em", textTransform: "uppercase", lineHeight: 1.4 }}>
                     {s.label}
                   </span>
-                </Tag>
+                </>
+              );
+              const cardStyle: React.CSSProperties = {
+                backgroundColor: "rgba(232,196,180,0.06)",
+                border: "1px solid rgba(232,196,180,0.15)",
+              };
+              if (isXanath) {
+                return (
+                  <a key={i} href="https://www.xanathbanuelos.com" target="_blank" rel="noopener noreferrer"
+                    className="rounded-2xl p-6 flex flex-col gap-2 text-center transition-opacity hover:opacity-75"
+                    style={{ ...cardStyle, textDecoration: 'none' }}>
+                    {inner}
+                  </a>
+                );
+              }
+              return (
+                <div key={i} className="rounded-2xl p-6 flex flex-col gap-2 text-center" style={cardStyle}>
+                  {inner}
+                </div>
               );
             })}
           </div>
