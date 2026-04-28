@@ -161,32 +161,37 @@ import React, { useEffect, useState, ReactNode } from 'react';
 
 // --- Route & Role Configuration ---
 const ROUTES = {
-  PUBLIC: ['/', '/get-in-touch', '/catalog', '/portfolio'],
-  AUTH: ['/login', '/register', '/forgot-password'],
+  PUBLIC: ['/', '/get-in-touch', '/catalog', '/portfolio', '/flowers'],
+  AUTH: ['/login', '/register', '/forgot-password', '/accesso'],
   ADMIN_DASHBOARD: '/admin-dashboard',
   USER_DASHBOARD: '/user-dashboard',
   STATUS: '/status',
   ADMIN_ONLY: ['/admin-dashboard/user'],
 };
 
+const isAlwaysAllowed = (pathname: string) =>
+  ROUTES.PUBLIC.includes(pathname) ||
+  ROUTES.AUTH.some(r => pathname.startsWith(r)) ||
+  pathname.startsWith('/admin') ||
+  pathname.startsWith('/blog') ||
+  pathname.startsWith('/portfolio') ||
+  pathname.startsWith('/planner') ||
+  pathname.startsWith('/flowers') ||
+  pathname.startsWith('/catalog');
+
 function AuthorizationProvider({ children }: { children: ReactNode }) {
   const { currentUser, isLoading } = useAuthContext();
   const pathname = usePathname();
   const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(() => isAlwaysAllowed(pathname));
 
   useEffect(() => {
-    if (isLoading) {
+    if (isAlwaysAllowed(pathname)) {
+      setIsAuthorized(true);
       return;
     }
 
-    if (
-      pathname.startsWith('/admin') ||
-      pathname.startsWith('/blog') ||
-      pathname.startsWith('/portfolio') ||
-      pathname.startsWith('/planner')
-    ) {
-      setIsAuthorized(true);
+    if (isLoading) {
       return;
     }
 
