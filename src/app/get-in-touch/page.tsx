@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { sendContactEmail } from "@/actions/send-contact-email";
 
 const content = {
   en: {
@@ -28,9 +30,11 @@ const content = {
       phonePlaceholder: "Phone (optional)",
       eventTypeLabel: "Event Type",
       eventCityLabel: "Event City",
+      eventDateLabel: "Event Date (optional)",
       messagePlaceholder: "Tell us about your vision, date, and guest count…",
       eventTypes: ["Indian Wedding", "Jewish Wedding", "Persian Wedding", "Other"],
-      eventCities: ["Ciudad de México", "Cancún / Riviera Maya", "Oaxaca", "Los Cabos", "Roma / Italy", "Other"],
+      successMessage: "Message sent! We'll get back to you within 24 hours.",
+      errorMessage: "Something went wrong. Please try again.",
     },
     footer: {
       tagline: "Luxury Floral Design & Event Production",
@@ -62,9 +66,11 @@ const content = {
       phonePlaceholder: "Teléfono (opcional)",
       eventTypeLabel: "Tipo de Evento",
       eventCityLabel: "Ciudad del Evento",
+      eventDateLabel: "Fecha del Evento (opcional)",
       messagePlaceholder: "Cuéntanos sobre tu visión, fecha y número de invitados…",
       eventTypes: ["Boda India", "Boda Judía", "Boda Persa", "Otro"],
-      eventCities: ["Ciudad de México", "Cancún / Riviera Maya", "Oaxaca", "Los Cabos", "Roma / Italia", "Otro"],
+      successMessage: "¡Mensaje enviado! Te responderemos en menos de 24 horas.",
+      errorMessage: "Algo salió mal. Por favor intenta de nuevo.",
     },
     footer: {
       tagline: "Diseño Floral de Lujo y Producción de Eventos",
@@ -96,9 +102,11 @@ const content = {
       phonePlaceholder: "Telefono (opzionale)",
       eventTypeLabel: "Tipo di Evento",
       eventCityLabel: "Città dell'Evento",
+      eventDateLabel: "Data dell'Evento (opzionale)",
       messagePlaceholder: "Raccontaci la tua visione, la data e il numero di ospiti…",
       eventTypes: ["Matrimonio Indiano", "Matrimonio Ebraico", "Matrimonio Persiano", "Altro"],
-      eventCities: ["Ciudad de México", "Cancún / Riviera Maya", "Oaxaca", "Los Cabos", "Roma / Italia", "Altro"],
+      successMessage: "Messaggio inviato! Ti risponderemo entro 24 ore.",
+      errorMessage: "Qualcosa è andato storto. Riprova.",
     },
     footer: {
       tagline: "Design Floreale di Lusso e Produzione Eventi",
@@ -126,6 +134,20 @@ export default function GetInTouchPage() {
   const [lang, setLang] = useState<Lang>("en");
   const t = content[lang];
 
+  const [form, setForm] = useState({ name: "", email: "", phone: "", eventType: "", eventCity: "", eventDate: "", message: "" });
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus("loading");
+    const result = await sendContactEmail(form);
+    setStatus(result.success ? "success" : "error");
+  };
+
   return (
     <div style={{ fontFamily: "var(--font-body)", color: "var(--tqf-dark)", backgroundColor: "var(--tqf-beige)" }}>
 
@@ -141,7 +163,7 @@ export default function GetInTouchPage() {
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-8">
 
           {/* Logo */}
-          <a href="/" style={{ textDecoration: "none" }} className="flex items-center gap-3 shrink-0">
+          <Link href="/" style={{ textDecoration: "none" }} className="flex items-center gap-3 shrink-0">
             <Image
               src="/logo.png"
               alt="Te Quiero Feliz"
@@ -175,7 +197,7 @@ export default function GetInTouchPage() {
                 {t.nav.tagline}
               </span>
             </div>
-          </a>
+          </Link>
 
           {/* Center nav links */}
           <nav className="hidden md:flex items-center gap-7">
@@ -309,13 +331,16 @@ export default function GetInTouchPage() {
             </span>
           </div>
 
-          <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
             {/* Row 1: Name + Email */}
             <div className="grid sm:grid-cols-2 gap-4">
               <input
                 type="text"
+                name="name"
                 required
+                value={form.name}
+                onChange={handleChange}
                 placeholder={t.form.namePlaceholder}
                 style={inputStyle}
                 onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
@@ -323,7 +348,10 @@ export default function GetInTouchPage() {
               />
               <input
                 type="email"
+                name="email"
                 required
+                value={form.email}
+                onChange={handleChange}
                 placeholder={t.form.emailPlaceholder}
                 style={inputStyle}
                 onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
@@ -334,6 +362,9 @@ export default function GetInTouchPage() {
             {/* Row 2: Phone */}
             <input
               type="tel"
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
               placeholder={t.form.phonePlaceholder}
               style={inputStyle}
               onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
@@ -343,8 +374,10 @@ export default function GetInTouchPage() {
             {/* Row 3: Event Type + City */}
             <div className="grid sm:grid-cols-2 gap-4">
               <select
+                name="eventType"
                 required
-                defaultValue=""
+                value={form.eventType}
+                onChange={handleChange}
                 style={{ ...inputStyle, cursor: "pointer", appearance: "none" }}
                 onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
                 onBlur={(e) => (e.currentTarget.style.borderColor = "var(--tqf-beige-border)")}
@@ -354,24 +387,37 @@ export default function GetInTouchPage() {
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
-              <select
-                required
-                defaultValue=""
-                style={{ ...inputStyle, cursor: "pointer", appearance: "none" }}
+              <input
+                type="text"
+                name="eventCity"
+                value={form.eventCity}
+                onChange={handleChange}
+                placeholder={t.form.eventCityLabel}
+                style={inputStyle}
                 onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
                 onBlur={(e) => (e.currentTarget.style.borderColor = "var(--tqf-beige-border)")}
-              >
-                <option value="" disabled>{t.form.eventCityLabel}</option>
-                {t.form.eventCities.map((city) => (
-                  <option key={city} value={city}>{city}</option>
-                ))}
-              </select>
+              />
             </div>
 
-            {/* Row 4: Message */}
+            {/* Row 4: Event Date */}
+            <input
+              type="date"
+              name="eventDate"
+              value={form.eventDate}
+              onChange={handleChange}
+              placeholder={t.form.eventDateLabel}
+              style={{ ...inputStyle, colorScheme: "light" }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--tqf-beige-border)")}
+            />
+
+            {/* Row 5: Message */}
             <textarea
+              name="message"
               required
               rows={5}
+              value={form.message}
+              onChange={handleChange}
               placeholder={t.form.messagePlaceholder}
               style={{ ...inputStyle, resize: "vertical" }}
               onFocus={(e) => (e.currentTarget.style.borderColor = "var(--tqf-bordeaux)")}
@@ -380,30 +426,38 @@ export default function GetInTouchPage() {
 
             {/* Submit */}
             <div className="flex flex-col items-center gap-3 pt-2">
-              <button
-                type="submit"
-                className="rounded-full px-10 py-3 text-sm font-medium transition-opacity hover:opacity-80"
-                style={{
-                  backgroundColor: "var(--tqf-gold)",
-                  color: "var(--tqf-beige)",
-                  fontFamily: "var(--font-body)",
-                  letterSpacing: "0.06em",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              >
-                {t.form.submit}
-              </button>
-              <p
-                style={{
-                  color: "var(--tqf-muted)",
-                  fontSize: "0.72rem",
-                  letterSpacing: "0.04em",
-                  fontFamily: "var(--font-body)",
-                }}
-              >
-                {t.form.note}
-              </p>
+              {status === "success" ? (
+                <p style={{ color: "var(--tqf-bordeaux)", fontSize: "0.85rem", fontFamily: "var(--font-body)", letterSpacing: "0.04em" }}>
+                  {t.form.successMessage}
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="submit"
+                    disabled={status === "loading"}
+                    className="rounded-full px-10 py-3 text-sm font-medium transition-opacity hover:opacity-80"
+                    style={{
+                      backgroundColor: "var(--tqf-gold)",
+                      color: "var(--tqf-beige)",
+                      fontFamily: "var(--font-body)",
+                      letterSpacing: "0.06em",
+                      border: "none",
+                      cursor: status === "loading" ? "not-allowed" : "pointer",
+                      opacity: status === "loading" ? 0.6 : 1,
+                    }}
+                  >
+                    {status === "loading" ? "…" : t.form.submit}
+                  </button>
+                  {status === "error" && (
+                    <p style={{ color: "#b91c1c", fontSize: "0.72rem", fontFamily: "var(--font-body)" }}>
+                      {t.form.errorMessage}
+                    </p>
+                  )}
+                  <p style={{ color: "var(--tqf-muted)", fontSize: "0.72rem", letterSpacing: "0.04em", fontFamily: "var(--font-body)" }}>
+                    {t.form.note}
+                  </p>
+                </>
+              )}
             </div>
 
           </form>

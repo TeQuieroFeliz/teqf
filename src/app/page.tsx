@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { getPublishedArticles } from "@/actions/blog/get-published-articles";
+import type { Article } from "@/actions/blog/get-articles";
 
 const content = {
   en: {
@@ -10,8 +12,8 @@ const content = {
       tagline: "LUXURY FLORAL & EVENT DESIGN",
       planner: "Planner Area",
       links: [
-        { href: "/catalog", label: "Catalog" },
         { href: "/portfolio", label: "Portfolio" },
+        { href: "/flowers", label: "Floral Inspiration" },
         { href: "#about", label: "About Us" },
       ],
     },
@@ -31,32 +33,10 @@ const content = {
     },
     blog: {
       label: "From the Studio",
-      articles: [
-        {
-          category: "Flowers",
-          title: "Why Peonies Dominate Luxury Indian Weddings",
-          excerpt: "Their layered petals mirror the richness of embroidered lehengas — a natural match.",
-        },
-        {
-          category: "Color",
-          title: "The Art of Jewel Tones in Persian Ceremonies",
-          excerpt: "Deep sapphires and burgundies set against candlelight create an opulent intimacy.",
-        },
-        {
-          category: "Composition",
-          title: "Chuppah Design: Structure Meets Softness",
-          excerpt: "How we balance architectural form with cascading blooms for Jewish ceremonies.",
-        },
-        {
-          category: "Inspiration",
-          title: "Italian Botanics in a Mexican Summer",
-          excerpt: "Bringing olive branches and garden roses to Riviera Maya without losing local soul.",
-        },
-      ],
     },
     cities: {
       label: "We work across",
-      list: ["Ciudad de México", "Cancún · Riviera Maya", "Oaxaca", "Los Cabos", "Roma · Italia"],
+      list: ["Mexico City", "Cancún · Riviera Maya", "Oaxaca", "Los Cabos", "Rome · Italy"],
     },
     about: {
       label: "Our Story",
@@ -73,7 +53,7 @@ const content = {
     },
     footer: {
       tagline: "Luxury Floral Design & Event Production",
-      cities: ["Ciudad de México", "Cancún", "Oaxaca", "Los Cabos", "Roma"],
+      cities: ["Mexico City", "Cancún", "Oaxaca", "Los Cabos", "Rome"],
       copy: "© 2025 Te Quiero Feliz · Est. 2023",
     },
   },
@@ -82,8 +62,8 @@ const content = {
       tagline: "DISEÑO FLORAL DE LUJO & PRODUCCIÓN DE EVENTOS",
       planner: "Área Planner",
       links: [
-        { href: "/catalog", label: "Catálogo" },
         { href: "/portfolio", label: "Portafolio" },
+        { href: "/flowers", label: "Inspiración Floral" },
         { href: "#about", label: "Nosotros" },
       ],
     },
@@ -103,28 +83,6 @@ const content = {
     },
     blog: {
       label: "Del Estudio",
-      articles: [
-        {
-          category: "Flores",
-          title: "Por qué las peonías dominan las bodas indias de lujo",
-          excerpt: "Sus pétalos en capas reflejan la riqueza de las lehengas bordadas — una combinación natural.",
-        },
-        {
-          category: "Color",
-          title: "El arte de los tonos joya en ceremonias persas",
-          excerpt: "Zafiros profundos y borgoñas junto a la luz de las velas crean una intimidad opulenta.",
-        },
-        {
-          category: "Composición",
-          title: "Diseño de Chuppah: estructura y suavidad",
-          excerpt: "Cómo equilibramos la forma arquitectónica con flores en cascada para ceremonias judías.",
-        },
-        {
-          category: "Inspiración",
-          title: "Botánica italiana en un verano mexicano",
-          excerpt: "Llevar ramas de olivo y rosas de jardín a la Riviera Maya sin perder el alma local.",
-        },
-      ],
     },
     cities: {
       label: "Trabajamos en",
@@ -154,8 +112,8 @@ const content = {
       tagline: "DESIGN FLOREALE DI LUSSO & PRODUZIONE EVENTI",
       planner: "Area Planner",
       links: [
-        { href: "/catalog", label: "Catalogo" },
         { href: "/portfolio", label: "Portfolio" },
+        { href: "/flowers", label: "Ispirazione Floreale" },
         { href: "#about", label: "Chi Siamo" },
       ],
     },
@@ -175,28 +133,6 @@ const content = {
     },
     blog: {
       label: "Dallo Studio",
-      articles: [
-        {
-          category: "Fiori",
-          title: "Perché le peonie dominano i matrimoni indiani di lusso",
-          excerpt: "I loro petali stratificati rispecchiano la ricchezza delle lehenga ricamate — un abbinamento naturale.",
-        },
-        {
-          category: "Colore",
-          title: "L'arte dei toni gioiello nelle cerimonie persiane",
-          excerpt: "Zaffiri profondi e bordeaux accanto alla luce delle candele creano un'intimità opulenta.",
-        },
-        {
-          category: "Composizione",
-          title: "Design della Chuppah: struttura e morbidezza",
-          excerpt: "Come bilanciamo la forma architettonica con fiori a cascata per le cerimonie ebraiche.",
-        },
-        {
-          category: "Ispirazione",
-          title: "Botanica italiana in un'estate messicana",
-          excerpt: "Portare rami d'ulivo e rose da giardino nella Riviera Maya senza perdere l'anima locale.",
-        },
-      ],
     },
     cities: {
       label: "Lavoriamo a",
@@ -227,7 +163,12 @@ type Lang = keyof typeof content;
 
 export default function HomePage() {
   const [lang, setLang] = useState<Lang>("en");
+  const [articles, setArticles] = useState<Article[] | null>(null);
   const t = content[lang];
+
+  useEffect(() => {
+    getPublishedArticles(4).then(setArticles);
+  }, []);
 
   return (
     <div style={{ fontFamily: "var(--font-body)", color: "var(--tqf-dark)", backgroundColor: "var(--tqf-beige)" }}>
@@ -401,7 +342,7 @@ export default function HomePage() {
 
             {/* CTAs */}
             <div className="flex flex-wrap gap-3">
-              <a
+              <Link
                 href="/portfolio"
                 className="rounded-full px-6 py-3 text-sm font-medium transition-opacity hover:opacity-80"
                 style={{
@@ -413,7 +354,7 @@ export default function HomePage() {
                 }}
               >
                 {t.hero.cta1}
-              </a>
+              </Link>
               <Link
                 href="/get-in-touch"
                 className="rounded-full px-6 py-3 text-sm font-medium transition-opacity hover:opacity-80"
@@ -477,51 +418,114 @@ export default function HomePage() {
               {t.blog.label}
             </span>
             <div className="grid grid-cols-2 gap-4">
-              {t.blog.articles.map((article, i) => (
-                <a
-                  key={i}
-                  href="#"
-                  className="group flex flex-col gap-2 rounded-2xl p-5 transition-all hover:opacity-90"
-                  style={{
-                    backgroundColor: "rgba(232,196,180,0.08)",
-                    border: "1px solid rgba(232,196,180,0.15)",
-                    textDecoration: "none",
-                  }}
-                >
-                  <span
+              {Array.from({ length: 4 }, (_, i) => {
+                const article: Article | undefined = articles?.[i];
+
+                // Loading skeleton
+                if (articles === null) {
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-2xl p-5 animate-pulse"
+                      style={{
+                        backgroundColor: "rgba(232,196,180,0.06)",
+                        border: "1px solid rgba(232,196,180,0.1)",
+                      }}
+                    >
+                      <div className="h-2 w-14 rounded-full mb-3" style={{ background: "rgba(184,137,74,0.25)" }} />
+                      <div className="h-4 rounded mb-1.5" style={{ background: "rgba(245,232,223,0.12)" }} />
+                      <div className="h-4 w-4/5 rounded mb-3" style={{ background: "rgba(245,232,223,0.08)" }} />
+                      <div className="h-3 rounded mb-1" style={{ background: "rgba(232,196,180,0.08)" }} />
+                      <div className="h-3 w-3/5 rounded" style={{ background: "rgba(232,196,180,0.06)" }} />
+                    </div>
+                  );
+                }
+
+                // Placeholder for empty slots
+                if (!article) {
+                  return (
+                    <div
+                      key={i}
+                      className="flex flex-col gap-2 rounded-2xl p-5"
+                      style={{
+                        backgroundColor: "rgba(232,196,180,0.04)",
+                        border: "1px solid rgba(232,196,180,0.08)",
+                        opacity: 0.45,
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: "var(--tqf-gold)",
+                          fontSize: "0.6rem",
+                          letterSpacing: "0.18em",
+                          textTransform: "uppercase",
+                          fontFamily: "var(--font-body)",
+                        }}
+                      >
+                        — — —
+                      </span>
+                      <p
+                        style={{
+                          color: "var(--tqf-cipria)",
+                          fontSize: "0.78rem",
+                          lineHeight: 1.6,
+                          fontWeight: 300,
+                          fontStyle: "italic",
+                        }}
+                      >
+                        Coming soon
+                      </p>
+                    </div>
+                  );
+                }
+
+                // Real article card
+                return (
+                  <Link
+                    key={article.id}
+                    href={`/blog/${article.slug}`}
+                    className="group flex flex-col gap-2 rounded-2xl p-5 transition-all hover:opacity-90"
                     style={{
-                      color: "var(--tqf-gold)",
-                      fontSize: "0.6rem",
-                      letterSpacing: "0.18em",
-                      textTransform: "uppercase",
-                      fontFamily: "var(--font-body)",
+                      backgroundColor: "rgba(232,196,180,0.08)",
+                      border: "1px solid rgba(232,196,180,0.15)",
+                      textDecoration: "none",
                     }}
                   >
-                    {article.category}
-                  </span>
-                  <h3
-                    style={{
-                      fontFamily: "var(--font-display)",
-                      color: "var(--tqf-cipria-light)",
-                      fontSize: "1rem",
-                      fontWeight: 400,
-                      lineHeight: 1.35,
-                    }}
-                  >
-                    {article.title}
-                  </h3>
-                  <p
-                    style={{
-                      color: "var(--tqf-cipria)",
-                      fontSize: "0.78rem",
-                      lineHeight: 1.6,
-                      fontWeight: 300,
-                    }}
-                  >
-                    {article.excerpt}
-                  </p>
-                </a>
-              ))}
+                    <span
+                      style={{
+                        color: "var(--tqf-gold)",
+                        fontSize: "0.6rem",
+                        letterSpacing: "0.18em",
+                        textTransform: "uppercase",
+                        fontFamily: "var(--font-body)",
+                      }}
+                    >
+                      {article.category}
+                    </span>
+                    <h3
+                      style={{
+                        fontFamily: "var(--font-display)",
+                        color: "var(--tqf-cipria-light)",
+                        fontSize: "1rem",
+                        fontWeight: 400,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {article.title}
+                    </h3>
+                    <p
+                      style={{
+                        color: "var(--tqf-cipria)",
+                        fontSize: "0.78rem",
+                        lineHeight: 1.6,
+                        fontWeight: 300,
+                      }}
+                    >
+                      {article.shortDescription}
+                    </p>
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
@@ -552,17 +556,22 @@ export default function HomePage() {
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
             {t.cities.list.map((city, i) => (
               <span key={i} className="flex items-center gap-8">
-                <span
+                <Link
+                  href="/portfolio"
                   style={{
                     fontFamily: "var(--font-display)",
                     color: "var(--tqf-cipria-light)",
                     fontSize: "0.95rem",
                     fontWeight: 400,
                     letterSpacing: "0.02em",
+                    textDecoration: "none",
+                    transition: "opacity 0.2s",
                   }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
                 >
                   {city}
-                </span>
+                </Link>
                 {i < t.cities.list.length - 1 && (
                   <span style={{ color: "rgba(232,196,180,0.3)", fontSize: "0.5rem" }}>◆</span>
                 )}
@@ -703,9 +712,9 @@ export default function HomePage() {
             {/* City links */}
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {t.footer.cities.map((city) => (
-                <a
+                <Link
                   key={city}
-                  href="#"
+                  href="/portfolio"
                   style={{
                     color: "var(--tqf-muted)",
                     fontSize: "0.8rem",
@@ -718,7 +727,7 @@ export default function HomePage() {
                   onMouseLeave={(e) => (e.currentTarget.style.color = "var(--tqf-muted)")}
                 >
                   {city}
-                </a>
+                </Link>
               ))}
             </div>
           </div>
