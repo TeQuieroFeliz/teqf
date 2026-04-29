@@ -19,7 +19,7 @@ export async function getArticleBySlug(slug: string): Promise<Article | null> {
   if (data.status !== 'published') return null;
 
   const images = data.images ?? [];
-  const processedContent = (data.content ?? '').replace(/\[IMG:([^\]]+)\]/g, (match, url) => {
+  const processedContent = (data.content ?? '').replace(/\[IMG:([^\]]+)\]/g, (_match: string, url: string) => {
     return `<img src="${url}" alt="Article image" style="max-width: 100%; height: auto; margin: 1rem 0;" />`;
   });
 

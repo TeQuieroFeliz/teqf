@@ -25,6 +25,7 @@ export async function getPublishedArticles(limit = 4): Promise<Article[]> {
         status: 'published' as const,
         updatedAt: data.updatedAt?.toDate().toISOString() ?? new Date().toISOString(),
         coverImage: data.coverImage ?? '',
+        images: data.images ?? [],
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))

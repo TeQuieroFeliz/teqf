@@ -90,7 +90,7 @@ export default function PlannerProfilePage() {
     setAvatarUploading(true);
     setAvatarProgress(0);
 
-    const path = `planner-avatars/${plannerUser.id}/avatar`;
+    const path = `planner-avatars/${plannerUser!.id}/avatar`;
     const sRef = storageRef(storage, path);
     const task = uploadBytesResumable(sRef, file, { contentType: file.type });
 
@@ -103,7 +103,7 @@ export default function PlannerProfilePage() {
       },
       async () => {
         const url = await getDownloadURL(task.snapshot.ref);
-        const result = await updatePlannerAvatar(plannerUser.id, url);
+        const result = await updatePlannerAvatar(plannerUser!.id, url);
         if (result.success) {
           await refreshPlannerUser();
           toast.success('Foto profilo aggiornata.');
