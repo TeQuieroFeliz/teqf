@@ -14,7 +14,7 @@ import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import {
   ArrowLeft, Armchair, Check, Edit2, Flower2,
-  Loader2, LogOut, Plus, Sofa, Sparkles, Square,
+  Loader2, LogOut, Plus, RotateCcw, Scissors, Sofa, Sparkles, Square,
   Trash2, Upload, X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -114,6 +114,19 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
 
 // ── StandbyCard ───────────────────────────────────────────────────────────────
 
+type BgState = 'idle' | 'removing' | 'comparing' | 'uploading' | 'error';
+
+const CHECKERBOARD: React.CSSProperties = {
+  backgroundImage:
+    'linear-gradient(45deg,#d0d0d0 25%,transparent 25%),' +
+    'linear-gradient(-45deg,#d0d0d0 25%,transparent 25%),' +
+    'linear-gradient(45deg,transparent 75%,#d0d0d0 75%),' +
+    'linear-gradient(-45deg,transparent 75%,#d0d0d0 75%)',
+  backgroundSize: '14px 14px',
+  backgroundPosition: '0 0,0 7px,7px -7px,-7px 0px',
+  backgroundColor: 'white',
+};
+
 function StandbyCard({
   item, categories, cities,
   onUpdate, onSave, onRemove, onAddCity,
@@ -131,6 +144,16 @@ function StandbyCard({
   const [showNewCity, setShowNewCity] = useState(false);
   const [newCity,     setNewCity]     = useState('');
   const [lightbox,    setLightbox]    = useState(false);
+
+  // BG removal state
+  const originalUrlRef            = useRef(item.imageUrl);
+  const [bgState, setBgState]     = useState<BgState>('idle');
+  const [bgError, setBgError]     = useState('');
+  const [processedBlob, setProcessedBlob]       = useState<Blob | null>(null);
+  const [processedLocalUrl, setProcessedLocalUrl] = useState('');
+
+  const isProcessed = item.imageUrl !== originalUrlRef.current;
+
   const canSave = item.name.trim() && item.category && item.price !== '' && item.cities.length > 0 && !item.saving;
 
   const toggleCity = (city: string) => {
@@ -143,46 +166,210 @@ function StandbyCard({
   const handleAddCity = () => {
     const name = newCity.trim();
     if (!name) return;
-    onAddCity(name);                                       // updates parent meta + cities list
-    onUpdate({ cities: [...item.cities.filter(c => c !== name), name] }); // auto-select
+    onAddCity(name);
+    onUpdate({ cities: [...item.cities.filter(c => c !== name), name] });
     setNewCity('');
     setShowNewCity(false);
   };
 
+  // Fetch current image, remove background, show comparison
+  const handleRemoveBgStandby = async () => {
+    if (bgState === 'removing' || bgState === 'uploading') return;
+    setBgState('removing');
+    setBgError('');
+    try {
+      // Fetch the already-uploaded Firebase image client-side
+      const imgRes = await fetch(item.imageUrl);
+      if (!imgRes.ok) throw new Error('Impossibile ottenere l\'immagine originale');
+      const imgBlob = await imgRes.blob();
+      const imgFile = new File([imgBlob], 'image.jpg', { type: imgBlob.type || 'image/jpeg' });
+
+      // Call remove.bg via our server route
+      const fd = new FormData();
+      fd.append('image', imgFile);
+      const res = await fetch('/api/remove-background', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `Errore ${res.status}`);
+      }
+      const blob = await res.blob();
+      setProcessedBlob(blob);
+      setProcessedLocalUrl(URL.createObjectURL(blob));
+      setBgState('comparing');
+    } catch (err) {
+      setBgError(err instanceof Error ? err.message : 'Errore sconosciuto');
+      setBgState('error');
+    }
+  };
+
+  // User picked the processed version → upload to Firebase and update imageUrl
+  const handleChooseProcessed = async () => {
+    if (!processedBlob) return;
+    setBgState('uploading');
+    try {
+      const newUrl = await new Promise<string>((resolve, reject) => {
+        const path = `furniture/bulk/${Date.now()}_processed_bg.png`;
+        const sRef = storageRef(storage, path);
+        const task = uploadBytesResumable(sRef, processedBlob, { contentType: 'image/png' });
+        task.on('state_changed', null, reject,
+          async () => resolve(await getDownloadURL(task.snapshot.ref)));
+      });
+      if (processedLocalUrl) URL.revokeObjectURL(processedLocalUrl);
+      setProcessedLocalUrl('');
+      setProcessedBlob(null);
+      onUpdate({ imageUrl: newUrl });
+      setBgState('idle');
+    } catch {
+      setBgState('error');
+      setBgError('Errore durante il caricamento su Firebase');
+    }
+  };
+
+  // User picked the original → discard processed blob, keep current imageUrl
+  const handleChooseOriginal = () => {
+    if (processedLocalUrl) URL.revokeObjectURL(processedLocalUrl);
+    setProcessedLocalUrl('');
+    setProcessedBlob(null);
+    setBgState('idle');
+  };
+
+  // Revert to the very first imageUrl (before any processing)
+  const handleRestore = () => {
+    onUpdate({ imageUrl: originalUrlRef.current });
+    setBgState('idle');
+  };
+
   return (
     <div className="rounded-2xl overflow-hidden flex flex-col" style={{ background: 'white', border: '2px solid var(--tqf-cipria)' }}>
-      {/* Image */}
-      <div
-        className="relative flex items-center justify-center cursor-zoom-in"
-        style={{ height: '200px', overflow: 'hidden', background: '#f8f6f2', flexShrink: 0 }}
-        onClick={() => setLightbox(true)}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={item.imageUrl} alt=""
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '8px' }} />
-        {/* top-right: close card */}
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); onRemove(); }}
-          className="absolute top-2 right-2 size-7 flex items-center justify-center rounded-full transition-opacity hover:opacity-80"
-          style={{ background: 'rgba(0,0,0,0.45)', color: 'white' }}
-        >
-          <X className="size-3.5" />
-        </button>
-        <span className="absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full"
-          style={{ background: 'var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.08em' }}>
-          STANDBY
-        </span>
-      </div>
 
-      {/* Lightbox */}
-      {lightbox && (
+      {/* ── Image area (normal or comparison) ─────────────────────────── */}
+      {bgState === 'comparing' ? (
+        <div style={{ flexShrink: 0 }}>
+          {/* Side-by-side comparison */}
+          <div className="grid grid-cols-2" style={{ height: '160px' }}>
+            {/* Original */}
+            <div className="relative flex flex-col" style={{ borderRight: '1px solid var(--tqf-cipria)', background: '#f8f6f2' }}>
+              <p className="text-center py-1" style={{ fontSize: '0.6rem', letterSpacing: '0.08em', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', textTransform: 'uppercase' }}>
+                Originale
+              </p>
+              <div className="flex-1 flex items-center justify-center overflow-hidden px-1 pb-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={originalUrlRef.current} alt=""
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              </div>
+            </div>
+            {/* Processed */}
+            <div className="relative flex flex-col" style={CHECKERBOARD}>
+              <p className="text-center py-1" style={{ fontSize: '0.6rem', letterSpacing: '0.08em', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', fontWeight: 500, background: 'var(--tqf-cipria-light)' }}>
+                ✦ Sfondo Rimosso
+              </p>
+              <div className="flex-1 flex items-center justify-center overflow-hidden px-1 pb-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={processedLocalUrl} alt=""
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              </div>
+            </div>
+          </div>
+          {/* Choice buttons */}
+          <div className="grid grid-cols-2" style={{ borderTop: '1px solid var(--tqf-cipria)' }}>
+            <button type="button" onClick={handleChooseOriginal}
+              className="py-2 text-xs transition-opacity hover:opacity-80"
+              style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)', background: 'white', border: 'none', borderRight: '1px solid var(--tqf-cipria)' }}>
+              Usa Originale
+            </button>
+            <button type="button" onClick={handleChooseProcessed}
+              className="py-2 text-xs transition-opacity hover:opacity-80"
+              style={{ fontFamily: 'var(--font-body)', color: 'white', background: 'var(--tqf-bordeaux)', border: 'none' }}>
+              Usa Sfondo Rimosso
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Normal image */}
+          <div
+            className="relative flex items-center justify-center cursor-zoom-in"
+            style={{ height: '200px', overflow: 'hidden', background: '#f8f6f2', flexShrink: 0 }}
+            onClick={() => setLightbox(true)}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={item.imageUrl} alt=""
+              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', padding: '8px' }} />
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onRemove(); }}
+              className="absolute top-2 right-2 size-7 flex items-center justify-center rounded-full transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(0,0,0,0.45)', color: 'white' }}
+            >
+              <X className="size-3.5" />
+            </button>
+            <span className="absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full"
+              style={{ background: 'var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.08em' }}>
+              {isProcessed ? 'BG RIMOSSO' : 'STANDBY'}
+            </span>
+          </div>
+
+          {/* BG removal action bar */}
+          <div className="px-3 py-2" style={{ background: 'var(--tqf-beige)', borderBottom: '1px solid var(--tqf-beige-border)' }}>
+            {bgState === 'idle' && (
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={handleRemoveBgStandby}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}>
+                  <Scissors className="size-3" />
+                  Rimuovi Sfondo
+                </button>
+                {isProcessed && (
+                  <button type="button" onClick={handleRestore}
+                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-70"
+                    style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}>
+                    <RotateCcw className="size-3" />
+                    Ripristina
+                  </button>
+                )}
+              </div>
+            )}
+            {bgState === 'removing' && (
+              <div className="flex items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+                <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                  Rimozione sfondo in corso…
+                </span>
+              </div>
+            )}
+            {bgState === 'uploading' && (
+              <div className="flex items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+                <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                  Caricamento immagine…
+                </span>
+              </div>
+            )}
+            {bgState === 'error' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs flex-1 truncate" style={{ color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                  {bgError}
+                </span>
+                <button type="button" onClick={handleRemoveBgStandby}
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-80 flex-shrink-0"
+                  style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', background: 'white' }}>
+                  <RotateCcw className="size-3" />
+                  Riprova
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Lightbox (only when not comparing) */}
+      {lightbox && bgState !== 'comparing' && (
         <ImageLightbox src={item.imageUrl} alt={item.name || item.fileName} onClose={() => setLightbox(false)} />
       )}
 
-      {/* Form */}
+      {/* ── Form ──────────────────────────────────────────────────────── */}
       <div className="p-4 flex flex-col gap-3 flex-1">
-        {/* Name (the "rename") */}
+        {/* Name */}
         <div>
           <label className="block mb-1" style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             Nome *
@@ -258,7 +445,6 @@ function StandbyCard({
                 </button>
               );
             })}
-            {/* Add new city inline */}
             {!showNewCity ? (
               <button type="button" onClick={() => setShowNewCity(true)}
                 className="flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-all"

@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   const apiKey = process.env.REMOVE_BG_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'Background removal not configured' }, { status: 503 });
+    return NextResponse.json(
+      { error: 'REMOVE_BG_API_KEY is missing in environment variables.' },
+      { status: 503 }
+    );
   }
 
   let image: File | null = null;

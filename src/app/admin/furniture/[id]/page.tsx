@@ -28,6 +28,14 @@ import {
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+// Stable mutable ref for the current images list — avoids stale closure
+// when multiple pending uploads commit concurrently.
+function useImagesRef(images: string[]) {
+  const ref = useRef(images);
+  ref.current = images; // always up-to-date on every render
+  return ref;
+}
 import { toast } from 'sonner';
 
 type FormState = Omit<FurnitureItem, 'id' | 'createdAt' | 'updatedAt'>;
@@ -92,6 +100,7 @@ export default function FurnitureEditorPage() {
 
   const [projectId] = useState(() => (isNew ? crypto.randomUUID() : rawId));
   const [form, setForm] = useState<FormState>(EMPTY);
+  const imagesRef = useImagesRef(form.images);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
@@ -199,12 +208,15 @@ export default function FurnitureEditorPage() {
       state: 'idle',
     }));
     setPendingUploads((prev) => [...prev, ...newPending]);
+    // Reset so the same file(s) can be re-selected later
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
   // Stage 2 (optional): send to remove.bg API
   const handleRemoveBg = async (id: string) => {
+    // Only proceed when idle or in error state (prevents double-clicks mid-flight)
     const p = pendingUploads.find((x) => x.id === id);
-    if (!p || p.state === 'removing-bg') return;
+    if (!p || (p.state !== 'idle' && p.state !== 'bg-error')) return;
     setPendingUploads((prev) => prev.map((x) => (x.id === id ? { ...x, state: 'removing-bg' } : x)));
     try {
       const fd = new FormData();
@@ -221,14 +233,16 @@ export default function FurnitureEditorPage() {
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
-      setPendingUploads((prev) => prev.map((x) => (x.id === id ? { ...x, state: 'bg-error', errorMsg: msg } : x)));
+      setPendingUploads((prev) =>
+        prev.map((x) => (x.id === id ? { ...x, state: 'bg-error', errorMsg: msg } : x))
+      );
     }
   };
 
   // Stage 3: upload chosen version to Firebase Storage
   const commitPendingUpload = async (id: string, useProcessed: boolean) => {
     const p = pendingUploads.find((x) => x.id === id);
-    if (!p) return;
+    if (!p || p.state === 'uploading') return;
 
     const fileToUpload =
       useProcessed && p.processedBlob
@@ -264,7 +278,9 @@ export default function FurnitureEditorPage() {
       setPendingUploads((prev) => prev.filter((x) => x.id !== id));
       setUploads((prev) => prev.filter((u) => u.name !== displayName));
 
-      const updatedImages = [...form.images, url];
+      // Use imagesRef to avoid stale closure when multiple images commit concurrently
+      const updatedImages = [...imagesRef.current, url];
+      imagesRef.current = updatedImages;
       setForm((prev) => ({ ...prev, images: updatedImages }));
       if (!coverImage && updatedImages.length > 0) setCoverImage(updatedImages[0]);
       if (!isNew) await updateFurnitureImages(projectId, updatedImages);
