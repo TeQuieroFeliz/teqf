@@ -172,21 +172,15 @@ function StandbyCard({
     setShowNewCity(false);
   };
 
-  // Fetch current image, remove background, show comparison
+  // Remove background — pass imageUrl as string so the server fetches it
+  // (avoids browser CORS failure when fetching firebasestorage.googleapis.com)
   const handleRemoveBgStandby = async () => {
     if (bgState === 'removing' || bgState === 'uploading') return;
     setBgState('removing');
     setBgError('');
     try {
-      // Fetch the already-uploaded Firebase image client-side
-      const imgRes = await fetch(item.imageUrl);
-      if (!imgRes.ok) throw new Error('Impossibile ottenere l\'immagine originale');
-      const imgBlob = await imgRes.blob();
-      const imgFile = new File([imgBlob], 'image.jpg', { type: imgBlob.type || 'image/jpeg' });
-
-      // Call remove.bg via our server route
       const fd = new FormData();
-      fd.append('image', imgFile);
+      fd.append('imageUrl', item.imageUrl); // server fetches it — no browser CORS
       const res = await fetch('/api/remove-background', { method: 'POST', body: fd });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
