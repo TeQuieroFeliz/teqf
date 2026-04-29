@@ -17,6 +17,8 @@ import {
   Loader2,
   LogOut,
   Plus,
+  RotateCcw,
+  Scissors,
   Sofa,
   Star,
   Trash2,
@@ -48,6 +50,16 @@ const CURRENCIES: { value: FurnitureCurrency; symbol: string }[] = [
 ];
 
 type UploadProgress = { name: string; progress: number };
+
+type PendingUpload = {
+  id: string;
+  file: File;
+  localUrl: string;
+  state: 'idle' | 'removing-bg' | 'bg-done' | 'bg-error' | 'uploading' | 'upload-error';
+  processedBlob?: Blob;
+  processedUrl?: string;
+  errorMsg?: string;
+};
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -84,6 +96,7 @@ export default function FurnitureEditorPage() {
   const [saving, setSaving] = useState(false);
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
   const [coverImage, setCoverImage] = useState<string>('');
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Meta: available categories and cities
@@ -176,51 +189,106 @@ export default function FurnitureEditorPage() {
     setSavingCity(false);
   }
 
-  const handleUpload = useCallback(
-    async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
-      const fileArr = Array.from(files);
-      const newUploads: UploadProgress[] = fileArr.map((f) => ({ name: f.name, progress: 0 }));
-      setUploads((prev) => [...prev, ...newUploads]);
-      const urls: string[] = [];
+  // Stage 1: file selection → create pending items (no Firebase upload yet)
+  const handleFileSelect = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newPending: PendingUpload[] = Array.from(files).map((f) => ({
+      id: crypto.randomUUID(),
+      file: f,
+      localUrl: URL.createObjectURL(f),
+      state: 'idle',
+    }));
+    setPendingUploads((prev) => [...prev, ...newPending]);
+  }, []);
 
-      await Promise.all(
-        fileArr.map((file) =>
-          new Promise<void>((resolve, reject) => {
-            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const path = `furniture/${projectId}/${Date.now()}_${safeName}`;
-            const sRef = storageRef(storage, path);
-            const task = uploadBytesResumable(sRef, file, { contentType: file.type });
-            task.on(
-              'state_changed',
-              (snap) => {
-                const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-                setUploads((prev) =>
-                  prev.map((u) =>
-                    u.name === file.name && u.progress !== 100 ? { ...u, progress: pct } : u
-                  )
-                );
-              },
-              reject,
-              async () => {
-                const url = await getDownloadURL(task.snapshot.ref);
-                urls.push(url);
-                resolve();
-              }
-            );
-          })
-        )
+  // Stage 2 (optional): send to remove.bg API
+  const handleRemoveBg = async (id: string) => {
+    const p = pendingUploads.find((x) => x.id === id);
+    if (!p || p.state === 'removing-bg') return;
+    setPendingUploads((prev) => prev.map((x) => (x.id === id ? { ...x, state: 'removing-bg' } : x)));
+    try {
+      const fd = new FormData();
+      fd.append('image', p.file);
+      const res = await fetch('/api/remove-background', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `Errore ${res.status}`);
+      }
+      const blob = await res.blob();
+      const processedUrl = URL.createObjectURL(blob);
+      setPendingUploads((prev) =>
+        prev.map((x) => (x.id === id ? { ...x, state: 'bg-done', processedBlob: blob, processedUrl } : x))
       );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
+      setPendingUploads((prev) => prev.map((x) => (x.id === id ? { ...x, state: 'bg-error', errorMsg: msg } : x)));
+    }
+  };
 
-      const updatedImages = [...form.images, ...urls];
+  // Stage 3: upload chosen version to Firebase Storage
+  const commitPendingUpload = async (id: string, useProcessed: boolean) => {
+    const p = pendingUploads.find((x) => x.id === id);
+    if (!p) return;
+
+    const fileToUpload =
+      useProcessed && p.processedBlob
+        ? new File([p.processedBlob], p.file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' })
+        : p.file;
+
+    setPendingUploads((prev) => prev.map((x) => (x.id === id ? { ...x, state: 'uploading' } : x)));
+    const displayName = fileToUpload.name;
+    setUploads((prev) => [...prev, { name: displayName, progress: 0 }]);
+
+    try {
+      const url = await new Promise<string>((resolve, reject) => {
+        const safeName = fileToUpload.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `furniture/${projectId}/${Date.now()}_${safeName}`;
+        const sRef = storageRef(storage, path);
+        const task = uploadBytesResumable(sRef, fileToUpload, { contentType: fileToUpload.type });
+        task.on(
+          'state_changed',
+          (snap) => {
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            setUploads((prev) =>
+              prev.map((u) => (u.name === displayName && u.progress !== 100 ? { ...u, progress: pct } : u))
+            );
+          },
+          reject,
+          async () => resolve(await getDownloadURL(task.snapshot.ref))
+        );
+      });
+
+      URL.revokeObjectURL(p.localUrl);
+      if (p.processedUrl) URL.revokeObjectURL(p.processedUrl);
+
+      setPendingUploads((prev) => prev.filter((x) => x.id !== id));
+      setUploads((prev) => prev.filter((u) => u.name !== displayName));
+
+      const updatedImages = [...form.images, url];
       setForm((prev) => ({ ...prev, images: updatedImages }));
       if (!coverImage && updatedImages.length > 0) setCoverImage(updatedImages[0]);
       if (!isNew) await updateFurnitureImages(projectId, updatedImages);
-      setUploads([]);
-      toast.success(`${fileArr.length} ${fileArr.length === 1 ? 'immagine caricata' : 'immagini caricate'}.`);
-    },
-    [form.images, coverImage, isNew, projectId]
-  );
+
+      toast.success('Immagine caricata.');
+    } catch {
+      setUploads((prev) => prev.filter((u) => u.name !== displayName));
+      setPendingUploads((prev) =>
+        prev.map((x) => (x.id === id ? { ...x, state: 'upload-error', errorMsg: 'Errore caricamento' } : x))
+      );
+      toast.error('Errore caricamento immagine.');
+    }
+  };
+
+  const discardPending = (id: string) => {
+    setPendingUploads((prev) => {
+      const p = prev.find((x) => x.id === id);
+      if (p) {
+        URL.revokeObjectURL(p.localUrl);
+        if (p.processedUrl) URL.revokeObjectURL(p.processedUrl);
+      }
+      return prev.filter((x) => x.id !== id);
+    });
+  };
 
   const removeImage = async (url: string) => {
     const updated = form.images.filter((u) => u !== url);
@@ -561,7 +629,7 @@ export default function FurnitureEditorPage() {
               style={{ borderColor: 'var(--tqf-cipria)', background: 'var(--tqf-cipria-light)' }}
               onClick={() => fileInputRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); handleUpload(e.dataTransfer.files); }}
+              onDrop={(e) => { e.preventDefault(); handleFileSelect(e.dataTransfer.files); }}
             >
               <Upload className="size-6" style={{ color: 'var(--tqf-bordeaux)' }} />
               <p className="text-sm text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
@@ -576,10 +644,175 @@ export default function FurnitureEditorPage() {
                 accept="image/*"
                 multiple
                 className="hidden"
-                onChange={(e) => handleUpload(e.target.files)}
+                onChange={(e) => handleFileSelect(e.target.files)}
               />
             </div>
 
+            {/* ── Pending uploads: BG removal decision ─────────────────── */}
+            {pendingUploads.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {pendingUploads.map((p) => (
+                  <div key={p.id}>
+                    {p.state === 'bg-done' ? (
+                      /* Comparison view */
+                      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-beige)' }}>
+                        <div className="px-3 py-2" style={{ background: 'var(--tqf-cipria-light)', borderBottom: '1px solid var(--tqf-cipria)' }}>
+                          <p className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-bordeaux)', fontWeight: 500 }}>
+                            Scegli la versione da caricare
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2">
+                          {/* Original */}
+                          <div className="p-3" style={{ borderRight: '1px solid var(--tqf-cipria)' }}>
+                            <p className="text-xs text-center mb-2" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                              Originale
+                            </p>
+                            <div
+                              className="rounded-lg overflow-hidden mb-2"
+                              style={{ aspectRatio: '1', background: '#f8f6f2' }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={p.localUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
+                            </div>
+                            <button
+                              onClick={() => commitPendingUpload(p.id, false)}
+                              className="w-full text-xs py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)', background: 'white' }}
+                            >
+                              Usa Originale
+                            </button>
+                          </div>
+                          {/* Processed */}
+                          <div className="p-3">
+                            <p className="text-xs text-center mb-2" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-bordeaux)', fontWeight: 500 }}>
+                              ✦ Sfondo Rimosso
+                            </p>
+                            <div
+                              className="rounded-lg overflow-hidden mb-2"
+                              style={{
+                                aspectRatio: '1',
+                                backgroundImage:
+                                  'linear-gradient(45deg,#d8d8d8 25%,transparent 25%),linear-gradient(-45deg,#d8d8d8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#d8d8d8 75%),linear-gradient(-45deg,transparent 75%,#d8d8d8 75%)',
+                                backgroundSize: '14px 14px',
+                                backgroundPosition: '0 0,0 7px,7px -7px,-7px 0px',
+                                backgroundColor: 'white',
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={p.processedUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
+                            </div>
+                            <button
+                              onClick={() => commitPendingUpload(p.id, true)}
+                              className="w-full text-xs py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}
+                            >
+                              Usa Sfondo Rimosso
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Compact horizontal card for idle / processing / error */
+                      <div
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                        style={{ border: '1px solid var(--tqf-beige-border)', background: 'white' }}
+                      >
+                        {/* Thumbnail */}
+                        <div className="rounded-lg overflow-hidden flex-shrink-0" style={{ width: 52, height: 52, background: '#f8f6f2' }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.localUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 3 }} />
+                        </div>
+
+                        {/* Info + controls */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs truncate mb-1.5" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                            {p.file.name}
+                          </p>
+
+                          {p.state === 'idle' && (
+                            <div className="flex flex-wrap gap-1.5">
+                              <button
+                                onClick={() => handleRemoveBg(p.id)}
+                                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-80"
+                                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}
+                              >
+                                <Scissors className="size-3" />
+                                Rimuovi Sfondo
+                              </button>
+                              <button
+                                onClick={() => commitPendingUpload(p.id, false)}
+                                className="text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-70"
+                                style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}
+                              >
+                                Carica così
+                              </button>
+                            </div>
+                          )}
+
+                          {p.state === 'removing-bg' && (
+                            <div className="flex items-center gap-1.5">
+                              <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+                              <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                                Rimozione sfondo in corso…
+                              </span>
+                            </div>
+                          )}
+
+                          {p.state === 'uploading' && (
+                            <div className="flex items-center gap-1.5">
+                              <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+                              <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                                Caricamento in corso…
+                              </span>
+                            </div>
+                          )}
+
+                          {(p.state === 'bg-error' || p.state === 'upload-error') && (
+                            <div>
+                              <p className="text-xs mb-1.5" style={{ fontFamily: 'var(--font-body)', color: '#991b1b' }}>
+                                {p.errorMsg ?? 'Errore'}
+                              </p>
+                              <div className="flex gap-1.5">
+                                {p.state === 'bg-error' && (
+                                  <button
+                                    onClick={() => handleRemoveBg(p.id)}
+                                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-80"
+                                    style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', background: 'white' }}
+                                  >
+                                    <RotateCcw className="size-3" />
+                                    Riprova
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => commitPendingUpload(p.id, false)}
+                                  className="text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-70"
+                                  style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}
+                                >
+                                  Carica Originale
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Discard */}
+                        {p.state !== 'uploading' && (
+                          <button
+                            onClick={() => discardPending(p.id)}
+                            className="size-6 flex items-center justify-center rounded-full flex-shrink-0 transition-opacity hover:opacity-70"
+                            style={{ background: 'var(--tqf-beige)', color: 'var(--tqf-muted)' }}
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Firebase upload progress ──────────────────────────────── */}
             {uploads.length > 0 && (
               <div className="mt-4 space-y-2">
                 {uploads.map((u, i) => (
