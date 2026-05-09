@@ -76,6 +76,7 @@ export function PhotoUpload({ value, onChange, label = 'Comprobante (opcional)' 
         ref={inputRef}
         type="file"
         accept="image/*"
+        capture="environment"
         className="sr-only"
         onChange={e => {
           const file = e.target.files?.[0] ?? null;

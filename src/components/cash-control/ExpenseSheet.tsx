@@ -227,7 +227,7 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
                   background: 'white',
                   border: '1.5px solid var(--tqf-beige-border)',
                 }}
-                autoFocus={!isEdit}
+                autoFocus={false}
               />
             </div>
           </div>
