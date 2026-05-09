@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, firestore } from '@/firebase/server';
 import { FieldValue } from 'firebase-admin/firestore';
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM   = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
+const SITE   = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tequierofeliz.com';
+
+function formatCurrency(n: number) {
+  return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -96,6 +105,73 @@ export async function POST(req: NextRequest) {
       metadata: { totalReceived, totalSpent, finalBalance, totalWithoutSupport, closedBy },
       createdAt: FieldValue.serverTimestamp(),
     });
+
+    // Fetch event and user details for the email
+    try {
+      const [eventSnap, userRecord] = await Promise.all([
+        firestore.collection('cashControlEvents').doc(eventId).get(),
+        adminAuth.getUser(userId),
+      ]);
+
+      const eventData  = eventSnap.data() ?? {};
+      const eventLabel = eventData.eventCode || eventData.eventName || eventId;
+      const userName   = userRecord.displayName || userRecord.email || userId;
+      const balanceColor = finalBalance >= 0 ? '#166534' : '#991b1b';
+
+      await resend.emails.send({
+        from: FROM,
+        to: ['admin@tequierofeliz.mx'],
+        subject: `Cierre de cuenta: ${eventLabel} — ${userName}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a0f0a;">
+            <div style="background:#6b1a2a;padding:24px 32px;border-radius:12px 12px 0 0;">
+              <h1 style="margin:0;color:#fff;font-size:20px;font-weight:400;letter-spacing:0.05em;">Te Quiero Feliz</h1>
+              <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;">Cash Control · Cierre de cuenta</p>
+            </div>
+            <div style="background:#fff;padding:28px 32px;border:1px solid #e5d9d0;border-top:none;border-radius:0 0 12px 12px;">
+              <p style="margin:0 0 6px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Evento:</strong> ${eventLabel}</p>
+              <p style="margin:0 0 20px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Planner:</strong> ${userName}</p>
+
+              <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:16px;">
+                <tr style="border-bottom:1px solid #e5d9d0;">
+                  <td style="padding:10px 0;color:#555;">Total ricevuto</td>
+                  <td style="padding:10px 0;text-align:right;color:#166534;font-weight:500;">$${formatCurrency(totalReceived)}</td>
+                </tr>
+                <tr style="border-bottom:1px solid #e5d9d0;">
+                  <td style="padding:10px 0;color:#555;">Total speso</td>
+                  <td style="padding:10px 0;text-align:right;color:#991b1b;font-weight:500;">$${formatCurrency(totalSpent)}</td>
+                </tr>
+                ${totalWithoutSupport > 0 ? `
+                <tr style="border-bottom:1px solid #e5d9d0;">
+                  <td style="padding:10px 0;color:#92400e;">Senza giustificativo</td>
+                  <td style="padding:10px 0;text-align:right;color:#92400e;font-weight:500;">$${formatCurrency(totalWithoutSupport)}</td>
+                </tr>` : ''}
+                <tr>
+                  <td style="padding:12px 0 0;font-weight:600;color:#1a0f0a;">Saldo finale</td>
+                  <td style="padding:12px 0 0;text-align:right;font-weight:700;color:${balanceColor};font-size:16px;">$${formatCurrency(finalBalance)}</td>
+                </tr>
+              </table>
+
+              <a href="${SITE}/admin/planners" style="display:inline-block;background:#6b1a2a;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;margin-top:8px;">
+                Vai al pannello admin
+              </a>
+            </div>
+          </div>
+        `,
+      });
+
+      // Mark emailSent in the closure document
+      const closureSnap = await firestore.collection('cashControlClosures')
+        .where('userId', '==', userId)
+        .where('eventId', '==', eventId)
+        .limit(1)
+        .get();
+      if (!closureSnap.empty) {
+        await closureSnap.docs[0].ref.update({ emailSent: true });
+      }
+    } catch (emailErr) {
+      console.error('[close-account] email error:', emailErr);
+    }
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
