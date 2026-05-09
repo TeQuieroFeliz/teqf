@@ -3,7 +3,9 @@
 import { addPlanner, deletePlanner, getAllPlanners, togglePlannerActive } from '@/actions/planner/planner-auth';
 import { getAllPlannerEvents } from '@/actions/planner/planner-event-crud';
 import { approvePlannerRequest, getPendingRequests, rejectPlannerRequest } from '@/actions/planner/planner-requests';
+import { grantPlannerAdminAccess } from '@/actions/admin/user-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
+import { AdminPermissions, AdminRole, ALL_PERMISSIONS, PERMISSION_LEVELS, PLANNER_DEFAULT_PERMISSIONS } from '@/lib/admin-types';
 import { CITIES, PlannerEvent, PlannerRequest, PlannerUser } from '@/lib/planner-types';
 import {
   ArrowLeft,
@@ -55,6 +57,12 @@ export default function AdminPlannersPage() {
   const [loading, setLoading]   = useState(true);
   const [expandedPlanner, setExpandedPlanner] = useState<string | null>(null);
   const [processingReq, setProcessingReq] = useState<string | null>(null);
+
+  // Approval modal
+  const [approvalReq, setApprovalReq] = useState<PlannerRequest | null>(null);
+  const [approvalPerms, setApprovalPerms] = useState<AdminPermissions>(PLANNER_DEFAULT_PERMISSIONS);
+  const [approvalRole, setApprovalRole] = useState<AdminRole>('editor');
+  const [approving, setApproving] = useState(false);
 
   // Add form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -142,23 +150,39 @@ export default function AdminPlannersPage() {
   }
 
   // ── Approve / Reject request ───────────────────────────────────────────
-  async function handleApprove(req: PlannerRequest) {
-    setProcessingReq(req.id);
+  function handleApprove(req: PlannerRequest) {
+    setApprovalReq(req);
+    setApprovalPerms(PLANNER_DEFAULT_PERMISSIONS);
+    setApprovalRole('editor');
+  }
+
+  async function handleConfirmApprove() {
+    if (!approvalReq) return;
+    setApproving(true);
+    const req = approvalReq;
+
     const result = await approvePlannerRequest(req.id, req.email, req.name);
-    if (result.success) {
-      setRequests((prev) => prev.filter((r) => r.id !== req.id));
-      const updated = await getAllPlanners();
-      setPlanners(updated);
-      if (result.emailSent) {
-        toast.success(`${req.name} approvata. Email di conferma inviata.`);
-      } else {
-        toast.success(`${req.name} approvata.`);
-        toast.warning(`Email non inviata: ${result.emailError ?? 'errore sconosciuto'}. Verifica il dominio in Resend.`);
-      }
-    } else {
+    if (!result.success) {
       toast.error(result.error ?? 'Errore approvazione.');
+      setApproving(false);
+      return;
     }
-    setProcessingReq(null);
+
+    const fullName = req.name;
+    await grantPlannerAdminAccess(req.email, fullName, approvalRole, approvalPerms);
+
+    setRequests((prev) => prev.filter((r) => r.id !== req.id));
+    const updated = await getAllPlanners();
+    setPlanners(updated);
+    setApprovalReq(null);
+    setApproving(false);
+
+    if (result.emailSent) {
+      toast.success(`${req.name} approvata. Email di conferma inviata.`);
+    } else {
+      toast.success(`${req.name} approvata.`);
+      toast.warning(`Email non inviata: ${result.emailError ?? 'errore sconosciuto'}.`);
+    }
   }
 
   async function handleReject(req: PlannerRequest) {
@@ -300,6 +324,80 @@ export default function AdminPlannersPage() {
                   Reimposta
                 </button>
                 <button onClick={() => { setResetTarget(null); setResetPassword(''); }} className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-70" style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}>
+                  Annulla
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Approval modal ────────────────────────────────────────── */}
+        {approvalReq && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(26,15,10,0.6)' }}>
+            <div className="rounded-2xl p-6 w-full max-w-lg my-4" style={{ background: 'white' }} onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 mb-1">
+                <UserCheck className="size-5" style={{ color: '#15803d' }} />
+                <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+                  Approva planner
+                </h2>
+              </div>
+              <p className="text-sm mb-5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                Stai approvando <strong>{approvalReq.name}</strong> ({approvalReq.email}). Imposta i permessi di accesso al pannello admin.
+              </p>
+
+              <div className="mb-4">
+                <label className={labelCls} style={labelStyle}>Ruolo admin</label>
+                <select
+                  value={approvalRole}
+                  onChange={(e) => setApprovalRole(e.target.value as AdminRole)}
+                  className={inputCls}
+                  style={inputStyle}
+                >
+                  <option value="viewer">Visualizzatore</option>
+                  <option value="editor">Editor</option>
+                  <option value="admin">Amministratore</option>
+                </select>
+              </div>
+
+              <div className="mb-5">
+                <label className={labelCls} style={{ ...labelStyle, marginBottom: '0.625rem' }}>Permessi per sezione</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {ALL_PERMISSIONS.map(({ key, label }) => (
+                    <div key={key}>
+                      <label className={labelCls} style={labelStyle}>{label}</label>
+                      <select
+                        value={approvalPerms[key]}
+                        onChange={(e) => setApprovalPerms({ ...approvalPerms, [key]: e.target.value as any })}
+                        className={inputCls}
+                        style={inputStyle}
+                      >
+                        {PERMISSION_LEVELS.map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {lvl === 'none' ? 'Nessuno' : lvl === 'read' ? 'Lettura' : lvl === 'write' ? 'Scrittura' : 'Admin'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleConfirmApprove}
+                  disabled={approving}
+                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+                  style={{ background: '#15803d', color: 'white', fontFamily: 'var(--font-body)' }}
+                >
+                  {approving ? <Loader2 className="size-4 animate-spin" /> : <UserCheck className="size-4" />}
+                  Approva e concedi accesso
+                </button>
+                <button
+                  onClick={() => setApprovalReq(null)}
+                  disabled={approving}
+                  className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
+                >
                   Annulla
                 </button>
               </div>
