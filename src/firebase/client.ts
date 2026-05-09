@@ -5,6 +5,7 @@ import {
   Firestore,
   getFirestore,
   initializeFirestore,
+  memoryLocalCache,
   persistentLocalCache,
   persistentSingleTabManager,
 } from 'firebase/firestore';
@@ -28,9 +29,13 @@ if (!currentApps.length) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   storage = getStorage(app);
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
-  });
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+    });
+  } catch {
+    db = initializeFirestore(app, { localCache: memoryLocalCache() });
+  }
 } else {
   const app = currentApps[0];
   auth = getAuth(app);
