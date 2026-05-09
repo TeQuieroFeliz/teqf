@@ -14,6 +14,37 @@ const planRef = firestore.collection('planners');
 
 // ── Email helpers ────────────────────────────────────────────────────────────
 
+async function sendAdminNewRequestEmail(name: string, email: string): Promise<void> {
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: ['admin@tequierofeliz.mx'],
+    subject: `Nuova richiesta di accesso — ${name}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a0f0a;">
+        <div style="background:#6b1a2a;padding:28px 32px;border-radius:12px 12px 0 0;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:400;letter-spacing:0.05em;">Te Quiero Feliz</h1>
+          <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;">Area Admin</p>
+        </div>
+        <div style="background:#fff;padding:32px;border:1px solid #e5d9d0;border-top:none;border-radius:0 0 12px 12px;">
+          <p style="margin:0 0 16px;font-size:16px;">Nuova richiesta di accesso</p>
+          <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#555;">
+            <strong>${name}</strong> (<a href="mailto:${email}" style="color:#6b1a2a;">${email}</a>)
+            ha inviato una richiesta di accesso all'<strong>Area Planner</strong>.
+          </p>
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#555;">
+            Accedi al pannello admin per approvarla o rifiutarla.
+          </p>
+          <a href="${SITE}/admin/planners"
+             style="display:inline-block;background:#6b1a2a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;">
+            Vai al pannello admin
+          </a>
+        </div>
+      </div>
+    `,
+  });
+  if (error) throw new Error(`Resend: ${(error as any).message ?? JSON.stringify(error)}`);
+}
+
 async function sendApprovalEmail(name: string, email: string): Promise<void> {
   const { error } = await resend.emails.send({
     from: FROM,
@@ -101,6 +132,9 @@ export async function createPlannerRequest(
       return { success: false, error: 'Sei già registrata. Accedi con le tue credenziali.' };
     }
     await reqRef.add({ name, email, status: 'pending', createdAt: new Date().toISOString() });
+    sendAdminNewRequestEmail(name, email).catch((e) =>
+      console.error('[createPlannerRequest] admin email error:', e.message)
+    );
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
