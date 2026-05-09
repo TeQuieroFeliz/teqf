@@ -1,6 +1,6 @@
 'use client';
 
-import { getPlannerEvent, savePlannerEvent, updatePlannerEventStatus } from '@/actions/planner/planner-event-crud';
+import { getPlannerEvent, savePlannerEvent, updatePlannerEventStatus, deletePlannerEvent } from '@/actions/planner/planner-event-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { CITIES, EventDay, PlannerEvent } from '@/lib/planner-types';
 import {
@@ -11,8 +11,10 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  Lock,
   MapPin,
   Pencil,
+  Trash2,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -64,6 +66,7 @@ export default function AdminEventDetailPage() {
   const [editClient, setEditClient] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const isSuperAdmin = adminUser?.role === 'superadmin';
 
@@ -99,6 +102,20 @@ export default function AdminEventDetailPage() {
       toast.success('Evento aggiornato.');
     } else {
       toast.error('Errore salvataggio.');
+    }
+  }
+
+  async function handleDelete() {
+    if (!event) return;
+    if (!confirm(`Eliminare definitivamente l'evento "${event.eventCode || event.eventName}"?\n\nQuesta azione non può essere annullata.`)) return;
+    setIsDeleting(true);
+    const res = await deletePlannerEvent(event.id);
+    setIsDeleting(false);
+    if (res.success) {
+      toast.success('Evento eliminato.');
+      router.replace('/admin/events');
+    } else {
+      toast.error('Errore durante l\'eliminazione.');
     }
   }
 
@@ -206,7 +223,7 @@ export default function AdminEventDetailPage() {
             </div>
 
             {/* Status buttons */}
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-wrap gap-2 mb-4">
               {(['draft', 'active', 'submitted'] as const).map(s => (
                 <button
                   key={s}
@@ -224,6 +241,28 @@ export default function AdminEventDetailPage() {
                   {STATUS_CONFIG[s].label}
                 </button>
               ))}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2 pt-3 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
+              <button
+                onClick={() => handleStatusChange('submitted')}
+                disabled={event.status === 'submitted'}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontFamily: 'var(--font-body)' }}
+              >
+                <Lock className="size-3.5" />
+                Chiudi evento
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fca5a5', fontFamily: 'var(--font-body)' }}
+              >
+                {isDeleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                Elimina evento
+              </button>
             </div>
 
             {/* Inline edit form */}
