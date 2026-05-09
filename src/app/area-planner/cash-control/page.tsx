@@ -165,6 +165,14 @@ export default function CashControlIndexPage() {
                       {ev.eventName}
                     </p>
                   )}
+                  {ev.eventDate && (
+                    <p
+                      className="text-xs mt-0.5"
+                      style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+                    >
+                      {new Date(ev.eventDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  )}
                 </div>
                 <ArrowRight className="size-5 flex-shrink-0 ml-3" style={{ color: 'var(--tqf-bordeaux)' }} />
               </Link>
