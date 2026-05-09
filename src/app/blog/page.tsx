@@ -40,7 +40,7 @@ export default function BlogPage() {
           height: '72px',
         }}
       >
-        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3" style={{ textDecoration: 'none' }}>
             <Image
               src="/logo.png"
@@ -160,7 +160,7 @@ export default function BlogPage() {
       </div>
 
       {/* ── Article grid ── */}
-      <main className="max-w-7xl mx-auto px-6 py-14 pb-24">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-14 pb-24">
         {loading ? (
           <div className="flex justify-center py-24">
             <Loader2
@@ -191,7 +191,7 @@ export default function BlogPage() {
         }}
         className="py-12"
       >
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
           <div className="flex flex-col gap-1">
             <span
               style={{

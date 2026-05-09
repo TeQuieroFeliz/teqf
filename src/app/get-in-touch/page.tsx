@@ -160,7 +160,7 @@ export default function GetInTouchPage() {
         }}
         className="sticky top-0 z-50"
       >
-        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center justify-between gap-8">
 
           {/* Logo */}
           <Link href="/" style={{ textDecoration: "none" }} className="flex items-center gap-3 shrink-0">
@@ -273,9 +273,9 @@ export default function GetInTouchPage() {
       {/* ── Hero ───────────────────────────────────────────────────── */}
       <section
         style={{ backgroundColor: "var(--tqf-bordeaux)" }}
-        className="py-24 flex items-center"
+        className="py-12 md:py-24 flex items-center"
       >
-        <div className="max-w-7xl mx-auto px-6 w-full text-center flex flex-col items-center gap-5">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 w-full text-center flex flex-col items-center gap-5">
           <span
             style={{
               color: "var(--tqf-gold)",
@@ -314,7 +314,7 @@ export default function GetInTouchPage() {
       {/* ── Contact Form ───────────────────────────────────────────── */}
       <section
         style={{ backgroundColor: "var(--tqf-beige)" }}
-        className="py-24"
+        className="py-12 md:py-24"
       >
         <div className="max-w-2xl mx-auto px-6">
           <div className="text-center mb-12 flex flex-col gap-3">
@@ -472,7 +472,7 @@ export default function GetInTouchPage() {
         }}
         className="py-12"
       >
-        <div className="max-w-7xl mx-auto px-6 flex flex-col gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col gap-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex flex-col gap-1">
               <span

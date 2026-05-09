@@ -73,7 +73,7 @@ function Lightbox({ item, onClose, onPrev, onNext, hasPrev, hasNext }: {
           ›
         </button>
       )}
-      <div className="flex flex-col items-center gap-4 px-20" onClick={e => e.stopPropagation()}>
+      <div className="flex flex-col items-center gap-4 px-4 sm:px-16" onClick={e => e.stopPropagation()}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={item.imageUrl} alt={item.title || item.category}
           className="rounded-xl object-contain"
@@ -127,7 +127,7 @@ export default function FlowersPage() {
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-40 border-b"
         style={{ background: 'var(--tqf-beige)', borderColor: 'var(--tqf-beige-border)', height: '64px' }}>
-        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-75">
               <Image src="/logo.png" alt="Te Quiero Feliz" width={36} height={36}
@@ -178,7 +178,7 @@ export default function FlowersPage() {
       {/* ── Category filter ── */}
       <div className="sticky top-16 z-30 border-b py-3"
         style={{ background: 'var(--tqf-beige)', borderColor: 'var(--tqf-beige-border)' }}>
-        <div className="max-w-7xl mx-auto px-6 flex gap-2 flex-wrap">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex gap-2 flex-wrap">
           {[{ key: 'all', label: t.all }, ...categories.map(c => ({ key: c, label: c }))].map(cat => (
             <button key={cat.key} type="button" onClick={() => setActiveCategory(cat.key)}
               className="text-sm px-4 py-1.5 rounded-full transition-all"
@@ -193,7 +193,7 @@ export default function FlowersPage() {
       </div>
 
       {/* ── Gallery ── */}
-      <main className="max-w-7xl mx-auto px-6 py-10">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-10">
         {loading ? (
           <div className="flex justify-center py-24">
             <div className="size-8 rounded-full border-2 animate-spin"
@@ -262,8 +262,7 @@ export default function FlowersPage() {
 function MasonryGrid({ items, onOpen }: { items: InspirationItem[]; onOpen: (item: InspirationItem) => void }) {
   // 3-column masonry via CSS columns
   return (
-    <div style={{ columnCount: 3, columnGap: '12px', gap: '12px' }}
-      className="sm:columns-2 md:columns-3 lg:columns-4">
+    <div className="columns-2 sm:columns-2 md:columns-3 lg:columns-4" style={{ columnGap: '12px' }}>
       {items.map(item => (
         <div key={item.id}
           className="group relative rounded-xl overflow-hidden cursor-pointer mb-3 transition-all hover:shadow-lg"

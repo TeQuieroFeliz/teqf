@@ -162,7 +162,7 @@ export default function PortfolioPage() {
         }}
         className="sticky top-0 z-50"
       >
-        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center justify-between gap-8">
           <Link href="/" className="flex items-center gap-3 shrink-0" style={{ textDecoration: "none" }}>
             <Image
               src="/logo.png"
@@ -239,8 +239,8 @@ export default function PortfolioPage() {
       </nav>
 
       {/* ── Hero ───────────────────────────────────────────────────── */}
-      <section style={{ backgroundColor: "var(--tqf-bordeaux)" }} className="py-24">
-        <div className="max-w-7xl mx-auto px-6 text-center flex flex-col items-center gap-5">
+      <section style={{ backgroundColor: "var(--tqf-bordeaux)" }} className="py-12 md:py-24">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 text-center flex flex-col items-center gap-5">
           <span style={{ color: "var(--tqf-gold)", fontSize: "0.65rem", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: "var(--font-body)" }}>
             {t.hero.label}
           </span>
@@ -258,7 +258,7 @@ export default function PortfolioPage() {
 
       {/* ── Filter tabs ────────────────────────────────────────────── */}
       <section style={{ backgroundColor: "var(--tqf-bordeaux)", borderBottom: "1px solid var(--tqf-beige-border)" }} className="pb-8">
-        <div className="max-w-7xl mx-auto px-6 flex flex-wrap justify-center gap-2">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-wrap justify-center gap-2">
           {filterKeys.map((key) => (
             <button
               key={key}
@@ -280,8 +280,8 @@ export default function PortfolioPage() {
       </section>
 
       {/* ── Portfolio grid ─────────────────────────────────────────── */}
-      <section style={{ backgroundColor: "var(--tqf-beige)" }} className="py-20">
-        <div className="max-w-7xl mx-auto px-6">
+      <section style={{ backgroundColor: "var(--tqf-beige)" }} className="py-10 md:py-20">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
 
           {/* Loading skeleton */}
           {filtered === null && (
@@ -416,8 +416,8 @@ export default function PortfolioPage() {
       </section>
 
       {/* ── CTA ────────────────────────────────────────────────────── */}
-      <section style={{ backgroundColor: "var(--tqf-bordeaux)" }} className="py-24">
-        <div className="max-w-7xl mx-auto px-6 text-center flex flex-col items-center gap-6">
+      <section style={{ backgroundColor: "var(--tqf-bordeaux)" }} className="py-12 md:py-24">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 text-center flex flex-col items-center gap-6">
           <span style={{ color: "var(--tqf-gold)", fontSize: "0.65rem", letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: "var(--font-body)" }}>
             {t.cta.label}
           </span>
@@ -439,7 +439,7 @@ export default function PortfolioPage() {
 
       {/* ── Footer ─────────────────────────────────────────────────── */}
       <footer style={{ backgroundColor: "var(--tqf-dark)", borderTop: "1px solid rgba(255,255,255,0.06)" }} className="py-12">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col gap-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex flex-col gap-1">
               <span style={{ fontFamily: "var(--font-display)", color: "var(--tqf-cipria-light)", fontSize: "1.4rem", fontWeight: 400, letterSpacing: "0.02em" }}>

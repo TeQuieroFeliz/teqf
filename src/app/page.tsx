@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { Menu, X } from "lucide-react";
 import { getPublishedArticles } from "@/actions/blog/get-published-articles";
 import type { Article } from "@/actions/blog/get-articles";
 
@@ -164,6 +165,7 @@ type Lang = keyof typeof content;
 export default function HomePage() {
   const [lang, setLang] = useState<Lang>("en");
   const [articles, setArticles] = useState<Article[] | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const t = content[lang];
 
   useEffect(() => {
@@ -180,18 +182,18 @@ export default function HomePage() {
           borderBottom: "1px solid var(--tqf-beige-border)",
           height: "72px",
         }}
-        className="sticky top-0 z-50"
+        className="sticky top-0 z-50 relative"
       >
-        <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center justify-between gap-4 md:gap-8">
 
           {/* ── Logo ── */}
-          <Link href="/" className="flex items-center gap-3 shrink-0" style={{ textDecoration: 'none' }}>
+          <Link href="/" className="flex items-center gap-2 md:gap-3 shrink-0" style={{ textDecoration: 'none' }}>
             <Image
               src="/logo.png"
               alt="Te Quiero Feliz"
-              width={64}
-              height={64}
-              className="object-contain"
+              width={44}
+              height={44}
+              className="object-contain md:w-16 md:h-16"
               style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
               priority
             />
@@ -200,7 +202,7 @@ export default function HomePage() {
                 style={{
                   fontFamily: "var(--font-display)",
                   color: "var(--tqf-bordeaux)",
-                  fontSize: "1.25rem",
+                  fontSize: "clamp(0.95rem, 3vw, 1.25rem)",
                   fontWeight: 600,
                   letterSpacing: "0.02em",
                   lineHeight: 1.1,
@@ -209,6 +211,7 @@ export default function HomePage() {
                 Te Quiero Feliz
               </span>
               <span
+                className="hidden sm:block"
                 style={{
                   color: "var(--tqf-muted)",
                   fontSize: "0.52rem",
@@ -221,7 +224,7 @@ export default function HomePage() {
             </div>
           </Link>
 
-          {/* ── Center nav links ── */}
+          {/* ── Center nav links (desktop) ── */}
           <nav className="hidden md:flex items-center gap-7">
             {t.nav.links.map((link) => (
               <a
@@ -244,8 +247,8 @@ export default function HomePage() {
             ))}
           </nav>
 
-          {/* ── Right: lang switcher + CTA ── */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* ── Right: lang switcher + CTA + hamburger ── */}
+          <div className="flex items-center gap-2 md:gap-3 shrink-0">
             {/* Language switcher */}
             <div
               className="flex items-center gap-0.5 rounded-full px-1 py-1"
@@ -258,7 +261,7 @@ export default function HomePage() {
                 <button
                   key={l}
                   onClick={() => setLang(l)}
-                  className="rounded-full px-2.5 py-1 text-xs font-medium transition-all"
+                  className="rounded-full px-2 md:px-2.5 py-1 text-xs font-medium transition-all"
                   style={{
                     fontFamily: "var(--font-body)",
                     letterSpacing: "0.08em",
@@ -274,10 +277,10 @@ export default function HomePage() {
               ))}
             </div>
 
-            {/* Planner CTA */}
+            {/* Planner CTA (desktop) */}
             <a
               href="/planner"
-              className="rounded-full px-5 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+              className="hidden md:block rounded-full px-5 py-2 text-sm font-medium transition-opacity hover:opacity-80"
               style={{
                 backgroundColor: "var(--tqf-bordeaux)",
                 color: "var(--tqf-cipria-light)",
@@ -289,7 +292,55 @@ export default function HomePage() {
             >
               {t.nav.planner}
             </a>
+
+            {/* Hamburger (mobile) */}
+            <button
+              className="md:hidden flex items-center justify-center size-9 rounded-lg"
+              style={{ border: "1px solid var(--tqf-beige-border)", color: "var(--tqf-bordeaux)" }}
+              onClick={() => setMenuOpen(v => !v)}
+              aria-label="Menu"
+            >
+              {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </button>
           </div>
+
+          {/* ── Mobile menu drawer ── */}
+          {menuOpen && (
+            <div
+              className="absolute top-[72px] left-0 right-0 md:hidden flex flex-col gap-0 shadow-lg z-50"
+              style={{ backgroundColor: "var(--tqf-beige)", borderBottom: "1px solid var(--tqf-beige-border)" }}
+            >
+              {t.nav.links.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="px-6 py-4 text-sm border-b"
+                  style={{
+                    fontFamily: "var(--font-body)",
+                    color: "var(--tqf-dark)",
+                    letterSpacing: "0.04em",
+                    textDecoration: "none",
+                    borderColor: "var(--tqf-beige-border)",
+                  }}
+                >
+                  {link.label}
+                </a>
+              ))}
+              <a
+                href="/planner"
+                className="mx-6 my-4 rounded-full px-5 py-3 text-sm font-medium text-center transition-opacity hover:opacity-80"
+                style={{
+                  backgroundColor: "var(--tqf-bordeaux)",
+                  color: "var(--tqf-cipria-light)",
+                  fontFamily: "var(--font-body)",
+                  textDecoration: "none",
+                }}
+              >
+                {t.nav.planner}
+              </a>
+            </div>
+          )}
 
         </div>
       </nav>
@@ -299,7 +350,7 @@ export default function HomePage() {
         style={{ backgroundColor: "var(--tqf-bordeaux)" }}
         className="min-h-screen flex items-center"
       >
-        <div className="max-w-7xl mx-auto px-6 py-20 w-full grid lg:grid-cols-2 gap-16 items-center">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-14 lg:py-20 w-full grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
           {/* Left: copy */}
           <div className="flex flex-col gap-8">
@@ -373,7 +424,7 @@ export default function HomePage() {
 
             {/* Stats */}
             <div
-              className="grid grid-cols-4 gap-4 pt-4"
+              className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4"
               style={{ borderTop: "1px solid rgba(232,196,180,0.2)" }}
             >
               {t.hero.stats.map((s) => (
@@ -405,7 +456,7 @@ export default function HomePage() {
           </div>
 
           {/* Right: blog preview grid */}
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 lg:mt-0 mt-4">
             <Link
               href="/blog"
               style={{
@@ -423,7 +474,7 @@ export default function HomePage() {
             >
               {t.blog.label} →
             </Link>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {Array.from({ length: 4 }, (_, i) => {
                 const article: Article | undefined = articles?.[i];
 
@@ -547,7 +598,7 @@ export default function HomePage() {
         }}
         className="py-5"
       >
-        <div className="max-w-7xl mx-auto px-6 flex flex-wrap items-center gap-2 justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-wrap items-center gap-2 justify-center md:justify-between">
           <span
             style={{
               color: "var(--tqf-gold)",
@@ -591,9 +642,9 @@ export default function HomePage() {
       <section
         id="about"
         style={{ backgroundColor: "var(--tqf-bordeaux)" }}
-        className="py-28"
+        className="py-16 lg:py-28"
       >
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="max-w-2xl mx-auto text-center mb-16 flex flex-col gap-4">
             <span
               style={{
@@ -686,7 +737,7 @@ export default function HomePage() {
         }}
         className="py-12"
       >
-        <div className="max-w-7xl mx-auto px-6 flex flex-col gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex flex-col gap-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             {/* Brand */}
             <div className="flex flex-col gap-1">
