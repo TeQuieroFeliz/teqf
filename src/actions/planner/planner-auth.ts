@@ -1,9 +1,10 @@
 'use server';
 
-import { firestore } from '@/firebase/server';
+import { auth, firestore } from '@/firebase/server';
 import { PlannerUser } from '@/lib/planner-types';
 
 const ref = firestore.collection('planners');
+const reqRef = firestore.collection('plannerRequests');
 
 export async function getPlannerByEmail(email: string): Promise<PlannerUser | null> {
   const snap = await ref.where('email', '==', email).where('active', '==', true).limit(1).get();
@@ -66,9 +67,23 @@ export async function togglePlannerActive(
   }
 }
 
-export async function deletePlanner(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deletePlanner(id: string, email: string): Promise<{ success: boolean; error?: string }> {
   try {
     await ref.doc(id).delete();
+
+    // Delete from plannerRequests so the email can re-register
+    const reqSnap = await reqRef.where('email', '==', email).get();
+    await Promise.all(reqSnap.docs.map((d) => d.ref.delete()));
+
+    // Delete Firebase Auth account
+    try {
+      const user = await auth!.getUserByEmail(email);
+      await auth!.deleteUser(user.uid);
+    } catch (authErr: any) {
+      if (authErr.code !== 'auth/user-not-found') {
+        console.error('[deletePlanner] auth delete error:', authErr.message);
+      }
+    }
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };

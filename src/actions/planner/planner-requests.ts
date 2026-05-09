@@ -1,6 +1,6 @@
 'use server';
 
-import { firestore } from '@/firebase/server';
+import { auth, firestore } from '@/firebase/server';
 import { PlannerRequest } from '@/lib/planner-types';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
@@ -192,6 +192,15 @@ export async function rejectPlannerRequest(
   try {
     await reqRef.doc(requestId).update({ status: 'rejected' });
     revalidatePath('/admin/planners');
+
+    try {
+      const user = await auth!.getUserByEmail(email);
+      await auth!.deleteUser(user.uid);
+    } catch (authErr: any) {
+      if (authErr.code !== 'auth/user-not-found') {
+        console.error('[rejectPlannerRequest] auth delete error:', authErr.message);
+      }
+    }
 
     let emailSent = false;
     let emailError: string | undefined;

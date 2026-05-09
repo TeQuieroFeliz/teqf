@@ -132,7 +132,7 @@ export default function AdminPlannersPage() {
   // ── Delete planner ─────────────────────────────────────────────────────
   async function handleDelete(planner: PlannerUser) {
     if (!confirm(`Eliminare la planner "${planner.name}"?`)) return;
-    const result = await deletePlanner(planner.id);
+    const result = await deletePlanner(planner.id, planner.email);
     if (result.success) {
       setPlanners((prev) => prev.filter((p) => p.id !== planner.id));
       toast.success('Planner eliminata.');
