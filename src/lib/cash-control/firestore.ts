@@ -18,6 +18,15 @@ import {
   DocumentData,
   QuerySnapshot,
 } from 'firebase/firestore';
+
+function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('La operación tardó demasiado. Verifica tu conexión.')), ms)
+    ),
+  ]);
+}
 import {
   CashControlProfile,
   CashControlEvent,
@@ -141,10 +150,10 @@ export async function addMoneyReceived(data: {
   date: string;
   createdBy: string;
 }): Promise<string> {
-  const ref = await addDoc(receivedCol(), {
+  const ref = await withTimeout(addDoc(receivedCol(), {
     ...data,
     createdAt: serverTimestamp(),
-  });
+  }));
   return ref.id;
 }
 
@@ -203,10 +212,10 @@ export async function addExpense(data: {
   date: string;
   createdBy: string;
 }): Promise<string> {
-  const ref = await addDoc(expensesCol(), {
+  const ref = await withTimeout(addDoc(expensesCol(), {
     ...data,
     createdAt: serverTimestamp(),
-  });
+  }));
   return ref.id;
 }
 

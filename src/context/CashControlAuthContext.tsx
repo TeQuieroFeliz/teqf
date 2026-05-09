@@ -41,8 +41,7 @@ export function CashControlAuthContextProvider({ children }: { children: ReactNo
         return;
       }
       try {
-        // Use cached token (auto-refreshed every hour by Firebase)
-        const tokenResult = await user.getIdTokenResult(false);
+        const tokenResult = await user.getIdTokenResult(true);
         const role = (tokenResult.claims.cashControlRole as CashControlRole) ?? null;
         setState({
           isLoading: false,
