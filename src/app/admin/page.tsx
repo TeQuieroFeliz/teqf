@@ -107,10 +107,9 @@ export default function AdminDashboardPage() {
   if (!adminUser) return null;
 
   const isSuperAdmin = adminUser.role === 'superadmin';
-  const accessibleSections = SECTIONS.filter((s) => {
-    if (s.key === 'cashControl') return isSuperAdmin || (adminUser.permissions[s.key] ?? 'none') !== 'none';
-    return (adminUser.permissions[s.key] ?? 'write') !== 'none';
-  });
+  const accessibleSections = isSuperAdmin
+    ? SECTIONS
+    : SECTIONS.filter((s) => (adminUser.permissions[s.key] ?? 'none') !== 'none');
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
@@ -203,7 +202,7 @@ export default function AdminDashboardPage() {
         {accessibleSections.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {accessibleSections.map((section) => {
-              const level = adminUser.permissions[section.key] ?? 'none';
+              const level: AdminPermissionLevel = isSuperAdmin ? 'admin' : (adminUser.permissions[section.key] ?? 'none');
               const colors = PERMISSION_COLORS[level];
               return (
                 <a
