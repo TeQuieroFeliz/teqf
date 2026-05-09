@@ -3,7 +3,7 @@
 import { addPlanner, deletePlanner, getAllPlanners, togglePlannerActive } from '@/actions/planner/planner-auth';
 import { getAllPlannerEvents } from '@/actions/planner/planner-event-crud';
 import { approvePlannerRequest, getPendingRequests, rejectPlannerRequest } from '@/actions/planner/planner-requests';
-import { grantPlannerAdminAccess } from '@/actions/admin/user-crud';
+import { getAllAdminUsers, grantPlannerAdminAccess } from '@/actions/admin/user-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
 import { AdminPermissions, AdminRole, ALL_PERMISSIONS, PERMISSION_LEVELS, PLANNER_DEFAULT_PERMISSIONS } from '@/lib/admin-types';
 import { CITIES, PlannerEvent, PlannerRequest, PlannerUser } from '@/lib/planner-types';
@@ -22,6 +22,7 @@ import {
   LogOut,
   Plus,
   RefreshCw,
+  ShieldCheck,
   Trash2,
   UserCheck,
   UserX,
@@ -64,6 +65,13 @@ export default function AdminPlannersPage() {
   const [approvalRole, setApprovalRole] = useState<AdminRole>('editor');
   const [approving, setApproving] = useState(false);
 
+  // Edit permissions modal
+  const [editPermTarget, setEditPermTarget] = useState<PlannerUser | null>(null);
+  const [editPerms, setEditPerms] = useState<AdminPermissions>(PLANNER_DEFAULT_PERMISSIONS);
+  const [editRole, setEditRole] = useState<AdminRole>('editor');
+  const [editSaving, setEditSaving] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+
   // Add form
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEmail, setNewEmail]       = useState('');
@@ -79,8 +87,8 @@ export default function AdminPlannersPage() {
   const [resetting, setResetting]         = useState(false);
 
   useEffect(() => {
-    Promise.all([getAllPlanners(), getAllPlannerEvents(), getPendingRequests()])
-      .then(([p, e, r]) => { setPlanners(p); setEvents(e); setRequests(r); })
+    Promise.all([getAllPlanners(), getAllPlannerEvents(), getPendingRequests(), getAllAdminUsers()])
+      .then(([p, e, r, a]) => { setPlanners(p); setEvents(e); setRequests(r); setAdminUsers(a); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -183,6 +191,29 @@ export default function AdminPlannersPage() {
       toast.success(`${req.name} approvata.`);
       toast.warning(`Email non inviata: ${result.emailError ?? 'errore sconosciuto'}.`);
     }
+  }
+
+  function openEditPerms(planner: PlannerUser) {
+    const adminRecord = adminUsers.find((a) => a.email === planner.email);
+    setEditPerms(adminRecord?.permissions ?? PLANNER_DEFAULT_PERMISSIONS);
+    setEditRole(adminRecord?.role ?? 'editor');
+    setEditPermTarget(planner);
+  }
+
+  async function handleSavePerms() {
+    if (!editPermTarget) return;
+    setEditSaving(true);
+    const fullName = editPermTarget.name + (editPermTarget.lastName ? ' ' + editPermTarget.lastName : '');
+    const result = await grantPlannerAdminAccess(editPermTarget.email, fullName, editRole, editPerms);
+    if (result.success) {
+      const updated = await getAllAdminUsers();
+      setAdminUsers(updated);
+      toast.success(`Permessi di ${editPermTarget.name} aggiornati.`);
+      setEditPermTarget(null);
+    } else {
+      toast.error(result.error ?? 'Errore salvataggio permessi.');
+    }
+    setEditSaving(false);
   }
 
   async function handleReject(req: PlannerRequest) {
@@ -405,6 +436,80 @@ export default function AdminPlannersPage() {
           </div>
         )}
 
+        {/* ── Edit permissions modal ────────────────────────────────── */}
+        {editPermTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(26,15,10,0.6)' }}>
+            <div className="rounded-2xl p-6 w-full max-w-lg my-4" style={{ background: 'white' }} onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck className="size-5" style={{ color: 'var(--tqf-bordeaux)' }} />
+                <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+                  Modifica permessi
+                </h2>
+              </div>
+              <p className="text-sm mb-5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                Modifica il ruolo e i permessi di <strong>{editPermTarget.name}</strong> ({editPermTarget.email}).
+              </p>
+
+              <div className="mb-4">
+                <label className={labelCls} style={labelStyle}>Ruolo admin</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as AdminRole)}
+                  className={inputCls}
+                  style={inputStyle}
+                >
+                  <option value="viewer">Visualizzatore</option>
+                  <option value="editor">Editor</option>
+                  <option value="admin">Amministratore</option>
+                </select>
+              </div>
+
+              <div className="mb-5">
+                <label className={labelCls} style={{ ...labelStyle, marginBottom: '0.625rem' }}>Permessi per sezione</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {ALL_PERMISSIONS.map(({ key, label }) => (
+                    <div key={key}>
+                      <label className={labelCls} style={labelStyle}>{label}</label>
+                      <select
+                        value={editPerms[key]}
+                        onChange={(e) => setEditPerms({ ...editPerms, [key]: e.target.value as any })}
+                        className={inputCls}
+                        style={inputStyle}
+                      >
+                        {PERMISSION_LEVELS.map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {lvl === 'none' ? 'Nessuno' : lvl === 'read' ? 'Lettura' : lvl === 'write' ? 'Scrittura' : 'Admin'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSavePerms}
+                  disabled={editSaving}
+                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+                >
+                  {editSaving ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                  Salva permessi
+                </button>
+                <button
+                  onClick={() => setEditPermTarget(null)}
+                  disabled={editSaving}
+                  className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-70"
+                  style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
+                >
+                  Annulla
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Pending requests ──────────────────────────────────────── */}
         {!loading && requests.length > 0 && (
           <div className="rounded-2xl overflow-hidden" style={{ border: '2px solid #fbbf24', background: 'white' }}>
@@ -503,6 +608,16 @@ export default function AdminPlannersPage() {
                       <span className="text-xs px-2 py-0.5 rounded-full" style={planner.active ? { background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' } : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
                         {planner.active ? 'Attiva' : 'Inattiva'}
                       </span>
+
+                      {/* Edit permissions */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openEditPerms(planner); }}
+                        title="Modifica permessi"
+                        className="size-8 rounded-lg flex items-center justify-center transition-opacity hover:opacity-70"
+                        style={{ border: '1px solid #e9d5ff', background: '#faf5ff', color: '#7c3aed' }}
+                      >
+                        <ShieldCheck className="size-3.5" />
+                      </button>
 
                       {/* Reset password */}
                       <button
