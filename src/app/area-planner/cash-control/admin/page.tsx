@@ -10,11 +10,11 @@ import {
   Plus,
   Calendar,
   ArrowRight,
+  ArrowLeft,
   Users,
   LogOut,
   Trash2,
 } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -150,42 +150,23 @@ export default function AdminCashControlPage() {
         className="border-b px-6 py-4 flex items-center justify-between"
         style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
       >
-        <Link href="/area-planner" className="flex items-center gap-3 transition-opacity hover:opacity-75">
-          <Image
-            src="/logo.png"
-            alt="Te Quiero Feliz"
-            width={32}
-            height={32}
-            className="object-contain"
-            style={{
-              filter:
-                'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)',
-            }}
-          />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin"
+            className="flex items-center justify-center size-9 rounded-lg"
+            style={{ border: '1px solid var(--tqf-beige-border)' }}
+          >
+            <ArrowLeft className="size-4" style={{ color: 'var(--tqf-muted)' }} />
+          </Link>
           <div>
-            <p
-              style={{
-                fontFamily: 'var(--font-display)',
-                color: 'var(--tqf-bordeaux)',
-                fontSize: '1rem',
-                fontWeight: 300,
-                lineHeight: 1.2,
-              }}
-            >
+            <p className="text-xs tracking-widest uppercase" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              Pannello Admin
+            </p>
+            <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 300 }}>
               Cash Control
-            </p>
-            <p
-              style={{
-                fontFamily: 'var(--font-body)',
-                color: 'var(--tqf-muted)',
-                fontSize: '0.6rem',
-                letterSpacing: '0.18em',
-              }}
-            >
-              ADMINISTRADOR
-            </p>
+            </h1>
           </div>
-        </Link>
+        </div>
 
         <div className="flex items-center gap-2">
           <Link
