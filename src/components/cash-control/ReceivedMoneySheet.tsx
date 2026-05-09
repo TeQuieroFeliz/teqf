@@ -127,29 +127,7 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
         </SheetHeader>
 
         <div className="px-6 py-4 space-y-5">
-          {/* Date */}
-          <div>
-            <label
-              className="block text-xs uppercase tracking-wide mb-2"
-              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-            >
-              Fecha
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="w-full rounded-2xl px-4 py-3 text-base outline-none"
-              style={{
-                fontFamily: 'var(--font-body)',
-                color: 'var(--tqf-dark)',
-                background: 'white',
-                border: '1.5px solid var(--tqf-beige-border)',
-              }}
-            />
-          </div>
-
-          {/* Amount */}
+          {/* Amount — first so keyboard opens here and stays visible */}
           <div>
             <label
               className="block text-xs uppercase tracking-wide mb-2"
@@ -216,6 +194,28 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Date — below method since it defaults to today */}
+          <div>
+            <label
+              className="block text-xs uppercase tracking-wide mb-2"
+              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+            >
+              Fecha
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full rounded-2xl px-4 py-3 text-base outline-none"
+              style={{
+                fontFamily: 'var(--font-body)',
+                color: 'var(--tqf-dark)',
+                background: 'white',
+                border: '1.5px solid var(--tqf-beige-border)',
+              }}
+            />
           </div>
 
           {/* Photo — only in add mode */}
