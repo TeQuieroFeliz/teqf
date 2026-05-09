@@ -5,7 +5,7 @@ import { isCashControlAdmin } from '@/lib/cash-control/permissions';
 import { getAssignedEvents } from '@/lib/cash-control/firestore';
 import { CashControlEvent } from '@/lib/cash-control/types';
 import { CreateEventSheet } from '@/components/cash-control/CreateEventSheet';
-import { Loader2, Calendar, ArrowRight, Plus } from 'lucide-react';
+import { Loader2, Calendar, ArrowLeft, ArrowRight, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -49,9 +49,25 @@ export default function CashControlIndexPage() {
     return (
       <>
         <div
-          className="min-h-screen flex flex-col items-center justify-center px-6"
+          className="min-h-screen flex flex-col"
           style={{ background: 'var(--tqf-beige)' }}
         >
+          <header
+            className="border-b px-4 py-3 flex items-center gap-3 flex-shrink-0"
+            style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
+          >
+            <Link
+              href="/area-planner"
+              className="flex items-center justify-center size-9 rounded-lg flex-shrink-0"
+              style={{ border: '1px solid var(--tqf-beige-border)' }}
+            >
+              <ArrowLeft className="size-4" style={{ color: 'var(--tqf-muted)' }} />
+            </Link>
+            <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1rem', fontWeight: 300 }}>
+              Cash Control
+            </p>
+          </header>
+          <div className="flex-1 flex flex-col items-center justify-center px-6">
           <div
             className="max-w-sm w-full text-center rounded-2xl p-8"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
@@ -84,6 +100,7 @@ export default function CashControlIndexPage() {
               Crear evento
             </button>
           </div>
+          </div>
         </div>
 
         <CreateEventSheet
@@ -100,34 +117,45 @@ export default function CashControlIndexPage() {
   return (
     <>
       <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
-        <main className="max-w-lg mx-auto px-6 py-10">
-          <div className="flex items-end justify-between mb-6">
-            <div>
-              <h1
-                className="text-3xl mb-0.5"
-                style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}
-              >
-                Mis eventos
-              </h1>
-              <p
-                className="text-sm"
-                style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-              >
-                Selecciona el evento activo
-              </p>
-            </div>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl transition-opacity hover:opacity-80 flex-shrink-0"
-              style={{
-                background: 'var(--tqf-bordeaux)',
-                color: 'white',
-                fontFamily: 'var(--font-body)',
-              }}
+        <header
+          className="border-b px-4 py-3 flex items-center justify-between"
+          style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
+        >
+          <div className="flex items-center gap-3">
+            <Link
+              href="/area-planner"
+              className="flex items-center justify-center size-9 rounded-lg flex-shrink-0"
+              style={{ border: '1px solid var(--tqf-beige-border)' }}
             >
-              <Plus className="size-4" />
-              Nuevo
-            </button>
+              <ArrowLeft className="size-4" style={{ color: 'var(--tqf-muted)' }} />
+            </Link>
+            <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1rem', fontWeight: 300 }}>
+              Cash Control
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-xl transition-opacity hover:opacity-80"
+            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+          >
+            <Plus className="size-4" />
+            Nuevo
+          </button>
+        </header>
+        <main className="max-w-lg mx-auto px-6 py-8">
+          <div className="mb-5">
+            <h1
+              className="text-2xl mb-0.5"
+              style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}
+            >
+              Mis eventos
+            </h1>
+            <p
+              className="text-sm"
+              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+            >
+              Selecciona el evento activo
+            </p>
           </div>
 
           <div className="space-y-3">
