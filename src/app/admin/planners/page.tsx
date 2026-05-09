@@ -31,6 +31,17 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { auth } from '@/firebase/client';
+
+async function setCashControlRole(email: string, fullName: string, role: 'team' | 'admin' | 'remove') {
+  const token = await auth.currentUser?.getIdToken(true);
+  if (!token) return;
+  await fetch('/api/cash-control/set-role', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ email, role, fullName }),
+  });
+}
 
 const STATUS_LABELS: Record<string, { label: string; bg: string; text: string }> = {
   draft:     { label: 'Bozza',  bg: '#f3f4f6', text: '#6b7280' },
@@ -63,12 +74,14 @@ export default function AdminPlannersPage() {
   const [approvalReq, setApprovalReq] = useState<PlannerRequest | null>(null);
   const [approvalPerms, setApprovalPerms] = useState<AdminPermissions>(PLANNER_DEFAULT_PERMISSIONS);
   const [approvalRole, setApprovalRole] = useState<AdminRole>('editor');
+  const [approvalCCRole, setApprovalCCRole] = useState<'none' | 'team' | 'admin'>('team');
   const [approving, setApproving] = useState(false);
 
   // Edit permissions modal
   const [editPermTarget, setEditPermTarget] = useState<PlannerUser | null>(null);
   const [editPerms, setEditPerms] = useState<AdminPermissions>(PLANNER_DEFAULT_PERMISSIONS);
   const [editRole, setEditRole] = useState<AdminRole>('editor');
+  const [editCCRole, setEditCCRole] = useState<'none' | 'team' | 'admin'>('none');
   const [editSaving, setEditSaving] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
 
@@ -178,6 +191,9 @@ export default function AdminPlannersPage() {
 
     const fullName = req.name;
     await grantPlannerAdminAccess(req.email, fullName, approvalRole, approvalPerms);
+    if (approvalCCRole !== 'none') {
+      await setCashControlRole(req.email, fullName, approvalCCRole);
+    }
 
     setRequests((prev) => prev.filter((r) => r.id !== req.id));
     const updated = await getAllPlanners();
@@ -197,6 +213,7 @@ export default function AdminPlannersPage() {
     const adminRecord = adminUsers.find((a) => a.email === planner.email);
     setEditPerms(adminRecord?.permissions ?? PLANNER_DEFAULT_PERMISSIONS);
     setEditRole(adminRecord?.role ?? 'editor');
+    setEditCCRole('none');
     setEditPermTarget(planner);
   }
 
@@ -206,6 +223,9 @@ export default function AdminPlannersPage() {
     const fullName = editPermTarget.name + (editPermTarget.lastName ? ' ' + editPermTarget.lastName : '');
     const result = await grantPlannerAdminAccess(editPermTarget.email, fullName, editRole, editPerms);
     if (result.success) {
+      if (editCCRole !== 'none') {
+        await setCashControlRole(editPermTarget.email, fullName, editCCRole);
+      }
       const updated = await getAllAdminUsers();
       setAdminUsers(updated);
       toast.success(`Permessi di ${editPermTarget.name} aggiornati.`);
@@ -413,6 +433,20 @@ export default function AdminPlannersPage() {
                 </div>
               </div>
 
+              <div className="mb-5 p-4 rounded-xl" style={{ background: '#faf5ff', border: '1px solid #e9d5ff' }}>
+                <label className={labelCls} style={{ ...labelStyle, color: '#7c3aed', marginBottom: '0.5rem' }}>Accesso Cash Control</label>
+                <select
+                  value={approvalCCRole}
+                  onChange={(e) => setApprovalCCRole(e.target.value as any)}
+                  className={inputCls}
+                  style={inputStyle}
+                >
+                  <option value="none">Nessuno</option>
+                  <option value="team">Equipo — vede eventi assegnati, registra entrate/uscite</option>
+                  <option value="admin">Admin — crea eventi, gestisce tutti i bilanci</option>
+                </select>
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={handleConfirmApprove}
@@ -485,6 +519,23 @@ export default function AdminPlannersPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="mb-5 p-4 rounded-xl" style={{ background: '#faf5ff', border: '1px solid #e9d5ff' }}>
+                <label className={labelCls} style={{ ...labelStyle, color: '#7c3aed', marginBottom: '0.5rem' }}>Accesso Cash Control</label>
+                <p className="text-xs mb-2" style={{ color: '#7c3aed', fontFamily: 'var(--font-body)', opacity: 0.8 }}>
+                  Seleziona solo se vuoi modificare l&apos;accesso Cash Control (altrimenti lascia su Nessuno).
+                </p>
+                <select
+                  value={editCCRole}
+                  onChange={(e) => setEditCCRole(e.target.value as any)}
+                  className={inputCls}
+                  style={inputStyle}
+                >
+                  <option value="none">— Non modificare —</option>
+                  <option value="team">Equipo — vede eventi assegnati, registra entrate/uscite</option>
+                  <option value="admin">Admin — crea eventi, gestisce tutti i bilanci</option>
+                </select>
               </div>
 
               <div className="flex gap-2">

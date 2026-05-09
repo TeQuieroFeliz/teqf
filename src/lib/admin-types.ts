@@ -35,7 +35,6 @@ export const ALL_PERMISSIONS: { key: keyof AdminPermissions; label: string }[] =
   { key: 'planners',    label: 'Planner' },
   { key: 'furniture',   label: 'Catalogo Mobili' },
   { key: 'flowers',     label: 'Catalogo Fiori' },
-  { key: 'cashControl', label: 'Cash Control' },
 ];
 
 export const PERMISSION_LEVELS: AdminPermissionLevel[] = ['none', 'read', 'write', 'admin'];
