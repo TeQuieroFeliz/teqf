@@ -192,7 +192,7 @@ export default function HomePage() {
               width={64}
               height={64}
               className="object-contain"
-              style={{ filter: 'invert(11%) sepia(57%) saturate(1200%) hue-rotate(314deg) brightness(80%) contrast(95%)' }}
+              style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
               priority
             />
             <div className="flex flex-col leading-none">
@@ -406,17 +406,23 @@ export default function HomePage() {
 
           {/* Right: blog preview grid */}
           <div className="flex flex-col gap-4">
-            <span
+            <Link
+              href="/blog"
               style={{
                 color: "var(--tqf-gold)",
                 fontSize: "0.65rem",
                 letterSpacing: "0.2em",
                 textTransform: "uppercase",
                 fontFamily: "var(--font-body)",
+                textDecoration: "none",
+                width: "fit-content",
+                transition: "opacity 0.2s",
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
             >
-              {t.blog.label}
-            </span>
+              {t.blog.label} →
+            </Link>
             <div className="grid grid-cols-2 gap-4">
               {Array.from({ length: 4 }, (_, i) => {
                 const article: Article | undefined = articles?.[i];

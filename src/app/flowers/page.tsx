@@ -132,7 +132,7 @@ export default function FlowersPage() {
             <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-75">
               <Image src="/logo.png" alt="Te Quiero Feliz" width={36} height={36}
                 className="object-contain"
-                style={{ filter: 'invert(11%) sepia(57%) saturate(1200%) hue-rotate(314deg) brightness(80%) contrast(95%)' }} />
+                style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }} />
               <div>
                 <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1rem', fontWeight: 300, lineHeight: 1.2 }}>
                   Te Quiero Feliz

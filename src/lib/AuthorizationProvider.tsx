@@ -176,6 +176,7 @@ const isAlwaysAllowed = (pathname: string) =>
   pathname.startsWith('/blog') ||
   pathname.startsWith('/portfolio') ||
   pathname.startsWith('/planner') ||
+  pathname.startsWith('/area-planner') ||
   pathname.startsWith('/flowers') ||
   pathname.startsWith('/catalog');
 

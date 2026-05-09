@@ -39,7 +39,7 @@ export default async function BlogArticlePage({
               width={48}
               height={48}
               className="object-contain"
-              style={{ filter: 'invert(11%) sepia(57%) saturate(1200%) hue-rotate(314deg) brightness(80%) contrast(95%)' }}
+              style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
             />
             <span
               style={{

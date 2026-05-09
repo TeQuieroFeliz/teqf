@@ -14,6 +14,7 @@ import {
   Plus,
   Shield,
   Trash2,
+  Wallet,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -81,7 +82,7 @@ export default function PlannerDashboard() {
             width={36}
             height={36}
             className="object-contain"
-            style={{ filter: 'invert(11%) sepia(57%) saturate(1200%) hue-rotate(314deg) brightness(80%) contrast(95%)' }}
+            style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
           />
           <div>
             <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1.1rem', fontWeight: 300, lineHeight: 1.2 }}>
@@ -122,6 +123,17 @@ export default function PlannerDashboard() {
           >
             <Plus className="size-4" />
             <span className="hidden sm:inline">{t.newEvent}</span>
+          </Link>
+
+          {/* Cash control */}
+          <Link
+            href="/planner/cash-control"
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
+            style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
+            title="Control de Gastos"
+          >
+            <Wallet className="size-4" />
+            <span className="hidden sm:inline">Gastos</span>
           </Link>
 
           {/* Admin access */}

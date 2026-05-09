@@ -175,7 +175,7 @@ export default function CatalogPage() {
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-8">
           <Link href="/" className="flex items-center gap-3 shrink-0" style={{ textDecoration: 'none' }}>
             <Image src="/logo.png" alt="Te Quiero Feliz" width={56} height={56} className="object-contain"
-              style={{ filter: 'invert(11%) sepia(57%) saturate(1200%) hue-rotate(314deg) brightness(80%) contrast(95%)' }} priority />
+              style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }} priority />
             <div className="flex flex-col leading-none">
               <span style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '0.02em', lineHeight: 1.1 }}>
                 Te Quiero Feliz
