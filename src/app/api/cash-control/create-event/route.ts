@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, firestore } from '@/firebase/server';
+import { checkCashControlAdminAuth } from '@/lib/server/checkAdminAuth';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(req: NextRequest) {
@@ -14,10 +15,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Token requerido.' }, { status: 401 });
     }
 
-    const decoded = await adminAuth.verifyIdToken(token);
-    const callerRole = decoded.cashControlRole as string | undefined;
-    const isAdmin = callerRole === 'admin';
-    const isTeam = callerRole === 'team';
+    const caller = await checkCashControlAdminAuth(token);
+    const isAdmin = caller.isAuthorized;
+    const isTeam = caller.cashControlRole === 'team';
 
     if (!isAdmin && !isTeam) {
       return NextResponse.json({ error: 'Sin permisos.' }, { status: 403 });
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       location: location.trim(),
       eventType,
       status: 'active',
-      createdBy: decoded.uid,
+      createdBy: caller.uid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const eventId = eventRef.id;
     const uidsToAssign = isAdmin
       ? [...new Set(assignedUserIds as string[])]
-      : [decoded.uid];
+      : [caller.uid];
 
     const batch = firestore.batch();
     for (const uid of uidsToAssign) {
@@ -76,9 +76,9 @@ export async function POST(req: NextRequest) {
 
     await firestore.collection('cashControlAudit').add({
       eventId,
-      userId: decoded.uid,
+      userId: caller.uid,
       action: 'create_event',
-      metadata: { eventCode, assignedUserIds: uidsToAssign, role: callerRole },
+      metadata: { eventCode, assignedUserIds: uidsToAssign, role: caller.cashControlRole },
       createdAt: FieldValue.serverTimestamp(),
     });
 

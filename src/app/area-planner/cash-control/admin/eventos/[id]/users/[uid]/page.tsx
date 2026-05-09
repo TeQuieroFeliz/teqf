@@ -1,5 +1,6 @@
 'use client';
 
+import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useCashControlAuth } from '@/context/CashControlAuthContext';
 import { isCashControlAdmin } from '@/lib/cash-control/permissions';
 import {
@@ -66,7 +67,8 @@ type EditExpense = {
 export default function AdminUserEventPage() {
   const { id: eventId, uid: targetUid } = useParams<{ id: string; uid: string }>();
   const { cashControlRole, uid: adminUid, isLoading: authLoading } = useCashControlAuth();
-  const isAdmin = isCashControlAdmin(cashControlRole);
+  const { adminUser } = useAdminAuth();
+  const isAdmin = isCashControlAdmin(cashControlRole) || adminUser?.role === 'superadmin';
   const router = useRouter();
 
   const [event, setEvent] = useState<CashControlEvent | null>(null);

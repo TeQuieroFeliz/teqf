@@ -1,5 +1,6 @@
 'use client';
 
+import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useCashControlAuth } from '@/context/CashControlAuthContext';
 import { hasCashControlAccess } from '@/lib/cash-control/permissions';
 import { Loader2 } from 'lucide-react';
@@ -8,16 +9,18 @@ import { useEffect, ReactNode } from 'react';
 
 export function CashControlGuard({ children }: { children: ReactNode }) {
   const { isLoading, firebaseUser, cashControlRole } = useCashControlAuth();
+  const { adminUser, isLoading: adminLoading } = useAdminAuth();
+  const isSuperAdmin = adminUser?.role === 'superadmin';
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || adminLoading) return;
     if (!firebaseUser) {
       router.replace('/login');
     }
-  }, [isLoading, firebaseUser, router]);
+  }, [isLoading, adminLoading, firebaseUser, router]);
 
-  if (isLoading) {
+  if (isLoading || adminLoading) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
@@ -33,7 +36,7 @@ export function CashControlGuard({ children }: { children: ReactNode }) {
     return null;
   }
 
-  if (!hasCashControlAccess(cashControlRole)) {
+  if (!hasCashControlAccess(cashControlRole) && !isSuperAdmin) {
     return (
       <div
         className="min-h-screen flex flex-col items-center justify-center px-6"

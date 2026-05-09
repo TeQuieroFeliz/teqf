@@ -1,3 +1,4 @@
+import { AdminAuthContextProvider } from '@/context/AdminAuthContext';
 import { CashControlAuthContextProvider } from '@/context/CashControlAuthContext';
 import { CashControlGuard } from '@/components/cash-control/CashControlGuard';
 import Image from 'next/image';
@@ -6,6 +7,7 @@ import { ReactNode } from 'react';
 
 export default function AreaPlannerLayout({ children }: { children: ReactNode }) {
   return (
+    <AdminAuthContextProvider>
     <CashControlAuthContextProvider>
       <div className="min-h-screen flex flex-col" style={{ background: 'var(--tqf-beige)' }}>
         <header
@@ -31,5 +33,6 @@ export default function AreaPlannerLayout({ children }: { children: ReactNode })
         </div>
       </div>
     </CashControlAuthContextProvider>
+    </AdminAuthContextProvider>
   );
 }

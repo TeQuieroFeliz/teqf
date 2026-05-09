@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, firestore } from '@/firebase/server';
+import { checkCashControlAdminAuth } from '@/lib/server/checkAdminAuth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { Resend } from 'resend';
 
@@ -47,11 +48,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Token requerido.' }, { status: 401 });
     }
 
-    const decoded = await adminAuth.verifyIdToken(token);
-    const isOwner = decoded.uid === userId;
-    const isCallerAdmin = decoded.cashControlRole === 'admin';
+    const caller = await checkCashControlAdminAuth(token);
+    const isOwner = caller.uid === userId;
 
-    if (!isOwner && !isCallerAdmin) {
+    if (!isOwner && !caller.isAuthorized) {
       return NextResponse.json({ error: 'Sin permisos.' }, { status: 403 });
     }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useAdminAuth } from '@/context/AdminAuthContext';
 import { useCashControlAuth } from '@/context/CashControlAuthContext';
 import { isCashControlAdmin } from '@/lib/cash-control/permissions';
 import { getAllEvents, getTeamProfiles } from '@/lib/cash-control/firestore';
@@ -30,7 +31,8 @@ const EMPTY_FORM: CreateForm = { eventCode: '', eventName: '', eventDate: '', lo
 
 export default function AdminCashControlPage() {
   const { cashControlRole, uid, displayName, email, isLoading: authLoading } = useCashControlAuth();
-  const isAdmin = isCashControlAdmin(cashControlRole);
+  const { adminUser } = useAdminAuth();
+  const isAdmin = isCashControlAdmin(cashControlRole) || adminUser?.role === 'superadmin';
   const router = useRouter();
 
   const [events, setEvents] = useState<CashControlEvent[]>([]);
