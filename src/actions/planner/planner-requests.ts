@@ -70,7 +70,7 @@ async function sendApprovalEmail(name: string, email: string): Promise<void> {
             Accedi all'Area Planner
           </a>
           <p style="margin:28px 0 0;font-size:12px;color:#999;">
-            Per assistenza scrivi a <a href="mailto:info@tequierofeliz.com" style="color:#6b1a2a;">info@tequierofeliz.com</a>
+            Per assistenza scrivi a <a href="mailto:admin@tequierofeliz.com" style="color:#6b1a2a;">admin@tequierofeliz.com</a>
           </p>
         </div>
       </div>
@@ -99,7 +99,7 @@ async function sendRejectionEmail(name: string, email: string): Promise<void> {
             Purtroppo la tua richiesta non è stata approvata in questo momento.
             Se pensi si tratti di un errore, contatta il team di Te Quiero Feliz.
           </p>
-          <a href="mailto:info@tequierofeliz.com"
+          <a href="mailto:admin@tequierofeliz.com"
              style="display:inline-block;background:#6b1a2a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;">
             Contatta il team
           </a>
