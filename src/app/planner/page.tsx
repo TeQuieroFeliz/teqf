@@ -72,20 +72,20 @@ export default function PlannerDashboard() {
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
       {/* Header */}
       <header
-        className="border-b px-6 py-4 flex items-center justify-between"
+        className="border-b px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between"
         style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
       >
-        <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-75">
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 transition-opacity hover:opacity-75 flex-shrink-0">
           <Image
             src="/logo.png"
             alt="Te Quiero Feliz"
-            width={36}
-            height={36}
+            width={32}
+            height={32}
             className="object-contain"
             style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
           />
-          <div>
-            <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1.1rem', fontWeight: 300, lineHeight: 1.2 }}>
+          <div className="hidden xs:block">
+            <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1rem', fontWeight: 300, lineHeight: 1.2 }}>
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
@@ -94,9 +94,9 @@ export default function PlannerDashboard() {
           </div>
         </Link>
 
-        <div className="flex items-center gap-3">
-          {/* Language switcher */}
-          <div className="flex items-center rounded-lg overflow-hidden" style={{ border: '1px solid var(--tqf-beige-border)' }}>
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* Language switcher — hidden on xs, visible sm+ */}
+          <div className="hidden sm:flex items-center rounded-lg overflow-hidden" style={{ border: '1px solid var(--tqf-beige-border)' }}>
             {LANG_OPTIONS.map((opt, idx) => (
               <button
                 key={opt.value}
@@ -118,7 +118,7 @@ export default function PlannerDashboard() {
 
           <Link
             href="/planner/events/new"
-            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
           >
             <Plus className="size-4" />
@@ -136,10 +136,10 @@ export default function PlannerDashboard() {
             <span className="hidden sm:inline">Gastos</span>
           </Link>
 
-          {/* Admin access */}
+          {/* Admin access — hidden on mobile */}
           <Link
             href="/planner/accesso-admin"
-            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
+            className="hidden sm:flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
             style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
             title="Admin"
           >
@@ -163,14 +163,14 @@ export default function PlannerDashboard() {
                 [plannerUser.name?.[0], plannerUser.lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?'
               )}
             </div>
-            <span className="hidden sm:block text-sm max-w-[120px] truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+            <span className="hidden sm:block text-sm max-w-[100px] truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
               {plannerUser.name}{plannerUser.lastName ? ` ${plannerUser.lastName}` : ''}
             </span>
           </Link>
 
           <button
             onClick={logout}
-            className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors hover:opacity-80"
+            className="flex items-center gap-1.5 text-sm px-2.5 py-2 rounded-lg transition-colors hover:opacity-80"
             style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
           >
             <LogOut className="size-4" />
@@ -179,7 +179,7 @@ export default function PlannerDashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-6">
           <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
             {t.yourEvents}

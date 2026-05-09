@@ -1,11 +1,12 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { Auth, getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { Auth, getAuth } from 'firebase/auth';
 import { FirebaseStorage, getStorage } from 'firebase/storage';
 import {
   Firestore,
   getFirestore,
   initializeFirestore,
-  memoryLocalCache,
+  persistentLocalCache,
+  persistentSingleTabManager,
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -27,12 +28,14 @@ if (!currentApps.length) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   storage = getStorage(app);
-  db = initializeFirestore(app, { localCache: memoryLocalCache() });
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+  });
 } else {
   const app = currentApps[0];
   auth = getAuth(app);
   storage = getStorage(app);
-  db = initializeFirestore(app, { localCache: memoryLocalCache() });
+  db = getFirestore(app);
 }
 
 export { auth, storage, db };
