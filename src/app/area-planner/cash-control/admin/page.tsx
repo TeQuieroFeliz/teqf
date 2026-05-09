@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Users,
   LogOut,
+  Trash2,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -97,6 +98,25 @@ export default function AdminCashControlPage() {
       toast.error(msg);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDeleteEvent(ev: CashControlEvent) {
+    if (!confirm(`Eliminare l'evento "${ev.eventCode || ev.eventName}"?\n\nSaranno eliminati tutti i movimenti, chiusure e assegnazioni.`)) return;
+    try {
+      const token = await auth.currentUser?.getIdToken(true);
+      if (!token) throw new Error('Sin sesión activa.');
+      const res = await fetch('/api/cash-control/delete-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ eventId: ev.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error al eliminar.');
+      setEvents(prev => prev.filter(e => e.id !== ev.id));
+      toast.success('Evento eliminato.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error inesperado.');
     }
   }
 
@@ -367,7 +387,7 @@ export default function AdminCashControlPage() {
             </p>
             <div className="space-y-3">
               {activeEvents.map(ev => (
-                <EventCard key={ev.id} event={ev} />
+                <EventCard key={ev.id} event={ev} onDelete={() => handleDeleteEvent(ev)} />
               ))}
             </div>
           </section>
@@ -384,7 +404,7 @@ export default function AdminCashControlPage() {
             </p>
             <div className="space-y-3">
               {closedEvents.map(ev => (
-                <EventCard key={ev.id} event={ev} />
+                <EventCard key={ev.id} event={ev} onDelete={() => handleDeleteEvent(ev)} />
               ))}
             </div>
           </section>
@@ -420,14 +440,16 @@ export default function AdminCashControlPage() {
   );
 }
 
-function EventCard({ event }: { event: CashControlEvent }) {
+function EventCard({ event, onDelete }: { event: CashControlEvent; onDelete: () => void }) {
   return (
-    <Link
-      href={`/area-planner/cash-control/admin/eventos/${event.id}`}
-      className="flex items-center justify-between rounded-2xl p-5 transition-all hover:opacity-90 active:scale-[0.98]"
+    <div
+      className="flex items-center justify-between rounded-2xl p-5"
       style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
     >
-      <div className="min-w-0">
+      <Link
+        href={`/area-planner/cash-control/admin/eventos/${event.id}`}
+        className="flex-1 min-w-0 transition-opacity hover:opacity-70"
+      >
         <p
           className="font-medium truncate"
           style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontSize: '1.05rem', fontWeight: 400 }}
@@ -444,7 +466,7 @@ function EventCard({ event }: { event: CashControlEvent }) {
             {event.location}
           </p>
         )}
-      </div>
+      </Link>
       <div className="flex items-center gap-2 flex-shrink-0 ml-3">
         <span
           className="text-xs px-2.5 py-1 rounded-full"
@@ -456,8 +478,15 @@ function EventCard({ event }: { event: CashControlEvent }) {
         >
           {event.status === 'active' ? 'Activo' : 'Cerrado'}
         </span>
+        <button
+          onClick={onDelete}
+          className="flex items-center justify-center size-8 rounded-lg transition-opacity hover:opacity-80"
+          style={{ border: '1px solid #fca5a5', color: '#991b1b' }}
+        >
+          <Trash2 className="size-3.5" />
+        </button>
         <ArrowRight className="size-4" style={{ color: 'var(--tqf-muted)' }} />
       </div>
-    </Link>
+    </div>
   );
 }
