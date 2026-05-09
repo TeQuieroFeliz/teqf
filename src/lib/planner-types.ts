@@ -107,6 +107,7 @@ export type EventDay = {
   setupTime: string;
   breakdownTime: string;
   supplierAccessTime: string;
+  eventStartTime: string;
   supplierRegulationUrl: string;
   layoutUrls: string[];
   selectedFurniture: SelectedFurnitureItem[];

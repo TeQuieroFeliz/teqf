@@ -41,6 +41,7 @@ export async function sendPlannerEventEmail(
             ${day.notes ? `<p style="margin:4px 0;"><strong>Note:</strong> ${day.notes}</p>` : ''}
             <p style="margin:4px 0;">
               <strong>${dt.setup}:</strong> ${formatTime(day.setupTime)} &nbsp;|&nbsp;
+              <strong>${dt.eventStart}:</strong> ${formatTime(day.eventStartTime ?? '')} &nbsp;|&nbsp;
               <strong>${dt.breakdown}:</strong> ${formatTime(day.breakdownTime)} &nbsp;|&nbsp;
               <strong>${dt.supplierAccess}:</strong> ${formatTime(day.supplierAccessTime)}
             </p>

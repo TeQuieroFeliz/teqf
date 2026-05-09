@@ -50,7 +50,7 @@ function newDay(date: string): EventDay {
   return {
     id: crypto.randomUUID(), date,
     eventName: '', venue: '', venueAddress: '', venuePlaceId: '', venueMapUrl: '',
-    notes: '', setupTime: '', breakdownTime: '', supplierAccessTime: '',
+    notes: '', setupTime: '', breakdownTime: '', supplierAccessTime: '', eventStartTime: '',
     supplierRegulationUrl: '', layoutUrls: [],
     selectedFurniture: [], selectedFlowers: [], customItems: [],
   };
@@ -123,18 +123,20 @@ function TimePickerAMPM({ value, onChange }: { value: string; onChange: (v: stri
 
 type DayCardProps = {
   day: EventDay;
+  dayIndex: number;
   eventId: string;
   isExpanded: boolean;
   onToggle: () => void;
   onChange: (updated: EventDay) => void;
   onRemove: () => void;
+  onAddSameDay: () => void;
   t: Translations;
   furnitureItems: FurnitureItem[];
   flowerItems: FlowerItem[];
   catalogLoading: boolean;
 };
 
-function DayCard({ day, eventId, isExpanded, onToggle, onChange, onRemove, t, furnitureItems, flowerItems, catalogLoading }: DayCardProps) {
+function DayCard({ day, dayIndex, eventId, isExpanded, onToggle, onChange, onRemove, onAddSameDay, t, furnitureItems, flowerItems, catalogLoading }: DayCardProps) {
   const regRef    = useRef<HTMLInputElement>(null);
   const layoutRef = useRef<HTMLInputElement>(null);
   const [uploadingReg,    setUploadingReg]    = useState(false);
@@ -250,9 +252,17 @@ function DayCard({ day, eventId, isExpanded, onToggle, onChange, onRemove, t, fu
             <Calendar className="size-4" style={{ color: 'white' }} />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-sm font-medium" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-              {formatDate(day.date, t.dateMonths)}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                {formatDate(day.date, t.dateMonths)}
+              </p>
+              {dayIndex > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', fontSize: '0.6rem' }}>
+                  #{dayIndex + 1}
+                </span>
+              )}
+            </div>
             <p className="text-xs truncate" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
               {day.eventName || t.eventDescriptionEmpty}
               {day.venue ? ` · ${day.venue}` : ''}
@@ -303,11 +313,17 @@ function DayCard({ day, eventId, isExpanded, onToggle, onChange, onRemove, t, fu
 
           <div>
             <label style={{ ...labelStyle, marginBottom: '0.5rem' }}>{t.logistics}</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t.setup}</label>
                 <TimePickerAMPM value={day.setupTime} onChange={v => set('setupTime', v)} />
               </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t.eventStart}</label>
+                <TimePickerAMPM value={day.eventStartTime ?? ''} onChange={v => set('eventStartTime', v)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t.breakdown}</label>
                 <TimePickerAMPM value={day.breakdownTime} onChange={v => set('breakdownTime', v)} />
@@ -575,6 +591,17 @@ function DayCard({ day, eventId, isExpanded, onToggle, onChange, onRemove, t, fu
             )}
           </div>
 
+          {/* ── Add another event for same date ── */}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onAddSameDay(); }}
+            className="w-full py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-80"
+            style={{ border: '1.5px dashed var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', background: 'transparent' }}
+          >
+            <Plus className="size-4" />
+            {t.addEventSameDay}
+          </button>
+
           {/* ── Idee & Elementi Personalizzati (per giorno) ── */}
           <div className="rounded-xl p-4" style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
             <div className="flex items-center justify-between mb-4">
@@ -723,6 +750,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
       city: initialEvent.city ?? '',
       days: (initialEvent.days ?? []).map(d => ({
         ...d,
+        eventStartTime: d.eventStartTime ?? '',
         selectedFurniture: d.selectedFurniture ?? [],
         selectedFlowers: d.selectedFlowers ?? [],
         customItems: (d.customItems ?? []).map(ci => ({
@@ -749,17 +777,27 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
       .then(([furniture, flowers]) => { setFurnitureItems(furniture); setFlowerItems(flowers); setCatalogLoading(false); });
   }, []);
 
-  const selectedDates = form.days.map(d => d.date);
+  const selectedDates = [...new Set(form.days.map(d => d.date))];
 
   const handleDatesChange = (newDates: string[]) => {
-    const existing = new Map(form.days.map(d => [d.date, d]));
-    const updated  = newDates.map(date => existing.get(date) ?? newDay(date));
-    setForm(prev => ({ ...prev, days: updated }));
-    const added = newDates.find(d => !selectedDates.includes(d));
-    if (added) {
-      const addedDay = existing.get(added) ?? updated.find(d => d.date === added);
+    const removedDates = selectedDates.filter(d => !newDates.includes(d));
+    const addedDates   = newDates.filter(d => !selectedDates.includes(d));
+    let updatedDays = form.days.filter(d => !removedDates.includes(d.date));
+    for (const date of addedDates) {
+      updatedDays = [...updatedDays, newDay(date)];
+    }
+    updatedDays.sort((a, b) => a.date.localeCompare(b.date));
+    setForm(prev => ({ ...prev, days: updatedDays }));
+    if (addedDates.length > 0) {
+      const addedDay = updatedDays.find(d => d.date === addedDates[addedDates.length - 1]);
       if (addedDay) setExpandedDay(addedDay.id);
     }
+  };
+
+  const addEventForDate = (date: string) => {
+    const newD = newDay(date);
+    setForm(prev => ({ ...prev, days: [...prev.days, newD] }));
+    setExpandedDay(newD.id);
   };
 
   const updateDay = (id: string, updated: EventDay) =>
@@ -767,7 +805,13 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
 
   const removeDay = (id: string) => {
     const day = form.days.find(d => d.id === id);
-    if (day) handleDatesChange(selectedDates.filter(dt => dt !== day.date));
+    if (!day) return;
+    const siblingsForDate = form.days.filter(d => d.date === day.date && d.id !== id);
+    if (siblingsForDate.length === 0) {
+      handleDatesChange(selectedDates.filter(dt => dt !== day.date));
+    } else {
+      setForm(prev => ({ ...prev, days: prev.days.filter(d => d.id !== id) }));
+    }
     if (expandedDay === id) setExpandedDay(null);
   };
 
@@ -952,18 +996,23 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {form.days.map(day => (
-                    <DayCard
-                      key={day.id} day={day} eventId={eventId} t={t}
-                      isExpanded={expandedDay === day.id}
-                      onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
-                      onChange={updated => updateDay(day.id, updated)}
-                      onRemove={() => removeDay(day.id)}
-                      furnitureItems={furnitureItems}
-                      flowerItems={flowerItems}
-                      catalogLoading={catalogLoading}
-                    />
-                  ))}
+                  {form.days.map((day) => {
+                    const sameDateDays = form.days.filter(d => d.date === day.date);
+                    const dayIndex = sameDateDays.findIndex(d => d.id === day.id);
+                    return (
+                      <DayCard
+                        key={day.id} day={day} dayIndex={dayIndex} eventId={eventId} t={t}
+                        isExpanded={expandedDay === day.id}
+                        onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
+                        onChange={updated => updateDay(day.id, updated)}
+                        onRemove={() => removeDay(day.id)}
+                        onAddSameDay={() => addEventForDate(day.date)}
+                        furnitureItems={furnitureItems}
+                        flowerItems={flowerItems}
+                        catalogLoading={catalogLoading}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>

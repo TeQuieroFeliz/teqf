@@ -23,6 +23,7 @@ export type DocTranslations = {
   numDays: (n: number) => string;
   description: string;
   address: string;
+  eventStart: string;
   setup: string;
   breakdown: string;
   supplierAccess: string;
@@ -74,6 +75,7 @@ export const DT: Record<Lang, DocTranslations> = {
     numDays: (n) => `${n} ${n === 1 ? 'giorno' : 'giorni'}`,
     description: 'Descrizione',
     address: 'INDIRIZZO',
+    eventStart: 'Inizio Evento',
     setup: 'Montaggio',
     breakdown: 'Smontaggio',
     supplierAccess: 'Accesso Fornitori',
@@ -119,6 +121,7 @@ export const DT: Record<Lang, DocTranslations> = {
     numDays: (n) => `${n} ${n === 1 ? 'day' : 'days'}`,
     description: 'Description',
     address: 'ADDRESS',
+    eventStart: 'Event Start',
     setup: 'Setup',
     breakdown: 'Breakdown',
     supplierAccess: 'Supplier Access',
@@ -164,6 +167,7 @@ export const DT: Record<Lang, DocTranslations> = {
     numDays: (n) => `${n} ${n === 1 ? 'día' : 'días'}`,
     description: 'Descripción',
     address: 'DIRECCIÓN',
+    eventStart: 'Inicio del Evento',
     setup: 'Montaje',
     breakdown: 'Desmontaje',
     supplierAccess: 'Acceso de Proveedores',
@@ -249,9 +253,11 @@ export type Translations = {
   notes: string;
   notesPlaceholder: string;
   logistics: string;
+  eventStart: string;
   setup: string;
   breakdown: string;
   supplierAccess: string;
+  addEventSameDay: string;
   supplierRegulations: string;
   regulationsUploaded: string;
   uploading: string;
@@ -361,9 +367,11 @@ export const T: Record<Lang, Translations> = {
     notes: 'Note',
     notesPlaceholder: 'es. Ballroom Louvre, piano -1, ingresso laterale...',
     logistics: 'Orari Logistica',
+    eventStart: 'Inizio Evento',
     setup: 'Montaggio',
     breakdown: 'Smontaggio',
     supplierAccess: 'Accesso Fornitori',
+    addEventSameDay: '+ Aggiungi evento per questa data',
     supplierRegulations: 'Regolamento Fornitori',
     regulationsUploaded: 'Regolamento caricato',
     uploading: 'Caricamento...',
@@ -464,9 +472,11 @@ export const T: Record<Lang, Translations> = {
     notes: 'Notes',
     notesPlaceholder: 'e.g. Ballroom Louvre, floor -1, side entrance...',
     logistics: 'Logistics Times',
+    eventStart: 'Event Start',
     setup: 'Setup',
     breakdown: 'Breakdown',
     supplierAccess: 'Supplier Access',
+    addEventSameDay: '+ Add event for this date',
     supplierRegulations: 'Supplier Regulations',
     regulationsUploaded: 'Regulations uploaded',
     uploading: 'Uploading...',
@@ -567,9 +577,11 @@ export const T: Record<Lang, Translations> = {
     notes: 'Notas',
     notesPlaceholder: 'ej. Ballroom Louvre, piso -1, entrada lateral...',
     logistics: 'Horarios Logísticos',
+    eventStart: 'Inicio del Evento',
     setup: 'Montaje',
     breakdown: 'Desmontaje',
     supplierAccess: 'Acceso de Proveedores',
+    addEventSameDay: '+ Agregar evento para esta fecha',
     supplierRegulations: 'Reglamento de Proveedores',
     regulationsUploaded: 'Reglamento cargado',
     uploading: 'Cargando...',

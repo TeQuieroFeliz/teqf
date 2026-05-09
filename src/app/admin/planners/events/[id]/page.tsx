@@ -185,9 +185,10 @@ export default function AdminPlannerEventPage() {
                   )}
                   {field('Note', day.notes)}
                 </div>
-                {(day.setupTime || day.breakdownTime || day.supplierAccessTime) && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
+                {(day.setupTime || day.eventStartTime || day.breakdownTime || day.supplierAccessTime) && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
                     {field('Montaggio', day.setupTime)}
+                    {field('Inizio Evento', day.eventStartTime)}
                     {field('Smontaggio', day.breakdownTime)}
                     {field('Accesso Fornitori', day.supplierAccessTime)}
                   </div>

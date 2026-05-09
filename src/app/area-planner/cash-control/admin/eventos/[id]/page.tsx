@@ -10,7 +10,7 @@ import {
 } from '@/lib/cash-control/firestore';
 import { CashControlEvent, CashControlClosure, CashControlProfile } from '@/lib/cash-control/types';
 import { formatCurrency } from '@/lib/cash-control/calculations';
-import { Loader2, ArrowLeft, UserPlus } from 'lucide-react';
+import { Loader2, ArrowLeft, UserPlus, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -250,7 +250,7 @@ export default function AdminEventDetailPage() {
                     style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p
                           className="font-medium"
                           style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
@@ -261,16 +261,25 @@ export default function AdminEventDetailPage() {
                           {ub.profile?.email ?? ''}
                         </p>
                       </div>
-                      <span
-                        className="text-xs px-2.5 py-1 rounded-full flex-shrink-0"
-                        style={
-                          isClosed
-                            ? { background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }
-                            : { background: '#f0fdf4', color: '#166534', fontFamily: 'var(--font-body)' }
-                        }
-                      >
-                        {isClosed ? 'Cerrada' : 'Activa'}
-                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span
+                          className="text-xs px-2.5 py-1 rounded-full"
+                          style={
+                            isClosed
+                              ? { background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }
+                              : { background: '#f0fdf4', color: '#166534', fontFamily: 'var(--font-body)' }
+                          }
+                        >
+                          {isClosed ? 'Cerrada' : 'Activa'}
+                        </span>
+                        <Link
+                          href={`/area-planner/cash-control/admin/eventos/${id}/users/${ub.uid}`}
+                          className="flex items-center justify-center size-8 rounded-lg transition-opacity hover:opacity-70"
+                          style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)' }}
+                        >
+                          <ChevronRight className="size-4" />
+                        </Link>
+                      </div>
                     </div>
 
                     {ub.closure && (

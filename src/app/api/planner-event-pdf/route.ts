@@ -142,12 +142,15 @@ export async function POST(request: Request) {
           y += 4.5 + lines.length * 4.5 + 3;
         }
 
-        if (day.setupTime || day.breakdownTime || day.supplierAccessTime) {
+        if (day.setupTime || day.eventStartTime || day.breakdownTime || day.supplierAccessTime) {
           leftY = y; rightY = y;
           if (day.setupTime) leftY = row(doc, dt.setup, formatTime(day.setupTime), leftY, 0, pageW);
-          if (day.breakdownTime) rightY = row(doc, dt.breakdown, formatTime(day.breakdownTime), rightY, 1, pageW);
+          if (day.eventStartTime) rightY = row(doc, dt.eventStart, formatTime(day.eventStartTime), rightY, 1, pageW);
           y = Math.max(leftY, rightY);
-          if (day.supplierAccessTime) y = row(doc, dt.supplierAccess, formatTime(day.supplierAccessTime), y, 0, pageW);
+          leftY = y; rightY = y;
+          if (day.breakdownTime) leftY = row(doc, dt.breakdown, formatTime(day.breakdownTime), leftY, 0, pageW);
+          if (day.supplierAccessTime) rightY = row(doc, dt.supplierAccess, formatTime(day.supplierAccessTime), rightY, 1, pageW);
+          y = Math.max(leftY, rightY);
         }
 
         if (day.supplierRegulationUrl || day.layoutUrls?.length > 0) {
