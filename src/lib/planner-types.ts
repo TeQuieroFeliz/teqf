@@ -87,7 +87,7 @@ export type SelectedFlowerItem = {
   unit: string;
 };
 
-export type PlannerEventStatus = 'draft' | 'submitted';
+export type PlannerEventStatus = 'draft' | 'active' | 'submitted';
 
 export type CustomItem = {
   id: string;

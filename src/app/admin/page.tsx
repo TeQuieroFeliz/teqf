@@ -10,6 +10,7 @@ import {
   LogOut,
   Sofa,
   Users,
+  Wallet,
 } from 'lucide-react';
 
 type Section = {
@@ -21,6 +22,13 @@ type Section = {
 };
 
 const SECTIONS: Section[] = [
+  {
+    key: 'cashControl',
+    label: 'Cash Control',
+    description: 'Gestisci conti, movimenti e chiusure delle planner',
+    icon: <Wallet className="size-5" />,
+    href: '/area-planner/cash-control/admin',
+  },
   {
     key: 'blog',
     label: 'Blog',
@@ -98,9 +106,11 @@ export default function AdminDashboardPage() {
 
   if (!adminUser) return null;
 
-  const accessibleSections = SECTIONS.filter(
-    (s) => (adminUser.permissions[s.key] ?? 'write') !== 'none'
-  );
+  const isSuperAdmin = adminUser.role === 'superadmin';
+  const accessibleSections = SECTIONS.filter((s) => {
+    if (s.key === 'cashControl') return isSuperAdmin || (adminUser.permissions[s.key] ?? 'none') !== 'none';
+    return (adminUser.permissions[s.key] ?? 'write') !== 'none';
+  });
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>

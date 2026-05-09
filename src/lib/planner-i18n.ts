@@ -220,6 +220,7 @@ export type Translations = {
   myEvents: string;
   newEvent: string;
   editEvent: string;
+  save: string;
   saveDraft: string;
   send: string;
   downloadPdf: string;
@@ -280,12 +281,14 @@ export type Translations = {
 
   // footer buttons
   saveAsDraft: string;
+  saveActive: string;
   sendToTqf: string;
 
   // toasts
   enterEventCode: string;
   selectOneDay: string;
   eventSent: string;
+  eventSaved: string;
   draftSaved: string;
   saveError: string;
   regulationUploaded: string;
@@ -338,6 +341,7 @@ export const T: Record<Lang, Translations> = {
     myEvents: 'I miei eventi',
     newEvent: 'Nuovo Evento',
     editEvent: 'Modifica Evento',
+    save: 'Salva',
     saveDraft: 'Salva bozza',
     send: 'Invia',
     downloadPdf: 'PDF',
@@ -391,11 +395,13 @@ export const T: Record<Lang, Translations> = {
     notesMainPlaceholder: 'Informazioni aggiuntive, richieste speciali, istruzioni per il team...',
 
     saveAsDraft: 'Salva come bozza',
+    saveActive: 'Salva',
     sendToTqf: 'Invia a Te Quiero Feliz',
 
     enterEventCode: 'Inserisci il codice evento.',
     selectOneDay: 'Seleziona almeno un giorno per l\'evento.',
     eventSent: 'Evento inviato!',
+    eventSaved: 'Evento salvato.',
     draftSaved: 'Bozza salvata.',
     saveError: 'Errore salvataggio.',
     regulationUploaded: 'Regolamento caricato.',
@@ -443,6 +449,7 @@ export const T: Record<Lang, Translations> = {
     myEvents: 'My events',
     newEvent: 'New Event',
     editEvent: 'Edit Event',
+    save: 'Save',
     saveDraft: 'Save draft',
     send: 'Send',
     downloadPdf: 'PDF',
@@ -496,11 +503,13 @@ export const T: Record<Lang, Translations> = {
     notesMainPlaceholder: 'Additional information, special requests, team instructions...',
 
     saveAsDraft: 'Save as draft',
+    saveActive: 'Save',
     sendToTqf: 'Send to Te Quiero Feliz',
 
     enterEventCode: 'Please enter an event code.',
     selectOneDay: 'Select at least one day for the event.',
     eventSent: 'Event sent!',
+    eventSaved: 'Event saved.',
     draftSaved: 'Draft saved.',
     saveError: 'Save error.',
     regulationUploaded: 'Regulation uploaded.',
@@ -548,6 +557,7 @@ export const T: Record<Lang, Translations> = {
     myEvents: 'Mis eventos',
     newEvent: 'Nuevo Evento',
     editEvent: 'Editar Evento',
+    save: 'Guardar',
     saveDraft: 'Guardar borrador',
     send: 'Enviar',
     downloadPdf: 'PDF',
@@ -601,11 +611,13 @@ export const T: Record<Lang, Translations> = {
     notesMainPlaceholder: 'Información adicional, solicitudes especiales, instrucciones para el equipo...',
 
     saveAsDraft: 'Guardar como borrador',
+    saveActive: 'Guardar',
     sendToTqf: 'Enviar a Te Quiero Feliz',
 
     enterEventCode: 'Por favor ingresa el código del evento.',
     selectOneDay: 'Selecciona al menos un día para el evento.',
     eventSent: '¡Evento enviado!',
+    eventSaved: 'Evento guardado.',
     draftSaved: 'Borrador guardado.',
     saveError: 'Error al guardar.',
     regulationUploaded: 'Reglamento cargado.',

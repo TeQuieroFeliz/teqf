@@ -823,7 +823,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
     const payload = {
       ...form, id: isNew ? undefined : eventId,
       plannerId: plannerUser.id, plannerName: plannerUser.name, plannerEmail: plannerUser.email,
-      status: submit ? 'submitted' : 'draft',
+      status: submit ? 'submitted' : 'active',
     } as const;
     const result = await savePlannerEvent(payload);
     if (result.success && submit) {
@@ -837,7 +837,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
     }
     setSaving(false);
     if (result.success) {
-      toast.success(submit ? t.eventSent : t.draftSaved);
+      toast.success(submit ? t.eventSent : t.eventSaved);
       router.push('/planner');
     } else {
       toast.error(t.saveError);
@@ -925,7 +925,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
             className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
             style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            <span className="hidden sm:inline">{t.saveDraft}</span>
+            <span className="hidden sm:inline">{t.saveActive}</span>
           </button>
           <button onClick={() => handleSave(true)} disabled={saving}
             className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
@@ -1040,7 +1040,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
             className="flex items-center gap-2 text-sm px-6 py-3 rounded-xl transition-opacity hover:opacity-80 disabled:opacity-50"
             style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-            {t.saveAsDraft}
+            {t.saveActive}
           </button>
           <button onClick={() => handleSave(true)} disabled={saving}
             className="flex items-center gap-2 text-sm px-6 py-3 rounded-xl transition-opacity hover:opacity-80 disabled:opacity-50"

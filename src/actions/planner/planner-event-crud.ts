@@ -48,6 +48,21 @@ export async function savePlannerEvent(
   }
 }
 
+export async function updatePlannerEventStatus(
+  id: string,
+  status: 'draft' | 'active' | 'submitted'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const now = new Date().toISOString();
+    await ref.doc(id).update({ status, updatedAt: now });
+    revalidatePath('/admin/events');
+    revalidatePath('/planner');
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export async function deletePlannerEvent(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     await ref.doc(id).delete();
