@@ -35,7 +35,7 @@ export default function AreaPlannerPage() {
         className="border-b px-6 py-4 flex items-center justify-between"
         style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
       >
-        <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-75">
+        <Link href="/planner" className="flex items-center gap-3 transition-opacity hover:opacity-75">
           <Image
             src="/logo.png"
             alt="Te Quiero Feliz"
