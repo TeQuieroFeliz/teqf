@@ -77,7 +77,12 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
   const unsubClosure = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (authLoading || !uid) return;
+    if (authLoading) return;
+    if (!uid) {
+      setNotAssigned(true);
+      setLoading(false);
+      return;
+    }
 
     let mounted = true;
 

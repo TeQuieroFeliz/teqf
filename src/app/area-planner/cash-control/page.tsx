@@ -25,7 +25,10 @@ export default function CashControlIndexPage() {
       router.replace('/area-planner/cash-control/admin');
       return;
     }
-    if (!uid) return;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
 
     getAssignedEvents(uid)
       .then(evs => {
