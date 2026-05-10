@@ -9,7 +9,6 @@ import {
   onSnapshot,
   query,
   where,
-  orderBy,
   limit,
   addDoc,
   updateDoc,
@@ -65,8 +64,13 @@ export async function getTeamProfiles(): Promise<CashControlProfile[]> {
 // ─── Events ───────────────────────────────────────────────────────────────────
 
 export async function getAllEvents(): Promise<CashControlEvent[]> {
-  const snap = await getDocs(query(eventsCol(), orderBy('createdAt', 'desc')));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as CashControlEvent));
+  const snap = await getDocs(eventsCol());
+  const events = snap.docs.map(d => ({ id: d.id, ...d.data() } as CashControlEvent));
+  return events.sort((a, b) => {
+    const aMs = (a.createdAt as any)?.toMillis?.() ?? 0;
+    const bMs = (b.createdAt as any)?.toMillis?.() ?? 0;
+    return bMs - aMs;
+  });
 }
 
 export async function getEvent(eventId: string): Promise<CashControlEvent | null> {
@@ -177,10 +181,11 @@ export function subscribeToMoneyReceived(
     receivedCol(),
     where('eventId', '==', eventId),
     where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
   );
   return onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as MoneyReceived)));
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as MoneyReceived));
+    items.sort((a, b) => ((b.createdAt as any)?.toMillis?.() ?? 0) - ((a.createdAt as any)?.toMillis?.() ?? 0));
+    callback(items);
   });
 }
 
@@ -191,10 +196,11 @@ export function subscribeToAllMoneyReceived(
   const q = query(
     receivedCol(),
     where('eventId', '==', eventId),
-    orderBy('createdAt', 'desc')
   );
   return onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as MoneyReceived)));
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as MoneyReceived));
+    items.sort((a, b) => ((b.createdAt as any)?.toMillis?.() ?? 0) - ((a.createdAt as any)?.toMillis?.() ?? 0));
+    callback(items);
   });
 }
 
@@ -239,10 +245,11 @@ export function subscribeToExpenses(
     expensesCol(),
     where('eventId', '==', eventId),
     where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
   );
   return onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Expense)));
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Expense));
+    items.sort((a, b) => ((b.createdAt as any)?.toMillis?.() ?? 0) - ((a.createdAt as any)?.toMillis?.() ?? 0));
+    callback(items);
   });
 }
 
@@ -253,10 +260,11 @@ export function subscribeToAllExpenses(
   const q = query(
     expensesCol(),
     where('eventId', '==', eventId),
-    orderBy('createdAt', 'desc')
   );
   return onSnapshot(q, (snap: QuerySnapshot<DocumentData>) => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Expense)));
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Expense));
+    items.sort((a, b) => ((b.createdAt as any)?.toMillis?.() ?? 0) - ((a.createdAt as any)?.toMillis?.() ?? 0));
+    callback(items);
   });
 }
 
