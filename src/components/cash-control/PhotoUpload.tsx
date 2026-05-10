@@ -1,7 +1,6 @@
 'use client';
 
 import { Camera, X } from 'lucide-react';
-import Image from 'next/image';
 import { useRef, useEffect, useState } from 'react';
 
 interface Props {
@@ -35,11 +34,11 @@ export function PhotoUpload({ value, onChange, label = 'Comprobante (opcional)' 
 
       {previewUrl ? (
         <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: '160px' }}>
-          <Image
+          <img
             src={previewUrl}
             alt="Foto"
-            fill
-            className="object-cover"
+            className="object-cover w-full h-full"
+            style={{ display: 'block' }}
           />
           <button
             type="button"

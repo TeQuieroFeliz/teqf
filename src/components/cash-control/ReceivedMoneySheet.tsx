@@ -88,8 +88,10 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
       }
       reset();
       onClose();
-    } catch {
-      toast.error('Error al guardar. Intenta de nuevo.');
+    } catch (error) {
+      console.error('Error saving received money entry:', error);
+      const message = error instanceof Error ? error.message : 'Error al guardar. Intenta de nuevo.';
+      toast.error(message);
     } finally {
       setSaving(false);
     }

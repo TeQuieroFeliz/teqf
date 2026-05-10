@@ -129,8 +129,10 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
       }
       reset();
       onClose();
-    } catch {
-      toast.error('Error al guardar. Intenta de nuevo.');
+    } catch (error) {
+      console.error('Error saving expense entry:', error);
+      const message = error instanceof Error ? error.message : 'Error al guardar. Intenta de nuevo.';
+      toast.error(message);
     } finally {
       setSaving(false);
     }
