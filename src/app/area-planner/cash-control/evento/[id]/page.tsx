@@ -82,6 +82,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
     let mounted = true;
 
     async function init() {
+      try {
       // Admin users can access any event without assignment check
       const [ev, assigned] = await Promise.all([
         getEvent(id),
@@ -116,6 +117,9 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
           setClosure(cl);
         }
       );
+      } catch {
+        if (mounted) setLoading(false);
+      }
     }
 
     init();
