@@ -12,22 +12,28 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-let auth: Auth;
-let storage: FirebaseStorage;
-let db: Firestore;
+let auth: Auth | undefined;
+let storage: FirebaseStorage | undefined;
+let db: Firestore | undefined;
 
 const currentApps = getApps();
+const isBrowser = typeof window !== 'undefined';
+const hasFirebaseConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 
-if (!currentApps.length) {
-  const app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  storage = getStorage(app);
-  db = initializeFirestore(app, { localCache: memoryLocalCache() });
-} else {
-  const app = currentApps[0];
-  auth = getAuth(app);
-  storage = getStorage(app);
-  db = getFirestore(app);
+if (isBrowser && hasFirebaseConfig) {
+  if (!currentApps.length) {
+    const app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    storage = getStorage(app);
+    db = initializeFirestore(app, { localCache: memoryLocalCache() });
+  } else {
+    const app = currentApps[0];
+    auth = getAuth(app);
+    storage = getStorage(app);
+    db = getFirestore(app);
+  }
+} else if (!isBrowser && !hasFirebaseConfig) {
+  console.warn('[Firebase Client] Skipping browser Firebase initialization because public config is missing or unavailable.');
 }
 
 export { auth, storage, db };

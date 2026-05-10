@@ -5,7 +5,14 @@ import { PlannerRequest } from '@/lib/planner-types';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing RESEND_API_KEY environment variable.');
+  }
+  return new Resend(apiKey);
+}
+
 const FROM   = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
 const SITE   = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
@@ -15,6 +22,7 @@ const planRef = firestore.collection('planners');
 // ── Email helpers ────────────────────────────────────────────────────────────
 
 async function sendAdminNewRequestEmail(name: string, email: string): Promise<void> {
+  const resend = getResendClient();
   const { error } = await resend.emails.send({
     from: FROM,
     to: ['admin@tequierofeliz.mx'],
@@ -46,6 +54,7 @@ async function sendAdminNewRequestEmail(name: string, email: string): Promise<vo
 }
 
 async function sendApprovalEmail(name: string, email: string): Promise<void> {
+  const resend = getResendClient();
   const { error } = await resend.emails.send({
     from: FROM,
     to: [email],
@@ -80,6 +89,7 @@ async function sendApprovalEmail(name: string, email: string): Promise<void> {
 }
 
 async function sendRejectionEmail(name: string, email: string): Promise<void> {
+  const resend = getResendClient();
   const { error } = await resend.emails.send({
     from: FROM,
     to: [email],

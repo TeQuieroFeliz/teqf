@@ -3,13 +3,53 @@ import { getApps } from 'firebase-admin/app';
 import { Auth, getAuth } from 'firebase-admin/auth';
 import { Firestore, getFirestore } from 'firebase-admin/firestore';
 
-let firestore = undefined as unknown as Firestore;
-let auth = undefined as unknown as Auth;
+function createFirebaseStub() {
+  const createProxy = (): any =>
+    new Proxy(() => Promise.reject(new Error(
+      'Firebase Admin is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL.'
+    )), {
+      get(_target, prop) {
+        if (prop === Symbol.toStringTag) return 'FirebaseStub';
+        if (prop === 'then') return undefined;
+        return createProxy();
+      },
+      apply() {
+        return Promise.reject(new Error(
+          'Firebase Admin is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL.'
+        ));
+      },
+    });
+
+  return createProxy();
+}
+
+function createAuthStub() {
+  const createProxy = (): any =>
+    new Proxy(() => Promise.reject(new Error(
+      'Firebase Admin Auth is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL.'
+    )), {
+      get(_target, prop) {
+        if (prop === Symbol.toStringTag) return 'FirebaseAuthStub';
+        if (prop === 'then') return undefined;
+        return createProxy();
+      },
+      apply() {
+        return Promise.reject(new Error(
+          'Firebase Admin Auth is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL.'
+        ));
+      },
+    });
+
+  return createProxy();
+}
 
 const hasCredentials =
   process.env.FIREBASE_PROJECT_ID &&
   process.env.FIREBASE_PRIVATE_KEY &&
   process.env.FIREBASE_CLIENT_EMAIL;
+
+let firestore: any = createFirebaseStub();
+let auth: any = createAuthStub();
 
 if (hasCredentials) {
   try {
@@ -36,7 +76,11 @@ if (hasCredentials) {
     auth = getAuth(app);
   } catch (error) {
     console.error('[Firebase Admin] Initialization failed:', error);
+    firestore = createFirebaseStub();
+    auth = createAuthStub();
   }
+} else {
+  console.warn('[Firebase Admin] Missing service account credentials, using stubbed Firebase Admin.');
 }
 
 export { firestore, auth };

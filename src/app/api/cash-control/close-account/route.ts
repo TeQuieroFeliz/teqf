@@ -4,7 +4,14 @@ import { checkCashControlAdminAuth } from '@/lib/server/checkAdminAuth';
 import { FieldValue } from 'firebase-admin/firestore';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing RESEND_API_KEY environment variable.');
+  }
+  return new Resend(apiKey);
+}
+
 const FROM   = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
 const SITE   = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tequierofeliz.com';
 
@@ -54,6 +61,8 @@ export async function POST(req: NextRequest) {
     if (!isOwner && !caller.isAuthorized) {
       return NextResponse.json({ error: 'Sin permisos.' }, { status: 403 });
     }
+
+    const resend = getResendClient();
 
     // Check if a closure already exists
     const existingSnap = await firestore
