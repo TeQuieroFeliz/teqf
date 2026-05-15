@@ -21,6 +21,7 @@ import {
 import {
   retryCachedProofUpload,
   retryCachedReceiptUpload,
+  deleteFileByUrl,
 } from '@/lib/cash-control/storage';
 import { SummaryCards } from '@/components/cash-control/SummaryCards';
 import { TransactionList } from '@/components/cash-control/TransactionList';
@@ -113,6 +114,33 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
         toast.error('No se pudo reintentar. Verifica la conexión.');
       }
     }
+  }
+
+  async function handleDeletePhoto(row: TransactionRow) {
+    try {
+      const photoUrl = row.kind === 'expense' ? row.receiptImageUrl : row.proofImageUrl;
+      if (!photoUrl) {
+        toast.error('No hay foto para eliminar.');
+        return;
+      }
+      
+      // Delete from Storage
+      await deleteFileByUrl(photoUrl);
+      
+      // Delete from Firestore
+      if (row.kind === 'expense') {
+        await updateExpense(row.id, { receiptImageUrl: null, uploadStatus: null }, photoUrl);
+      } else {
+        await updateMoneyReceived(row.id, { proofImageUrl: null, uploadStatus: null }, photoUrl);
+      }
+      
+      toast.success('Foto eliminada correctamente');
+    } catch (error) {
+      console.error('Failed to delete photo:', error);
+      toast.error('No se pudo eliminar la foto. Intenta de nuevo.');
+    }
+  }
+
   }
 
   // Keep stable unsubscribe refs
@@ -357,6 +385,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
               onEdit={!isClosed ? handleEdit : undefined}
               onDelete={!isClosed ? handleDelete : undefined}
               onRetry={!isClosed ? handleRetry : undefined}
+              onDeletePhoto={!isClosed ? handleDeletePhoto : undefined}
             />
           </section>
         </main>
