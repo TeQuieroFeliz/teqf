@@ -423,6 +423,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
         onClose={() => setShowReceived(false)}
         eventId={id}
         userId={uid}
+        onDeletePhoto={handleDeletePhoto}
       />
 
       <ExpenseSheet
@@ -430,6 +431,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
         onClose={() => setShowExpense(false)}
         eventId={id}
         userId={uid}
+        onDeletePhoto={handleDeletePhoto}
       />
 
       {/* Edit sheets */}

@@ -32,9 +32,10 @@ interface Props {
   eventId: string;
   userId: string;
   initialData?: TransactionRow; // when provided → edit mode
+  onDeletePhoto?: (row: TransactionRow) => Promise<void>;
 }
 
-export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData }: Props) {
+export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData, onDeletePhoto }: Props) {
   const isEdit = !!initialData;
 
   const [amount, setAmount] = useState(initialData ? String(initialData.amount) : '');
@@ -44,6 +45,7 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
   const [photo, setPhoto] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState(false);
 
   function reset() {
     setAmount(initialData ? String(initialData.amount) : '');
@@ -52,6 +54,7 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
     setDate(initialData?.date ?? todayISO());
     setPhoto(null);
     setUploadProgress(null);
+    setDeletingPhoto(false);
   }
 
   async function handleSave() {
@@ -169,6 +172,8 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
 
   const numAmount = parseFloat(amount.replace(',', '.'));
   const isValid = !isNaN(numAmount) && numAmount > 0;
+  const proofImageUrl = initialData?.kind === 'received' ? initialData.proofImageUrl : null;
+  const hasExistingPhoto = Boolean(isEdit && proofImageUrl);
 
   return (
     <Sheet
@@ -298,6 +303,65 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
               label="Comprobante (opcional)"
               uploadProgress={uploadProgress}
             />
+          )}
+
+          {/* Existing attached photo */}
+          {hasExistingPhoto && (
+            <div className="space-y-3">
+              <p
+                className="text-xs uppercase tracking-wide"
+                style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+              >
+                Foto adjunta
+              </p>
+              <div className="rounded-2xl overflow-hidden" style={{ background: 'white' }}>
+                <img
+                  src={proofImageUrl ?? undefined}
+                  alt="Comprobante"
+                  className="object-cover w-full h-44"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => proofImageUrl && window.open(proofImageUrl, '_blank')}
+                  className="flex-1 py-3 rounded-2xl text-sm font-medium transition-opacity active:opacity-70"
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    background: 'white',
+                    border: '1.5px solid var(--tqf-beige-border)',
+                    color: 'var(--tqf-dark)',
+                  }}
+                >
+                  Ver foto
+                </button>
+                {onDeletePhoto && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!initialData || !proofImageUrl) return;
+                      if (!window.confirm('¿Eliminar esta foto adjunta?')) return;
+                      setDeletingPhoto(true);
+                      try {
+                        await onDeletePhoto(initialData);
+                      } finally {
+                        setDeletingPhoto(false);
+                      }
+                    }}
+                    disabled={deletingPhoto}
+                    className="flex-1 py-3 rounded-2xl text-sm font-medium transition-opacity disabled:opacity-50 active:opacity-70"
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      background: '#fde8e8',
+                      border: '1.5px solid #fca5a5',
+                      color: '#991b1b',
+                    }}
+                  >
+                    {deletingPhoto ? 'Eliminando...' : 'Eliminar foto'}
+                  </button>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Note */}
