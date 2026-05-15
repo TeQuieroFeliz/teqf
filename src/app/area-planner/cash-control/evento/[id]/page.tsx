@@ -443,6 +443,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
           onClose={() => setEditingExpense(null)}
           eventId={id}
           userId={uid}
+          onDeletePhoto={handleDeletePhoto}
         />
       )}
 
@@ -454,6 +455,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
           onClose={() => setEditingReceived(null)}
           eventId={id}
           userId={uid}
+          onDeletePhoto={handleDeletePhoto}
         />
       )}
 
