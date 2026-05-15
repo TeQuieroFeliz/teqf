@@ -2,6 +2,7 @@ import { db } from '@/firebase/client';
 import {
   collection,
   doc,
+  documentId,
   getDoc,
   getDocs,
   setDoc,
@@ -40,18 +41,18 @@ import {
 
 // ─── Collection references ────────────────────────────────────────────────────
 
-export const profilesCol    = () => collection(db, 'cashControlProfiles');
-export const eventsCol      = () => collection(db, 'cashControlEvents');
-export const assignmentsCol = () => collection(db, 'cashControlAssignments');
-export const receivedCol    = () => collection(db, 'cashControlMoneyReceived');
-export const expensesCol    = () => collection(db, 'cashControlExpenses');
-export const closuresCol    = () => collection(db, 'cashControlClosures');
-export const auditCol       = () => collection(db, 'cashControlAudit');
+export const profilesCol    = () => collection(db!, 'cashControlProfiles');
+export const eventsCol      = () => collection(db!, 'cashControlEvents');
+export const assignmentsCol = () => collection(db!, 'cashControlAssignments');
+export const receivedCol    = () => collection(db!, 'cashControlMoneyReceived');
+export const expensesCol    = () => collection(db!, 'cashControlExpenses');
+export const closuresCol    = () => collection(db!, 'cashControlClosures');
+export const auditCol       = () => collection(db!, 'cashControlAudit');
 
 // ─── Profiles ─────────────────────────────────────────────────────────────────
 
 export async function getCashControlProfile(uid: string): Promise<CashControlProfile | null> {
-  const snap = await getDoc(doc(db, 'cashControlProfiles', uid));
+  const snap = await getDoc(doc(db!, 'cashControlProfiles', uid));
   if (!snap.exists()) return null;
   return { uid: snap.id, ...snap.data() } as CashControlProfile;
 }
@@ -74,7 +75,7 @@ export async function getAllEvents(): Promise<CashControlEvent[]> {
 }
 
 export async function getEvent(eventId: string): Promise<CashControlEvent | null> {
-  const snap = await getDoc(doc(db, 'cashControlEvents', eventId));
+  const snap = await getDoc(doc(db!, 'cashControlEvents', eventId));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as CashControlEvent;
 }
@@ -96,7 +97,7 @@ export async function createEvent(data: {
 }
 
 export async function updateEventStatus(eventId: string, status: 'active' | 'closed'): Promise<void> {
-  await updateDoc(doc(db, 'cashControlEvents', eventId), {
+  await updateDoc(doc(db!, 'cashControlEvents', eventId), {
     status,
     updatedAt: serverTimestamp(),
   });
@@ -111,12 +112,24 @@ export async function getAssignedEvents(uid: string): Promise<CashControlEvent[]
   const eventIds = snap.docs.map(d => d.data().eventId as string);
   if (eventIds.length === 0) return [];
 
-  const events: CashControlEvent[] = [];
-  for (const id of eventIds) {
-    const ev = await getEvent(id);
-    if (ev) events.push(ev);
+  const batches: string[][] = [];
+  for (let i = 0; i < eventIds.length; i += 30) {
+    batches.push(eventIds.slice(i, i + 30));
   }
-  return events;
+
+  const results = await Promise.all(
+    batches.map(batch =>
+      getDocs(query(eventsCol(), where(documentId(), 'in', batch)))
+    )
+  );
+
+  const events = results
+    .flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as CashControlEvent)));
+
+  const eventMap = new Map(events.map(event => [event.id, event]));
+  return eventIds
+    .map(id => eventMap.get(id))
+    .filter((event): event is CashControlEvent => Boolean(event));
 }
 
 export async function getEventAssignments(eventId: string): Promise<CashControlAssignment[]> {
@@ -127,19 +140,19 @@ export async function getEventAssignments(eventId: string): Promise<CashControlA
 }
 
 export async function isUserAssignedToEvent(uid: string, eventId: string): Promise<boolean> {
-  const snap = await getDoc(doc(db, 'cashControlAssignments', `${uid}_${eventId}`));
+  const snap = await getDoc(doc(db!, 'cashControlAssignments', `${uid}_${eventId}`));
   return snap.exists();
 }
 
 export async function assignUserToEvent(uid: string, eventId: string): Promise<void> {
-  const ref = doc(db, 'cashControlAssignments', `${uid}_${eventId}`);
+  const ref = doc(db!, 'cashControlAssignments', `${uid}_${eventId}`);
   const existing = await getDoc(ref);
   if (existing.exists()) return;
   await setDoc(ref, { userId: uid, eventId, createdAt: serverTimestamp() });
 }
 
 export async function removeUserFromEvent(uid: string, eventId: string): Promise<void> {
-  await deleteDoc(doc(db, 'cashControlAssignments', `${uid}_${eventId}`));
+  await deleteDoc(doc(db!, 'cashControlAssignments', `${uid}_${eventId}`));
 }
 
 // ─── Money Received ───────────────────────────────────────────────────────────
@@ -151,6 +164,7 @@ export async function addMoneyReceived(data: {
   method: PaymentMethod;
   note: string | null;
   proofImageUrl: string | null;
+  uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   date: string;
   createdBy: string;
 }): Promise<string> {
@@ -163,13 +177,20 @@ export async function addMoneyReceived(data: {
 
 export async function updateMoneyReceived(
   id: string,
-  data: { amount?: number; method?: PaymentMethod; note?: string | null; date?: string }
+  data: {
+    amount?: number;
+    method?: PaymentMethod;
+    note?: string | null;
+    date?: string;
+    proofImageUrl?: string | null;
+    uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
+  }
 ): Promise<void> {
-  await updateDoc(doc(db, 'cashControlMoneyReceived', id), data);
+  await updateDoc(doc(db!, 'cashControlMoneyReceived', id), data);
 }
 
 export async function deleteMoneyReceived(id: string): Promise<void> {
-  await deleteDoc(doc(db, 'cashControlMoneyReceived', id));
+  await deleteDoc(doc(db!, 'cashControlMoneyReceived', id));
 }
 
 export function subscribeToMoneyReceived(
@@ -214,6 +235,7 @@ export async function addExpense(data: {
   tags: string[];
   note: string | null;
   receiptImageUrl: string | null;
+  uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   isWithoutSupport: boolean;
   date: string;
   createdBy: string;
@@ -227,13 +249,22 @@ export async function addExpense(data: {
 
 export async function updateExpense(
   id: string,
-  data: { amount?: number; method?: PaymentMethod; tags?: string[]; note?: string | null; date?: string; isWithoutSupport?: boolean }
+  data: {
+    amount?: number;
+    method?: PaymentMethod;
+    tags?: string[];
+    note?: string | null;
+    date?: string;
+    isWithoutSupport?: boolean;
+    receiptImageUrl?: string | null;
+    uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
+  }
 ): Promise<void> {
-  await updateDoc(doc(db, 'cashControlExpenses', id), data);
+  await updateDoc(doc(db!, 'cashControlExpenses', id), data);
 }
 
 export async function deleteExpense(id: string): Promise<void> {
-  await deleteDoc(doc(db, 'cashControlExpenses', id));
+  await deleteDoc(doc(db!, 'cashControlExpenses', id));
 }
 
 export function subscribeToExpenses(
@@ -356,6 +387,7 @@ export function subscribeToEventBalance(
         tags: [],
         note: r.note,
         isWithoutSupport: false,
+        uploadStatus: r.uploadStatus ?? null,
         date: r.date,
         createdAt: r.createdAt,
       })),
@@ -367,6 +399,7 @@ export function subscribeToEventBalance(
         tags: e.tags,
         note: e.note,
         isWithoutSupport: e.isWithoutSupport,
+        uploadStatus: e.uploadStatus ?? null,
         date: e.date,
         createdAt: e.createdAt,
       })),

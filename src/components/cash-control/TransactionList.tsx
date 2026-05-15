@@ -10,6 +10,7 @@ interface Props {
   maxVisible?: number;
   onEdit?: (row: TransactionRow) => void;
   onDelete?: (row: TransactionRow) => void;
+  onRetry?: (row: TransactionRow) => void;
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -35,7 +36,7 @@ function formatDate(date: string | undefined, fallback: Timestamp | null | undef
   return '';
 }
 
-export function TransactionList({ transactions, maxVisible = 5, onEdit, onDelete }: Props) {
+export function TransactionList({ transactions, maxVisible = 5, onEdit, onDelete, onRetry }: Props) {
   const visible = transactions.slice(0, maxVisible);
 
   if (visible.length === 0) {
@@ -137,6 +138,35 @@ export function TransactionList({ transactions, maxVisible = 5, onEdit, onDelete
                   >
                     Sin respaldo
                   </span>
+                )}
+
+                {row.uploadStatus === 'pending' && (
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    Subiendo foto…
+                  </span>
+                )}
+
+                {row.uploadStatus === 'failed' && (
+                  <button
+                    type="button"
+                    onClick={() => onRetry?.(row)}
+                    className="text-xs px-2 py-0.5 rounded-full transition-opacity hover:opacity-80"
+                    style={{
+                      background: '#fee2e2',
+                      color: '#991b1b',
+                      border: '1px solid #fca5a5',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    Foto fallida ⟳
+                  </button>
                 )}
               </div>
 

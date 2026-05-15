@@ -7,9 +7,15 @@ interface Props {
   value: File | null;
   onChange: (file: File | null) => void;
   label?: string;
+  uploadProgress?: number | null;
 }
 
-export function PhotoUpload({ value, onChange, label = 'Comprobante (opcional)' }: Props) {
+export function PhotoUpload({
+  value,
+  onChange,
+  label = 'Comprobante (opcional)',
+  uploadProgress = null,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -40,6 +46,28 @@ export function PhotoUpload({ value, onChange, label = 'Comprobante (opcional)' 
             className="object-cover w-full h-full"
             style={{ display: 'block' }}
           />
+          {uploadProgress != null && (
+            <div
+              className="absolute inset-x-0 bottom-0 p-3"
+              style={{ background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.55))' }}
+            >
+              <div className="h-2 rounded-full overflow-hidden bg-white/20 mb-2">
+                <div
+                  style={{
+                    width: `${Math.min(Math.max(uploadProgress, 0), 100)}%`,
+                    background: 'rgba(255,255,255,0.9)',
+                    height: '100%',
+                  }}
+                />
+              </div>
+              <p
+                className="text-xs"
+                style={{ color: 'white', fontFamily: 'var(--font-body)' }}
+              >
+                Subiendo {uploadProgress}%
+              </p>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => onChange(null)}

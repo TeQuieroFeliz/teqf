@@ -1,7 +1,14 @@
 import { getApps, initializeApp } from 'firebase/app';
 import { Auth, getAuth } from 'firebase/auth';
 import { FirebaseStorage, getStorage } from 'firebase/storage';
-import { Firestore, getFirestore, initializeFirestore, memoryLocalCache } from 'firebase/firestore';
+import {
+  Firestore,
+  getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -25,7 +32,17 @@ if (isBrowser && hasFirebaseConfig) {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     storage = getStorage(app);
-    db = initializeFirestore(app, { localCache: memoryLocalCache() });
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      });
+    } catch (error) {
+      console.warn(
+        '[Firebase Client] IndexedDB cache is unavailable, falling back to memory cache.',
+        error
+      );
+      db = initializeFirestore(app, { localCache: memoryLocalCache() });
+    }
   } else {
     const app = currentApps[0];
     auth = getAuth(app);

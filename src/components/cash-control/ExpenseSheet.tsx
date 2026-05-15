@@ -9,7 +9,12 @@ import {
 import { PhotoUpload } from './PhotoUpload';
 import { PaymentMethod, TransactionRow } from '@/lib/cash-control/types';
 import { addExpense, updateExpense } from '@/lib/cash-control/firestore';
-import { uploadReceiptPhoto } from '@/lib/cash-control/storage';
+import {
+  cacheReceiptUploadFile,
+  removeCachedReceiptUploadFile,
+  retryCachedReceiptUpload,
+  uploadReceiptPhoto,
+} from '@/lib/cash-control/storage';
 import { todayISO } from '@/lib/cash-control/calculations';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -51,6 +56,7 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
   const [note, setNote] = useState(initialData?.note ?? '');
   const [date, setDate] = useState(initialData?.date ?? todayISO());
   const [photo, setPhoto] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   function reset() {
@@ -60,6 +66,7 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
     setNote(initialData?.note ?? '');
     setDate(initialData?.date ?? todayISO());
     setPhoto(null);
+    setUploadProgress(null);
   }
 
   function toggleTag(tag: string) {
@@ -102,33 +109,102 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
         });
         toast.success('Gasto actualizado');
       } else {
-        let receiptImageUrl: string | null = null;
-        if (photo) {
-          receiptImageUrl = await uploadReceiptPhoto(userId, eventId, photo);
-        }
-        const isWithoutSupport = computeIsWithoutSupport(receiptImageUrl, selectedTags, note);
-        await addExpense({
+        const receiptPending = Boolean(photo);
+        const isWithoutSupport = photo
+          ? false
+          : computeIsWithoutSupport(null, selectedTags, note);
+
+        const expenseId = await addExpense({
           eventId,
           userId,
           amount: numAmount,
           method,
           tags: selectedTags,
           note: note.trim() || null,
-          receiptImageUrl,
+          receiptImageUrl: null,
+          uploadStatus: receiptPending ? 'pending' : null,
           isWithoutSupport,
           date,
           createdBy: userId,
         });
-        if (isWithoutSupport) {
-          toast.success('Gasto guardado · Sin respaldo');
+
+        const pendingPhoto = photo;
+        reset();
+        onClose();
+
+        if (pendingPhoto) {
+          cacheReceiptUploadFile(expenseId, pendingPhoto);
+          toast.success('Gasto guardado, subiendo foto…');
+
+          void (async () => {
+            try {
+              const receiptImageUrl = await uploadReceiptPhoto(
+                userId,
+                eventId,
+                pendingPhoto,
+                {
+                  onProgress: setUploadProgress,
+                }
+              );
+              await updateExpense(expenseId, {
+                receiptImageUrl,
+                uploadStatus: 'uploaded',
+                isWithoutSupport: false,
+              });
+              removeCachedReceiptUploadFile(expenseId);
+            } catch (innerError) {
+              console.error('Error uploading expense receipt:', innerError);
+              await updateExpense(expenseId, {
+                uploadStatus: 'failed',
+              });
+              toast.error('Foto fallida', {
+                action: {
+                  label: 'Reintentar',
+                  onClick: async () => {
+                    try {
+                      setUploadProgress(0);
+                      const receiptImageUrl = await retryCachedReceiptUpload(
+                        expenseId,
+                        userId,
+                        eventId,
+                        {
+                          onProgress: setUploadProgress,
+                        }
+                      );
+                      await updateExpense(expenseId, {
+                        receiptImageUrl,
+                        uploadStatus: 'uploaded',
+                        isWithoutSupport: false,
+                      });
+                      removeCachedReceiptUploadFile(expenseId);
+                      toast.success('Foto subida correctamente');
+                    } catch (retryError) {
+                      console.error('Retry upload failed:', retryError);
+                      toast.error('Reintento fallido. Verifica la conexión.');
+                    } finally {
+                      setUploadProgress(null);
+                    }
+                  },
+                },
+              });
+            } finally {
+              setUploadProgress(null);
+            }
+          })();
         } else {
-          toast.success(
-            `Gasto: $${numAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
-          );
+          if (isWithoutSupport) {
+            toast.success('Gasto guardado · Sin respaldo');
+          } else {
+            toast.success(
+              `Gasto: $${numAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+            );
+          }
         }
       }
-      reset();
-      onClose();
+      if (isEdit) {
+        reset();
+        onClose();
+      }
     } catch (error) {
       console.error('Error saving expense entry:', error);
       const message = error instanceof Error ? error.message : 'Error al guardar. Intenta de nuevo.';
@@ -308,6 +384,7 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
               value={photo}
               onChange={setPhoto}
               label="Recibo (opcional)"
+              uploadProgress={uploadProgress}
             />
           )}
 

@@ -9,6 +9,8 @@ import {
   subscribeToClosureForUserEvent,
   deleteExpense,
   deleteMoneyReceived,
+  updateExpense,
+  updateMoneyReceived,
 } from '@/lib/cash-control/firestore';
 import {
   CashControlEvent,
@@ -16,6 +18,10 @@ import {
   EventBalance,
   TransactionRow,
 } from '@/lib/cash-control/types';
+import {
+  retryCachedProofUpload,
+  retryCachedReceiptUpload,
+} from '@/lib/cash-control/storage';
 import { SummaryCards } from '@/components/cash-control/SummaryCards';
 import { TransactionList } from '@/components/cash-control/TransactionList';
 import { ReceivedMoneySheet } from '@/components/cash-control/ReceivedMoneySheet';
@@ -31,6 +37,7 @@ import {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 const EMPTY_BALANCE: EventBalance = {
   totalReceived: 0,
@@ -70,6 +77,42 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
     if (!window.confirm('¿Eliminar esta operación? Esta acción no se puede deshacer.')) return;
     if (row.kind === 'expense') await deleteExpense(row.id);
     else await deleteMoneyReceived(row.id);
+  }
+
+  async function handleRetry(row: TransactionRow) {
+    if (!uid) return;
+    if (row.kind === 'expense') {
+      try {
+        toast('Reintentando la subida...');
+        const receiptUrl = await retryCachedReceiptUpload(row.id, uid, id, {
+          onProgress: () => undefined,
+        });
+        await updateExpense(row.id, {
+          receiptImageUrl: receiptUrl,
+          uploadStatus: 'uploaded',
+          isWithoutSupport: false,
+        });
+        toast.success('Foto subida correctamente');
+      } catch (error) {
+        console.error('Retry expense upload failed:', error);
+        toast.error('No se pudo reintentar. Verifica la conexión.');
+      }
+    } else {
+      try {
+        toast('Reintentando la subida...');
+        const proofUrl = await retryCachedProofUpload(row.id, uid, id, {
+          onProgress: () => undefined,
+        });
+        await updateMoneyReceived(row.id, {
+          proofImageUrl: proofUrl,
+          uploadStatus: 'uploaded',
+        });
+        toast.success('Foto subida correctamente');
+      } catch (error) {
+        console.error('Retry proof upload failed:', error);
+        toast.error('No se pudo reintentar. Verifica la conexión.');
+      }
+    }
   }
 
   // Keep stable unsubscribe refs
@@ -313,6 +356,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
               maxVisible={5}
               onEdit={!isClosed ? handleEdit : undefined}
               onDelete={!isClosed ? handleDelete : undefined}
+              onRetry={!isClosed ? handleRetry : undefined}
             />
           </section>
         </main>

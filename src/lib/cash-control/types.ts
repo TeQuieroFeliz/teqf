@@ -45,6 +45,7 @@ export interface MoneyReceived {
   method: PaymentMethod;
   note: string | null;
   proofImageUrl: string | null;
+  uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   date?: string; // YYYY-MM-DD, user-set date of the movement
   createdAt: Timestamp;
   createdBy: string;
@@ -59,6 +60,7 @@ export interface Expense {
   tags: string[];
   note: string | null;
   receiptImageUrl: string | null;
+  uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   isWithoutSupport: boolean;
   date?: string; // YYYY-MM-DD, user-set date of the movement
   createdAt: Timestamp;
@@ -108,6 +110,7 @@ export interface TransactionRow {
   tags: string[];
   note: string | null;
   isWithoutSupport: boolean;
+  uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   date?: string; // YYYY-MM-DD
   createdAt: Timestamp;
 }

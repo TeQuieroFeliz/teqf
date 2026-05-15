@@ -9,7 +9,12 @@ import {
 import { PhotoUpload } from './PhotoUpload';
 import { PaymentMethod, TransactionRow } from '@/lib/cash-control/types';
 import { addMoneyReceived, updateMoneyReceived } from '@/lib/cash-control/firestore';
-import { uploadProofPhoto } from '@/lib/cash-control/storage';
+import {
+  cacheProofUploadFile,
+  removeCachedProofUploadFile,
+  retryCachedProofUpload,
+  uploadProofPhoto,
+} from '@/lib/cash-control/storage';
 import { todayISO } from '@/lib/cash-control/calculations';
 import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -37,6 +42,7 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
   const [note, setNote] = useState(initialData?.note ?? '');
   const [date, setDate] = useState(initialData?.date ?? todayISO());
   const [photo, setPhoto] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   function reset() {
@@ -45,6 +51,7 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
     setNote(initialData?.note ?? '');
     setDate(initialData?.date ?? todayISO());
     setPhoto(null);
+    setUploadProgress(null);
   }
 
   async function handleSave() {
@@ -68,26 +75,87 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
         });
         toast.success('Movimiento actualizado');
       } else {
-        let proofImageUrl: string | null = null;
-        if (photo) {
-          proofImageUrl = await uploadProofPhoto(userId, eventId, photo);
-        }
-        await addMoneyReceived({
+        const proofPending = Boolean(photo);
+        const proofImageUrl = null;
+
+        const movementId = await addMoneyReceived({
           eventId,
           userId,
           amount: numAmount,
           method,
           note: note.trim() || null,
           proofImageUrl,
+          uploadStatus: proofPending ? 'pending' : null,
           date,
           createdBy: userId,
         });
-        toast.success(
-          `Recibido: $${numAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
-        );
+
+        const pendingPhoto = photo;
+        reset();
+        onClose();
+
+        if (pendingPhoto) {
+          cacheProofUploadFile(movementId, pendingPhoto);
+          toast.success('Movimiento guardado, subiendo foto…');
+
+          void (async () => {
+            try {
+              const uploadedUrl = await uploadProofPhoto(userId, eventId, pendingPhoto, {
+                onProgress: setUploadProgress,
+              });
+              await updateMoneyReceived(movementId, {
+                proofImageUrl: uploadedUrl,
+                uploadStatus: 'uploaded',
+              });
+              removeCachedProofUploadFile(movementId);
+            } catch (innerError) {
+              console.error('Error uploading proof photo:', innerError);
+              await updateMoneyReceived(movementId, {
+                uploadStatus: 'failed',
+              });
+              toast.error('Foto fallida', {
+                action: {
+                  label: 'Reintentar',
+                  onClick: async () => {
+                    try {
+                      setUploadProgress(0);
+                      const uploadedUrl = await retryCachedProofUpload(
+                        movementId,
+                        userId,
+                        eventId,
+                        {
+                          onProgress: setUploadProgress,
+                        }
+                      );
+                      await updateMoneyReceived(movementId, {
+                        proofImageUrl: uploadedUrl,
+                        uploadStatus: 'uploaded',
+                      });
+                      removeCachedProofUploadFile(movementId);
+                      toast.success('Foto subida correctamente');
+                    } catch (retryError) {
+                      console.error('Retry upload failed:', retryError);
+                      toast.error('Reintento fallido. Verifica la conexión.');
+                    } finally {
+                      setUploadProgress(null);
+                    }
+                  },
+                },
+              });
+            } finally {
+              setUploadProgress(null);
+            }
+          })();
+        } else {
+          toast.success(
+            `Recibido: $${numAmount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+          );
+        }
       }
-      reset();
-      onClose();
+      if (isEdit) {
+        reset();
+        onClose();
+      }
     } catch (error) {
       console.error('Error saving received money entry:', error);
       const message = error instanceof Error ? error.message : 'Error al guardar. Intenta de nuevo.';
@@ -226,6 +294,7 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
               value={photo}
               onChange={setPhoto}
               label="Comprobante (opcional)"
+              uploadProgress={uploadProgress}
             />
           )}
 
