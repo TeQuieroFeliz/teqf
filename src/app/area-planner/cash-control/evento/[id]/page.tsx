@@ -245,8 +245,11 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const isClosed = !!closure && !closure.isReopened;
-  const userName = displayName ?? uid;
-  const eventLabel = event.eventCode || event.eventName;
+  const userName = displayName?.trim() || '';
+  const safeEventCode = event.eventCode.replace(/undefined/g, '').trim();
+  const safeEventName = event.eventName.replace(/undefined/g, '').trim();
+  const eventLabel = safeEventCode || safeEventName || 'Gastos';
+  const eventSubtitle = [userName, event.eventDate].filter(Boolean).join(' · ');
   const backHref = isAdmin
     ? `/area-planner/cash-control/admin/eventos/${id}`
     : '/area-planner/cash-control';
@@ -284,13 +287,14 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
             >
               {eventLabel}
             </p>
-            <p
-              className="text-xs truncate"
-              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-            >
-              {userName}
-              {event.eventDate ? ` · ${event.eventDate}` : ''}
-            </p>
+            {eventSubtitle ? (
+              <p
+                className="text-xs truncate"
+                style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+              >
+                {eventSubtitle}
+              </p>
+            ) : null}
           </div>
 
           {isClosed && (
