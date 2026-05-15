@@ -26,19 +26,26 @@ let db: Firestore | undefined;
 const currentApps = getApps();
 const isBrowser = typeof window !== 'undefined';
 const hasFirebaseConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+const hasStorageBucket = Boolean(firebaseConfig.storageBucket);
 
 if (isBrowser && hasFirebaseConfig) {
   if (!currentApps.length) {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    storage = getStorage(app);
+    if (hasStorageBucket) {
+      storage = getStorage(app);
+    } else {
+      console.warn(
+        '[Firebase Client] Firebase Storage non inizializzato: manca NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.'
+      );
+    }
     try {
       db = initializeFirestore(app, {
         localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
       });
     } catch (error) {
       console.warn(
-        '[Firebase Client] IndexedDB cache is unavailable, falling back to memory cache.',
+        '[Firebase Client] IndexedDB cache è indisponibile, uso memoria locale.',
         error
       );
       db = initializeFirestore(app, { localCache: memoryLocalCache() });
@@ -46,7 +53,13 @@ if (isBrowser && hasFirebaseConfig) {
   } else {
     const app = currentApps[0];
     auth = getAuth(app);
-    storage = getStorage(app);
+    if (hasStorageBucket) {
+      storage = getStorage(app);
+    } else {
+      console.warn(
+        '[Firebase Client] Firebase Storage non inizializzato: manca NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.'
+      );
+    }
     db = getFirestore(app);
   }
 } else if (!isBrowser && !hasFirebaseConfig) {
