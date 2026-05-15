@@ -141,8 +141,6 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
     }
   }
 
-  }
-
   // Keep stable unsubscribe refs
   const unsubBalance = useRef<(() => void) | null>(null);
   const unsubClosure = useRef<(() => void) | null>(null);
