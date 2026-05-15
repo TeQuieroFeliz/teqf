@@ -1,5 +1,5 @@
 import { storage } from '@/firebase/client';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { deleteObject, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { compressImage } from './compressImage';
 
 const MAX_UPLOAD_TIMEOUT_MS = 90000;
@@ -92,6 +92,7 @@ async function uploadFile(
       await Promise.race([uploadPromise, timeoutPromise]);
       return getDownloadURL(storageRef);
     } catch (error) {
+      console.error(`[cash-control/storage] upload failed for ${path} (retry ${retryCount})`, error);
       if (!isRetryableStorageError(error) || retryCount >= MAX_UPLOAD_RETRIES) {
         throw error;
       }
@@ -100,6 +101,37 @@ async function uploadFile(
   }
 
   return attemptUpload();
+}
+
+function getStoragePathFromUrl(url: string): string {
+  if (url.startsWith('gs://')) {
+    return url.replace(/^gs:\/\/[^/]+\//, '');
+  }
+
+  const match = url.match(/\/o\/([^?]+)(?:\?|$)/);
+  if (match && match[1]) {
+    return decodeURIComponent(match[1]);
+  }
+
+  return url;
+}
+
+export async function deleteFileByUrl(url: string): Promise<void> {
+  const storagePath = getStoragePathFromUrl(url);
+  const storageRef = ref(assertStorage(), storagePath);
+
+  try {
+    await deleteObject(storageRef);
+  } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code === 'storage/object-not-found') {
+      console.warn('[cash-control/storage] delete skipped. Object not found:', storagePath);
+      return;
+    }
+
+    console.warn('[cash-control/storage] failed to delete object:', storagePath, error);
+    throw error;
+  }
 }
 
 export async function uploadReceiptPhoto(
@@ -113,6 +145,7 @@ export async function uploadReceiptPhoto(
 ): Promise<string> {
   const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const path = `cash-control/receipts/${uid}/${eventId}/${filename}`;
+  console.debug('[cash-control/storage] uploading receipt photo', { uid, eventId, filename, path });
   return uploadFile(path, file, opts);
 }
 
@@ -127,6 +160,7 @@ export async function uploadProofPhoto(
 ): Promise<string> {
   const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const path = `cash-control/proofs/${uid}/${eventId}/${filename}`;
+  console.debug('[cash-control/storage] uploading proof photo', { uid, eventId, filename, path });
   return uploadFile(path, file, opts);
 }
 

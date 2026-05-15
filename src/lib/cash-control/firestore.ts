@@ -38,6 +38,7 @@ import {
   TransactionRow,
   PaymentMethod,
 } from './types';
+import { deleteFileByUrl } from '@/lib/cash-control/storage';
 
 // ─── Collection references ────────────────────────────────────────────────────
 
@@ -184,13 +185,40 @@ export async function updateMoneyReceived(
     date?: string;
     proofImageUrl?: string | null;
     uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
-  }
+  },
+  previousProofImageUrl?: string | null
 ): Promise<void> {
+  const shouldDeletePreviousProof =
+    'proofImageUrl' in data &&
+    previousProofImageUrl &&
+    data.proofImageUrl !== previousProofImageUrl;
+
+  if (shouldDeletePreviousProof) {
+    try {
+      await deleteFileByUrl(previousProofImageUrl);
+    } catch (error) {
+      console.warn('Failed to delete previous proof image during money received update:', error);
+    }
+  }
+
   await updateDoc(doc(db!, 'cashControlMoneyReceived', id), data);
 }
 
 export async function deleteMoneyReceived(id: string): Promise<void> {
-  await deleteDoc(doc(db!, 'cashControlMoneyReceived', id));
+  const docRef = doc(db!, 'cashControlMoneyReceived', id);
+  const snap = await getDoc(docRef);
+  if (snap.exists()) {
+    const proofImageUrl = snap.data().proofImageUrl as string | null;
+    if (proofImageUrl) {
+      try {
+        await deleteFileByUrl(proofImageUrl);
+      } catch (error) {
+        console.warn('Failed to delete proof image during money received deletion:', error);
+      }
+    }
+  }
+
+  await deleteDoc(docRef);
 }
 
 export function subscribeToMoneyReceived(
@@ -258,13 +286,40 @@ export async function updateExpense(
     isWithoutSupport?: boolean;
     receiptImageUrl?: string | null;
     uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
-  }
+  },
+  previousReceiptImageUrl?: string | null
 ): Promise<void> {
+  const shouldDeletePreviousReceipt =
+    'receiptImageUrl' in data &&
+    previousReceiptImageUrl &&
+    data.receiptImageUrl !== previousReceiptImageUrl;
+
+  if (shouldDeletePreviousReceipt) {
+    try {
+      await deleteFileByUrl(previousReceiptImageUrl);
+    } catch (error) {
+      console.warn('Failed to delete previous receipt image during expense update:', error);
+    }
+  }
+
   await updateDoc(doc(db!, 'cashControlExpenses', id), data);
 }
 
 export async function deleteExpense(id: string): Promise<void> {
-  await deleteDoc(doc(db!, 'cashControlExpenses', id));
+  const docRef = doc(db!, 'cashControlExpenses', id);
+  const snap = await getDoc(docRef);
+  if (snap.exists()) {
+    const receiptImageUrl = snap.data().receiptImageUrl as string | null;
+    if (receiptImageUrl) {
+      try {
+        await deleteFileByUrl(receiptImageUrl);
+      } catch (error) {
+        console.warn('Failed to delete receipt image during expense deletion:', error);
+      }
+    }
+  }
+
+  await deleteDoc(docRef);
 }
 
 export function subscribeToExpenses(
