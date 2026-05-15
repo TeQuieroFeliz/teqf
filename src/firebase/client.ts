@@ -19,6 +19,8 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+const resolvedStorageBucket = firebaseConfig.storageBucket;
+
 let auth: Auth | undefined;
 let storage: FirebaseStorage | undefined;
 let db: Firestore | undefined;
@@ -26,12 +28,13 @@ let db: Firestore | undefined;
 const currentApps = getApps();
 const isBrowser = typeof window !== 'undefined';
 const hasFirebaseConfig = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
-const hasStorageBucket = Boolean(firebaseConfig.storageBucket);
+const hasStorageBucket = Boolean(resolvedStorageBucket);
 
 if (isBrowser && hasFirebaseConfig) {
   if (!currentApps.length) {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    console.debug('[Firebase Client] resolvedStorageBucket:', resolvedStorageBucket);
     if (hasStorageBucket) {
       storage = getStorage(app);
     } else {
@@ -53,6 +56,7 @@ if (isBrowser && hasFirebaseConfig) {
   } else {
     const app = currentApps[0];
     auth = getAuth(app);
+    console.debug('[Firebase Client] resolvedStorageBucket:', resolvedStorageBucket);
     if (hasStorageBucket) {
       storage = getStorage(app);
     } else {

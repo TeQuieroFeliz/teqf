@@ -153,7 +153,9 @@ export function ExpenseSheet({ open, onClose, eventId, userId, initialData }: Pr
               });
               removeCachedReceiptUploadFile(expenseId);
             } catch (innerError) {
-              console.error('Error uploading expense receipt:', innerError);
+              const code = (innerError as { code?: string })?.code ?? 'unknown';
+              const message = (innerError as { message?: string })?.message ?? String(innerError);
+              console.error('Error uploading expense receipt:', { code, message, expenseId, userId, eventId });
               await updateExpense(expenseId, {
                 uploadStatus: 'failed',
               });

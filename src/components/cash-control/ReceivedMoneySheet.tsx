@@ -109,7 +109,9 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
               });
               removeCachedProofUploadFile(movementId);
             } catch (innerError) {
-              console.error('Error uploading proof photo:', innerError);
+              const code = (innerError as { code?: string })?.code ?? 'unknown';
+              const message = (innerError as { message?: string })?.message ?? String(innerError);
+              console.error('Error uploading proof photo:', { code, message, movementId, userId, eventId });
               await updateMoneyReceived(movementId, {
                 uploadStatus: 'failed',
               });

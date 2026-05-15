@@ -31,11 +31,34 @@ async function uploadFile(
     signal?: AbortSignal;
   }
 ): Promise<string> {
+  if (!path || path.trim() === '') {
+    throw new Error('Upload path non valido. Verifica eventId/userId e il campo foto.');
+  }
+  if (!file) {
+    throw new Error('Nessun file fornito per l’upload. Seleziona una foto prima di salvare.');
+  }
+  if (file.size === 0) {
+    throw new Error('Il file è vuoto. Seleziona una foto valida.');
+  }
+  if (!file.name) {
+    throw new Error('Nome file mancante. Seleziona una foto valida.');
+  }
+
   const storageRef = ref(assertStorage(), path);
+  console.debug('[cash-control/storage] uploadFile start', {
+    path,
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+  });
 
   async function attemptUpload(retryCount = 0): Promise<string> {
     const compressed = await compressImage(file);
-    const task = uploadBytesResumable(storageRef, compressed);
+    const uploadTarget = compressed.size > 0 ? compressed : file;
+    if (compressed.size === 0 && file.size > 0) {
+      console.warn('[cash-control/storage] compressImage returned empty file, using original file instead.');
+    }
+    const task = uploadBytesResumable(storageRef, uploadTarget);
     let aborted = false;
     let cleanup: (() => void) | null = null;
 
@@ -92,7 +115,12 @@ async function uploadFile(
       await Promise.race([uploadPromise, timeoutPromise]);
       return getDownloadURL(storageRef);
     } catch (error) {
-      console.error(`[cash-control/storage] upload failed for ${path} (retry ${retryCount})`, error);
+      const code = (error as { code?: string })?.code ?? 'unknown';
+      const message = (error as { message?: string })?.message ?? String(error);
+      console.error(
+        `[cash-control/storage] upload failed for ${path} (retry ${retryCount})`,
+        { code, message, path, retryCount }
+      );
       if (!isRetryableStorageError(error) || retryCount >= MAX_UPLOAD_RETRIES) {
         throw error;
       }
@@ -143,6 +171,9 @@ export async function uploadReceiptPhoto(
     signal?: AbortSignal;
   }
 ): Promise<string> {
+  if (!uid || !eventId) {
+    throw new Error('Uid o eventId non valido per upload ricevuta.');
+  }
   const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const path = `cash-control/receipts/${uid}/${eventId}/${filename}`;
   console.debug('[cash-control/storage] uploading receipt photo', { uid, eventId, filename, path });
@@ -158,6 +189,9 @@ export async function uploadProofPhoto(
     signal?: AbortSignal;
   }
 ): Promise<string> {
+  if (!uid || !eventId) {
+    throw new Error('Uid o eventId non valido per upload comprobante.');
+  }
   const filename = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   const path = `cash-control/proofs/${uid}/${eventId}/${filename}`;
   console.debug('[cash-control/storage] uploading proof photo', { uid, eventId, filename, path });
