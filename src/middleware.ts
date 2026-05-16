@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken } from '@/lib/auth-token';
 
 const COOKIE = 'site_auth';
 const SKIP = ['/accesso', '/api/site-auth', '/login', '/register', '/forgot-password'];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (SKIP.some(p => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  const password = process.env.SITE_PASSWORD;
-  if (!password) return NextResponse.next();
+  // If SITE_PASSWORD is not configured, the site is public.
+  if (!process.env.SITE_PASSWORD) return NextResponse.next();
 
-  if (request.cookies.get(COOKIE)?.value === password) {
+  const token = request.cookies.get(COOKIE)?.value;
+  if (token && await verifyToken(token)) {
     return NextResponse.next();
   }
 

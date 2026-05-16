@@ -28,7 +28,7 @@ function serializeAdmin(id: string, data: FirebaseFirestore.DocumentData): Admin
 export async function getAllAdminUsers(): Promise<AdminUser[]> {
   if (!firestore) return [];
   const snap = await ref().orderBy('createdAt', 'desc').get();
-  return snap.docs.map(doc => serializeAdmin(doc.id, doc.data()));
+  return snap.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot) => serializeAdmin(doc.id, doc.data()));
 }
 
 export async function getAdminByEmail(email: string): Promise<AdminUser | null> {

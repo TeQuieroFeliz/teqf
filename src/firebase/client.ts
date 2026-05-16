@@ -21,9 +21,9 @@ const firebaseConfig = {
 
 const resolvedStorageBucket = firebaseConfig.storageBucket;
 
-let auth: Auth | undefined;
-let storage: FirebaseStorage | undefined;
-let db: Firestore | undefined;
+let auth!: Auth;
+let storage!: FirebaseStorage;
+let db!: Firestore;
 
 const currentApps = getApps();
 const isBrowser = typeof window !== 'undefined';

@@ -40,6 +40,7 @@ export function PhotoUpload({
 
       {previewUrl ? (
         <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: '160px' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={previewUrl}
             alt="Foto"

@@ -73,14 +73,14 @@ export default function AdminPlannersPage() {
   // Approval modal
   const [approvalReq, setApprovalReq] = useState<PlannerRequest | null>(null);
   const [approvalPerms, setApprovalPerms] = useState<AdminPermissions>(PLANNER_DEFAULT_PERMISSIONS);
-  const [approvalRole, setApprovalRole] = useState<AdminRole>('editor');
+  const [approvalRole, setApprovalRole] = useState<AdminRole>('planner');
   const [approvalCCRole, setApprovalCCRole] = useState<'none' | 'team' | 'admin'>('team');
   const [approving, setApproving] = useState(false);
 
   // Edit permissions modal
   const [editPermTarget, setEditPermTarget] = useState<PlannerUser | null>(null);
   const [editPerms, setEditPerms] = useState<AdminPermissions>(PLANNER_DEFAULT_PERMISSIONS);
-  const [editRole, setEditRole] = useState<AdminRole>('editor');
+  const [editRole, setEditRole] = useState<AdminRole>('planner');
   const [editCCRole, setEditCCRole] = useState<'none' | 'team' | 'admin'>('none');
   const [editSaving, setEditSaving] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
@@ -174,7 +174,7 @@ export default function AdminPlannersPage() {
   function handleApprove(req: PlannerRequest) {
     setApprovalReq(req);
     setApprovalPerms(PLANNER_DEFAULT_PERMISSIONS);
-    setApprovalRole('editor');
+    setApprovalRole('planner');
   }
 
   async function handleConfirmApprove() {
@@ -212,7 +212,7 @@ export default function AdminPlannersPage() {
   function openEditPerms(planner: PlannerUser) {
     const adminRecord = adminUsers.find((a) => a.email === planner.email);
     setEditPerms(adminRecord?.permissions ?? PLANNER_DEFAULT_PERMISSIONS);
-    setEditRole(adminRecord?.role ?? 'editor');
+    setEditRole(adminRecord?.role ?? 'planner');
     setEditCCRole('none');
     setEditPermTarget(planner);
   }
@@ -404,9 +404,8 @@ export default function AdminPlannersPage() {
                   className={inputCls}
                   style={inputStyle}
                 >
-                  <option value="viewer">Visualizzatore</option>
-                  <option value="editor">Editor</option>
-                  <option value="admin">Amministratore</option>
+                  <option value="planner">Planner</option>
+                  <option value="team">Team</option>
                 </select>
               </div>
 
@@ -424,7 +423,7 @@ export default function AdminPlannersPage() {
                       >
                         {PERMISSION_LEVELS.map((lvl) => (
                           <option key={lvl} value={lvl}>
-                            {lvl === 'none' ? 'Nessuno' : lvl === 'read' ? 'Lettura' : lvl === 'write' ? 'Scrittura' : 'Admin'}
+                            {lvl === 'none' ? 'Nessuno' : lvl === 'view' ? 'Lettura' : 'Editor'}
                           </option>
                         ))}
                       </select>
@@ -492,9 +491,8 @@ export default function AdminPlannersPage() {
                   className={inputCls}
                   style={inputStyle}
                 >
-                  <option value="viewer">Visualizzatore</option>
-                  <option value="editor">Editor</option>
-                  <option value="admin">Amministratore</option>
+                  <option value="planner">Planner</option>
+                  <option value="team">Team</option>
                 </select>
               </div>
 
@@ -512,7 +510,7 @@ export default function AdminPlannersPage() {
                       >
                         {PERMISSION_LEVELS.map((lvl) => (
                           <option key={lvl} value={lvl}>
-                            {lvl === 'none' ? 'Nessuno' : lvl === 'read' ? 'Lettura' : lvl === 'write' ? 'Scrittura' : 'Admin'}
+                            {lvl === 'none' ? 'Nessuno' : lvl === 'view' ? 'Lettura' : 'Editor'}
                           </option>
                         ))}
                       </select>

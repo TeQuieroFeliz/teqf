@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { signToken } from '@/lib/auth-token';
 
 export async function POST(request: NextRequest) {
   const { password } = await request.json();
@@ -8,8 +9,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Password errata' }, { status: 401 });
   }
 
+  const token = await signToken();
+
   const response = NextResponse.json({ ok: true });
-  response.cookies.set('site_auth', expected, {
+  response.cookies.set('site_auth', token, {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',

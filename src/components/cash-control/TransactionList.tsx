@@ -288,6 +288,7 @@ export function TransactionList({ transactions, maxVisible = 5, onEdit, onDelete
               <X className="size-5" style={{ color: '#991b1b' }} />
             </button>
             <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={photoModal.url}
                 alt="Foto"

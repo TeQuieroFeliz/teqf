@@ -2,38 +2,143 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Admin users — only server-side admin SDK writes, clients read their own
-    match /admins/{doc} {
-      allow read: if request.auth != null;
+    // ── Permission helpers ────────────────────────────────────────────────────
+    // Requires /admins/{uid} to be keyed by the user's Firebase UID.
+    // Current code uses .add() (auto-IDs keyed by email). To activate these
+    // helpers, migrate admin docs so doc.id == user.uid, then remove the
+    // catch-all fallback at the bottom.
+    //
+    // Permission levels (lowest → highest): none < view < editor
+    // Roles: superadmin (bypasses all), team, planner
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isActiveAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && adminDoc().data.active == true;
+    }
+
+    function isSuperAdmin() {
+      return isActiveAdmin() && adminDoc().data.role == 'superadmin';
+    }
+
+    // Returns true when the user is superadmin OR has at least 'view' on section.
+    function canView(section) {
+      return isSuperAdmin()
+        || (isActiveAdmin()
+            && adminDoc().data.permissions[section] in ['view', 'editor']);
+    }
+
+    // Returns true when the user is superadmin OR has 'editor' on section.
+    function canEdit(section) {
+      return isSuperAdmin()
+        || (isActiveAdmin()
+            && adminDoc().data.permissions[section] == 'editor');
+    }
+
+    // Legacy alias kept for existing rules below (binary admin check).
+    function isAdmin() {
+      return isActiveAdmin();
+    }
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // /users/{uid} — own document or admin
+    match /users/{uid} {
+      allow read, write: if isOwner(uid) || isAdmin();
+    }
+
+    // /admins/{uid} — authenticated users can read (needed for client-side admin check);
+    // client writes blocked — all mutations go through the Admin SDK server routes.
+    match /admins/{uid} {
+      allow read: if isAuth();
       allow write: if false;
     }
 
-    // Cash Control — any authenticated user
-    match /cashControlProfiles/{doc} {
-      allow read, write: if request.auth != null;
-    }
-    match /cashControlEvents/{doc} {
-      allow read, write: if request.auth != null;
-    }
-    match /cashControlAssignments/{doc} {
-      allow read, write: if request.auth != null;
-    }
-    match /cashControlMoneyReceived/{doc} {
-      allow read, write: if request.auth != null;
-    }
-    match /cashControlExpenses/{doc} {
-      allow read, write: if request.auth != null;
-    }
-    match /cashControlClosures/{doc} {
-      allow read, write: if request.auth != null;
-    }
-    match /cashControlAudit/{doc} {
-      allow read, write: if request.auth != null;
+    // /articles/* — public read; 'view' to read privately, 'editor' to write.
+    match /articles/{id} {
+      allow read: if true;
+      allow write: if canEdit('blog');
     }
 
-    // All other collections — authenticated access
+    // /furnitureItems/* and /furnitureMeta/* — public read, editor to write.
+    match /furnitureItems/{id} {
+      allow read: if true;
+      allow write: if canEdit('furniture');
+    }
+    match /furnitureMeta/{id} {
+      allow read: if true;
+      allow write: if canEdit('furniture');
+    }
+
+    // /floralInspiration/* — public read, editor to write.
+    match /floralInspiration/{id} {
+      allow read: if true;
+      allow write: if canEdit('florals');
+    }
+
+    // /events/{eventId} — owner or someone with at least view on events.
+    match /events/{eventId} {
+      allow read:   if isOwner(resource.data.userId) || canView('events');
+      allow create: if isOwner(request.resource.data.userId) || canEdit('events');
+      allow update, delete: if isOwner(resource.data.userId) || canEdit('events');
+    }
+
+    // /plannerEvents/{eventId} — owner (plannerId) or projects permission.
+    match /plannerEvents/{eventId} {
+      allow read:   if isOwner(resource.data.plannerId) || canView('projects');
+      allow create: if isOwner(request.resource.data.plannerId) || canEdit('projects');
+      allow update, delete: if isOwner(resource.data.plannerId) || canEdit('projects');
+
+      // /plannerEvents/{eventId}/expenses/{expenseId} — same access as parent.
+      match /expenses/{expenseId} {
+        allow read: if
+          isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
+          || canView('projects');
+        allow write: if
+          isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
+          || canEdit('projects');
+      }
+    }
+
+    // Cash Control — any authenticated user.
+    // Fine-grained access (event ownership, role checks) is enforced by the
+    // server-side API routes; rules enforce minimum authentication here.
+    match /cashControlProfiles/{doc} {
+      allow read, write: if isAuth();
+    }
+    match /cashControlEvents/{doc} {
+      allow read, write: if isAuth();
+    }
+    match /cashControlAssignments/{doc} {
+      allow read, write: if isAuth();
+    }
+    match /cashControlMoneyReceived/{doc} {
+      allow read, write: if isAuth();
+    }
+    match /cashControlExpenses/{doc} {
+      allow read, write: if isAuth();
+    }
+    match /cashControlClosures/{doc} {
+      allow read, write: if isAuth();
+    }
+    match /cashControlAudit/{doc} {
+      allow read, write: if isAuth();
+    }
+
+    // Temporary catch-all: authenticated access while the admin migration
+    // (auto-ID → uid-keyed docs) is pending. Remove once isAdmin() is live.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuth();
     }
   }
 }

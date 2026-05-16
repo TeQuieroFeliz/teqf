@@ -6,31 +6,18 @@ import {
   AdminPermissionLevel,
   AdminUser,
   ALL_PERMISSIONS,
+  PERMISSION_LEVEL_LABELS,
+  ROLE_LABELS,
 } from '@/lib/admin-types';
 import { ArrowLeft, ExternalLink, Loader2, ShieldCheck, ShieldOff } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-const PERMISSION_LEVEL_LABELS: Record<AdminPermissionLevel, string> = {
-  none: 'Nessun accesso',
-  read: 'Solo lettura',
-  write: 'Lettura e scrittura',
-  admin: 'Amministratore',
-};
-
 const PERMISSION_COLORS: Record<AdminPermissionLevel, { bg: string; text: string }> = {
-  none:  { bg: '#f3f4f6', text: '#6b7280' },
-  read:  { bg: '#eff6ff', text: '#1d4ed8' },
-  write: { bg: '#fef9ee', text: '#b45309' },
-  admin: { bg: '#fdf2f4', text: '#5C1A28' },
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  superadmin: 'Super Admin',
-  admin: 'Amministratore',
-  editor: 'Editor',
-  viewer: 'Visualizzatore',
+  none:   { bg: '#f3f4f6', text: '#6b7280' },
+  view:   { bg: '#eff6ff', text: '#1d4ed8' },
+  editor: { bg: '#fdf2f4', text: '#5C1A28' },
 };
 
 export default function PlannerAdminAccessPage() {

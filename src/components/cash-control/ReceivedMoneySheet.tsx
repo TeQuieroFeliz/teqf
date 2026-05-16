@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import {
   Sheet,
   SheetContent,
@@ -314,11 +315,12 @@ export function ReceivedMoneySheet({ open, onClose, eventId, userId, initialData
               >
                 Foto adjunta
               </p>
-              <div className="rounded-2xl overflow-hidden" style={{ background: 'white' }}>
-                <img
-                  src={proofImageUrl ?? undefined}
+              <div className="rounded-2xl overflow-hidden relative h-44" style={{ background: 'white' }}>
+                <Image
+                  src={proofImageUrl!}
                   alt="Comprobante"
-                  className="object-cover w-full h-44"
+                  fill
+                  className="object-cover"
                 />
               </div>
               <div className="flex gap-2">

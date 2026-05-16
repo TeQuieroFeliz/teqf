@@ -48,8 +48,8 @@ const hasCredentials =
   process.env.FIREBASE_PRIVATE_KEY &&
   process.env.FIREBASE_CLIENT_EMAIL;
 
-let firestore: any = createFirebaseStub();
-let auth: any = createAuthStub();
+let firestore: Firestore = createFirebaseStub() as unknown as Firestore;
+let auth: Auth = createAuthStub() as unknown as Auth;
 
 if (hasCredentials) {
   try {

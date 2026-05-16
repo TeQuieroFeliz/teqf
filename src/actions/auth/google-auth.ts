@@ -5,6 +5,10 @@ import { toast } from 'sonner';
 
 export const handleGoogleSignIn = async () => {
   try {
+    if (!auth || !db) {
+      toast.error('Firebase no está disponible');
+      return { userId: null };
+    }
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
     const user = result.user;

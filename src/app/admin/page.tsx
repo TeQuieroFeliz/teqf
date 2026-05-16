@@ -1,6 +1,6 @@
 'use client';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { AdminPermissionLevel } from '@/lib/admin-types';
+import { AdminPermissionLevel, PERMISSION_LEVEL_LABELS, ROLE_LABELS } from '@/lib/admin-types';
 import {
   BookOpen,
   Calendar,
@@ -51,54 +51,32 @@ const SECTIONS: Section[] = [
     href: '/admin/events',
   },
   {
-    key: 'users',
-    label: 'Utenti',
-    description: 'Gestione account e accessi',
-    icon: <Users className="size-5" />,
-    href: '/admin/users',
-  },
-  {
-    key: 'planners',
-    label: 'Planner',
+    key: 'projects',
+    label: 'Progetti Planner',
     description: 'Wedding planner, collaboratori ed eventi',
     icon: <ClipboardList className="size-5" />,
     href: '/admin/planners',
   },
   {
     key: 'furniture',
-    label: 'Catalogo Mobili',
+    label: 'Mobili',
     description: 'Sedie, tavoli, divani e allestimenti',
     icon: <Sofa className="size-5" />,
     href: '/admin/furniture',
   },
   {
-    key: 'flowers',
-    label: 'Catalogo Fiori',
+    key: 'florals',
+    label: 'Fiori',
     description: 'Fiori e composizioni floreali',
     icon: <Flower2 className="size-5" />,
     href: '/admin/flowers',
   },
 ];
 
-const PERMISSION_LABELS: Record<AdminPermissionLevel, string> = {
-  none: 'Nessun accesso',
-  read: 'Solo lettura',
-  write: 'Lettura e scrittura',
-  admin: 'Amministratore',
-};
-
 const PERMISSION_COLORS: Record<AdminPermissionLevel, { bg: string; text: string }> = {
-  none: { bg: '#f3f4f6', text: '#6b7280' },
-  read: { bg: '#eff6ff', text: '#1d4ed8' },
-  write: { bg: '#fef9ee', text: '#b45309' },
-  admin: { bg: '#fdf2f4', text: '#5C1A28' },
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  superadmin: 'Super Admin',
-  admin: 'Amministratore',
-  editor: 'Editor',
-  viewer: 'Visualizzatore',
+  none:   { bg: '#f3f4f6', text: '#6b7280' },
+  view:   { bg: '#eff6ff', text: '#1d4ed8' },
+  editor: { bg: '#fdf2f4', text: '#5C1A28' },
 };
 
 export default function AdminDashboardPage() {
@@ -156,7 +134,7 @@ export default function AdminDashboardPage() {
                 fontFamily: 'var(--font-body)',
               }}
             >
-              {ROLE_LABELS[adminUser.role] ?? adminUser.role}
+              {ROLE_LABELS[adminUser.role]}
             </span>
           </div>
           <button
@@ -202,7 +180,7 @@ export default function AdminDashboardPage() {
         {accessibleSections.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {accessibleSections.map((section) => {
-              const level: AdminPermissionLevel = isSuperAdmin ? 'admin' : (adminUser.permissions[section.key] ?? 'none');
+              const level: AdminPermissionLevel = isSuperAdmin ? 'editor' : (adminUser.permissions[section.key] ?? 'none');
               const colors = PERMISSION_COLORS[level];
               return (
                 <a
@@ -225,7 +203,7 @@ export default function AdminDashboardPage() {
                       className="text-xs px-2 py-0.5 rounded-full"
                       style={{ background: colors.bg, color: colors.text, fontFamily: 'var(--font-body)' }}
                     >
-                      {PERMISSION_LABELS[level]}
+                      {PERMISSION_LEVEL_LABELS[level]}
                     </span>
                   </div>
 

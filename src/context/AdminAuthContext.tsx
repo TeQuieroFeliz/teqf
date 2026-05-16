@@ -23,19 +23,6 @@ type AdminAuthContextType = {
 
 const AdminAuthContext = createContext<AdminAuthContextType | null>(null);
 
-async function fetchAdminByEmail(email: string): Promise<AdminUser | null> {
-  const q = query(
-    collection(db, 'admins'),
-    where('email', '==', email),
-    where('active', '==', true),
-    limit(1)
-  );
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return null;
-  const doc = snapshot.docs[0];
-  return { id: doc.id, ...doc.data() } as AdminUser;
-}
-
 export function AdminAuthContextProvider({ children }: { children: React.ReactNode }) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [mustChangePassword, setMustChangePassword] = useState(false);
@@ -45,19 +32,24 @@ export function AdminAuthContextProvider({ children }: { children: React.ReactNo
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       try {
         if (user?.email) {
-          const admin = await fetchAdminByEmail(user.email);
-          setAdminUser(admin);
-          setMustChangePassword(admin?.mustChangePassword === true);
-          if (admin) {
-            const q = query(
-              collection(db, 'admins'),
-              where('email', '==', user.email),
-              limit(1)
-            );
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              await updateDoc(snap.docs[0].ref, { lastLogin: serverTimestamp() });
-            }
+          const q = query(
+            collection(db, 'admins'),
+            where('email', '==', user.email),
+            where('active', '==', true),
+            limit(1)
+          );
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            const admin = { id: doc.id, ...doc.data() } as AdminUser;
+            setAdminUser(admin);
+            setMustChangePassword(admin.mustChangePassword === true);
+            updateDoc(doc.ref, { lastLogin: serverTimestamp() }).catch((err) => {
+              console.error('[AdminAuth] failed to update lastLogin', err);
+            });
+          } else {
+            setAdminUser(null);
+            setMustChangePassword(false);
           }
         } else {
           setAdminUser(null);

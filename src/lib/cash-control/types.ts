@@ -110,6 +110,8 @@ export interface TransactionRow {
   tags: string[];
   note: string | null;
   isWithoutSupport: boolean;
+  receiptImageUrl?: string | null;
+  proofImageUrl?: string | null;
   uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   date?: string; // YYYY-MM-DD
   createdAt: Timestamp;

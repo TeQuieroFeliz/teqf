@@ -19,6 +19,8 @@ import {
   ALL_PERMISSIONS,
   DEFAULT_PERMISSIONS,
   PERMISSION_LEVELS,
+  PERMISSION_LEVEL_LABELS,
+  ROLE_LABELS,
 } from '@/lib/admin-types';
 import { PlannerUser } from '@/lib/planner-types';
 import {
@@ -43,23 +45,14 @@ import { toast } from 'sonner';
 
 const ROLES: { value: AdminRole; label: string }[] = [
   { value: 'superadmin', label: 'Super Admin' },
-  { value: 'admin', label: 'Amministratore' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'viewer', label: 'Visualizzatore' },
+  { value: 'team',       label: 'Team' },
+  { value: 'planner',    label: 'Planner' },
 ];
 
-const PERMISSION_LEVEL_LABELS: Record<AdminPermissionLevel, string> = {
-  none: 'Nessuno',
-  read: 'Lettura',
-  write: 'Scrittura',
-  admin: 'Admin',
-};
-
 const PERMISSION_COLORS: Record<AdminPermissionLevel, { bg: string; text: string }> = {
-  none:  { bg: '#f3f4f6', text: '#6b7280' },
-  read:  { bg: '#eff6ff', text: '#1d4ed8' },
-  write: { bg: '#fef9ee', text: '#b45309' },
-  admin: { bg: '#fdf2f4', text: '#5C1A28' },
+  none:   { bg: '#f3f4f6', text: '#6b7280' },
+  view:   { bg: '#eff6ff', text: '#1d4ed8' },
+  editor: { bg: '#fdf2f4', text: '#5C1A28' },
 };
 
 type Tab = 'admins' | 'new-admin' | 'grant-planner';
@@ -308,13 +301,13 @@ export default function AdminUsersPage() {
   const [newName, setNewName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
-  const [newRole, setNewRole] = useState<AdminRole>('editor');
+  const [newRole, setNewRole] = useState<AdminRole>('team');
   const [newPerms, setNewPerms] = useState<AdminPermissions>(DEFAULT_PERMISSIONS);
   const [creatingAdmin, setCreatingAdmin] = useState(false);
 
   // Grant planner access form
   const [selectedPlannerId, setSelectedPlannerId] = useState('');
-  const [grantRole, setGrantRole] = useState<AdminRole>('viewer');
+  const [grantRole, setGrantRole] = useState<AdminRole>('planner');
   const [grantPerms, setGrantPerms] = useState<AdminPermissions>(DEFAULT_PERMISSIONS);
   const [granting, setGranting] = useState(false);
 
@@ -357,7 +350,7 @@ export default function AdminUsersPage() {
 
       toast.success('Utente admin creato. Al primo accesso dovrà cambiare la password.');
       setNewEmail(''); setNewName(''); setNewPassword('');
-      setNewRole('editor'); setNewPerms(DEFAULT_PERMISSIONS);
+      setNewRole('team'); setNewPerms(DEFAULT_PERMISSIONS);
       setTab('admins');
       await loadData();
     } catch (err: any) {
@@ -381,7 +374,7 @@ export default function AdminUsersPage() {
     );
     if (result.success) {
       toast.success(`Accesso admin concesso a ${planner.name ?? planner.email}.`);
-      setSelectedPlannerId(''); setGrantRole('viewer'); setGrantPerms(DEFAULT_PERMISSIONS);
+      setSelectedPlannerId(''); setGrantRole('planner'); setGrantPerms(DEFAULT_PERMISSIONS);
       setTab('admins');
       await loadData();
     } else {
@@ -433,7 +426,7 @@ export default function AdminUsersPage() {
           <div className="text-right hidden sm:block">
             <p className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>{adminUser.email}</p>
             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-              {ROLES.find((r) => r.value === adminUser.role)?.label ?? adminUser.role}
+              {ROLE_LABELS[adminUser.role]}
             </span>
           </div>
           <button
