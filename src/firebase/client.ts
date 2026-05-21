@@ -34,7 +34,6 @@ if (isBrowser && hasFirebaseConfig) {
   if (!currentApps.length) {
     const app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    console.debug('[Firebase Client] resolvedStorageBucket:', resolvedStorageBucket);
     if (hasStorageBucket) {
       storage = getStorage(app);
     } else {
@@ -56,7 +55,6 @@ if (isBrowser && hasFirebaseConfig) {
   } else {
     const app = currentApps[0];
     auth = getAuth(app);
-    console.debug('[Firebase Client] resolvedStorageBucket:', resolvedStorageBucket);
     if (hasStorageBucket) {
       storage = getStorage(app);
     } else {

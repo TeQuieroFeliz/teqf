@@ -27,6 +27,7 @@ export function AdminAuthContextProvider({ children }: { children: React.ReactNo
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      setIsLoading(true);
       try {
         if (user) {
           const docRef = doc(db, 'admins', user.uid);
@@ -57,7 +58,13 @@ export function AdminAuthContextProvider({ children }: { children: React.ReactNo
   }, []);
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    setIsLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      setIsLoading(false);
+      throw err;
+    }
   };
 
   const logout = async () => {

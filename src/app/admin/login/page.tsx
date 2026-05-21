@@ -27,6 +27,9 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
+      // Navigate immediately after Auth — AdminGuard shows its own spinner
+      // while the Firestore read completes in the background.
+      router.replace('/admin');
     } catch (err: any) {
       const code = err?.code as string;
       setError(FIREBASE_ERROR_MESSAGES[code] ?? 'Accesso non autorizzato.');
