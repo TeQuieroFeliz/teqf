@@ -339,13 +339,11 @@ export default function AdminUsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: newEmail, password: newPassword }),
       });
-      if (!apiRes.ok) {
-        const data = await apiRes.json().catch(() => ({}));
-        throw new Error(data.error ?? 'Errore creazione account Firebase.');
-      }
+      const apiData = await apiRes.json().catch(() => ({}));
+      if (!apiRes.ok) throw new Error(apiData.error ?? 'Errore creazione account Firebase.');
 
-      // Create Firestore record
-      const result = await createAdminUser({ email: newEmail, name: newName, role: newRole, permissions: newPerms });
+      // Create Firestore record keyed by UID
+      const result = await createAdminUser({ uid: apiData.uid, email: newEmail, name: newName, role: newRole, permissions: newPerms });
       if (!result.success) throw new Error(result.error ?? 'Errore creazione utente.');
 
       toast.success('Utente admin creato. Al primo accesso dovrà cambiare la password.');

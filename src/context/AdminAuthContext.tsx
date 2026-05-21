@@ -2,13 +2,10 @@
 import { auth, db } from '@/firebase/client';
 import { AdminUser } from '@/lib/admin-types';
 import {
-  collection,
-  getDocs,
-  limit,
-  query,
+  doc,
+  getDoc,
   serverTimestamp,
   updateDoc,
-  where,
 } from 'firebase/firestore';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -31,20 +28,14 @@ export function AdminAuthContextProvider({ children }: { children: React.ReactNo
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       try {
-        if (user?.email) {
-          const q = query(
-            collection(db, 'admins'),
-            where('email', '==', user.email),
-            where('active', '==', true),
-            limit(1)
-          );
-          const snapshot = await getDocs(q);
-          if (!snapshot.empty) {
-            const doc = snapshot.docs[0];
-            const admin = { id: doc.id, ...doc.data() } as AdminUser;
+        if (user) {
+          const docRef = doc(db, 'admins', user.uid);
+          const snapshot = await getDoc(docRef);
+          if (snapshot.exists() && snapshot.data()?.active === true) {
+            const admin = { id: snapshot.id, ...snapshot.data() } as AdminUser;
             setAdminUser(admin);
             setMustChangePassword(admin.mustChangePassword === true);
-            updateDoc(doc.ref, { lastLogin: serverTimestamp() }).catch((err) => {
+            updateDoc(docRef, { lastLogin: serverTimestamp() }).catch((err) => {
               console.error('[AdminAuth] failed to update lastLogin', err);
             });
           } else {

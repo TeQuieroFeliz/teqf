@@ -135,10 +135,5 @@ service cloud.firestore {
       allow read, write: if isAuth();
     }
 
-    // Temporary catch-all: authenticated access while the admin migration
-    // (auto-ID → uid-keyed docs) is pending. Remove once isAdmin() is live.
-    match /{document=**} {
-      allow read, write: if isAuth();
-    }
   }
 }

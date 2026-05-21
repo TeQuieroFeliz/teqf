@@ -1,7 +1,7 @@
 'use server';
 
-import { firestore } from '@/firebase/server';
-import { AdminUser, AdminRole, AdminPermissions, DEFAULT_PERMISSIONS } from '@/lib/admin-types';
+import { auth, firestore } from '@/firebase/server';
+import { AdminUser, AdminRole, AdminPermissions } from '@/lib/admin-types';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const ref = () => firestore!.collection('admins');
@@ -32,14 +32,19 @@ export async function getAllAdminUsers(): Promise<AdminUser[]> {
 }
 
 export async function getAdminByEmail(email: string): Promise<AdminUser | null> {
-  if (!firestore) return null;
-  const snap = await ref().where('email', '==', email).where('active', '==', true).limit(1).get();
-  if (snap.empty) return null;
-  const doc = snap.docs[0];
-  return serializeAdmin(doc.id, doc.data());
+  if (!firestore || !auth) return null;
+  try {
+    const firebaseUser = await auth.getUserByEmail(email);
+    const snap = await ref().doc(firebaseUser.uid).get();
+    if (!snap.exists || snap.data()?.active !== true) return null;
+    return serializeAdmin(snap.id, snap.data()!);
+  } catch {
+    return null;
+  }
 }
 
 export async function createAdminUser(data: {
+  uid: string;
   email: string;
   name: string;
   role: AdminRole;
@@ -47,16 +52,17 @@ export async function createAdminUser(data: {
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   if (!firestore) return { success: false, error: 'Firestore non disponibile' };
   try {
-    const existing = await ref().where('email', '==', data.email).limit(1).get();
-    if (!existing.empty) return { success: false, error: 'Email già registrata come admin.' };
-    const docRef = await ref().add({
-      ...data,
+    const existing = await ref().doc(data.uid).get();
+    if (existing.exists) return { success: false, error: 'Admin già registrato.' };
+    const { uid, ...fields } = data;
+    await ref().doc(uid).set({
+      ...fields,
       active: true,
       mustChangePassword: true,
       createdAt: Timestamp.now(),
       lastLogin: null,
     });
-    return { success: true, id: docRef.id };
+    return { success: true, id: uid };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
@@ -105,21 +111,24 @@ export async function grantPlannerAdminAccess(
   role: AdminRole,
   permissions: AdminPermissions
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  if (!firestore) return { success: false, error: 'Firestore non disponibile' };
+  if (!firestore || !auth) return { success: false, error: 'Firebase non disponibile' };
   try {
-    const existing = await ref().where('email', '==', email).limit(1).get();
-    if (!existing.empty) {
-      await existing.docs[0].ref.update({ role, permissions, active: true, name });
-      return { success: true, id: existing.docs[0].id };
+    const firebaseUser = await auth.getUserByEmail(email);
+    const uid = firebaseUser.uid;
+    const docRef = ref().doc(uid);
+    const existing = await docRef.get();
+    if (existing.exists) {
+      await docRef.update({ role, permissions, active: true, name });
+      return { success: true, id: uid };
     }
-    const docRef = await ref().add({
+    await docRef.set({
       email, name, role, permissions,
       active: true,
       mustChangePassword: false,
       createdAt: Timestamp.now(),
       lastLogin: null,
     });
-    return { success: true, id: docRef.id };
+    return { success: true, id: uid };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
