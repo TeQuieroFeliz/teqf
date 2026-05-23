@@ -2,14 +2,13 @@
 
 import {
   deleteFurnitureItem,
-  getFurnitureItems,
-  getFurnitureMeta,
   saveFurnitureItem,
   saveFurnitureMeta,
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { storage } from '@/firebase/client';
+import { db, storage } from '@/firebase/client';
+import { collection, doc, getDocs, getDoc, orderBy, query } from 'firebase/firestore';
 import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import {
@@ -610,10 +609,33 @@ export default function AdminFurniturePage() {
 
   // Load items + meta + standby from localStorage
   useEffect(() => {
-    Promise.all([getFurnitureItems(), getFurnitureMeta()]).then(([its, meta]) => {
-      setItems(its);
-      setCategories(meta.categories);
-      setCities(meta.cities);
+    const DEFAULT_CATEGORIES = ['Sedie', 'Tavoli', 'Tovaglie', 'Cocktail Table', 'Divani', 'Sala Lounge'];
+    const DEFAULT_CITIES = ['Ciudad de México', 'Cancún'];
+
+    Promise.all([
+      getDocs(query(collection(db, 'furnitureItems'), orderBy('createdAt', 'desc'))),
+      getDoc(doc(db, 'furnitureMeta', 'config')),
+    ]).then(([itemsSnap, metaSnap]) => {
+      const toStr = (v: any) => (v && typeof v.toDate === 'function' ? v.toDate().toISOString() : (v ?? ''));
+      setItems(itemsSnap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name ?? '',
+          category: data.category ?? '',
+          price: data.price ?? 0,
+          currency: data.currency ?? 'MXN',
+          cities: data.cities ?? [],
+          images: data.images ?? [],
+          description: data.description ?? '',
+          published: data.published ?? false,
+          createdAt: toStr(data.createdAt),
+          updatedAt: toStr(data.updatedAt),
+        } as FurnitureItem;
+      }));
+      const meta = metaSnap.exists() ? metaSnap.data() : {};
+      setCategories(meta.categories ?? DEFAULT_CATEGORIES);
+      setCities(meta.cities ?? DEFAULT_CITIES);
       setMetaLoaded(true);
       setLoading(false);
     });

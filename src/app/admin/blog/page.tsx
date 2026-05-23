@@ -1,7 +1,9 @@
 'use client';
-import { getArticles, Article } from '@/actions/blog/get-articles';
+import type { Article } from '@/actions/blog/get-articles';
 import { deleteArticle } from '@/actions/blog/delete-article';
 import { useAdminAuth } from '@/context/AdminAuthContext';
+import { db } from '@/firebase/client';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
   BookOpen,
@@ -37,8 +39,26 @@ export default function BlogListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    getArticles()
-      .then(setArticles)
+    getDocs(query(collection(db, 'articles'), orderBy('createdAt', 'desc')))
+      .then((snap) =>
+        setArticles(snap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            title: d.title ?? '',
+            category: d.category ?? '',
+            createdAt: d.createdAt?.toDate().toISOString() ?? new Date().toISOString(),
+            publishedAt: d.publishedAt?.toDate().toISOString() ?? null,
+            shortDescription: d.shortDescription ?? '',
+            content: d.content ?? '',
+            slug: d.slug ?? '',
+            status: d.status ?? 'draft',
+            updatedAt: d.updatedAt?.toDate().toISOString() ?? new Date().toISOString(),
+            coverImage: d.coverImage ?? '',
+            images: d.images ?? [],
+          } as Article;
+        }))
+      )
       .finally(() => setLoading(false));
   }, []);
 

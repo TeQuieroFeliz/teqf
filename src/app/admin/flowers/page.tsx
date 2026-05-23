@@ -2,13 +2,13 @@
 
 import {
   deleteInspirationItem,
-  getInspirationItems,
   saveInspirationItem,
   type InspirationItem,
 } from '@/actions/flowers/inspiration-crud';
-import { getPortfolioProjects, type PortfolioProject } from '@/actions/portfolio/portfolio-crud';
+import type { PortfolioProject } from '@/actions/portfolio/portfolio-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { storage } from '@/firebase/client';
+import { db, storage } from '@/firebase/client';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import {
   ArrowLeft, Check, Flower2, ImagePlus, Loader2, LogOut,
@@ -301,7 +301,21 @@ export default function AdminFlowersPage() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    getInspirationItems().then(setItems).finally(() => setLoadingItems(false));
+    getDocs(query(collection(db, 'floralInspiration'), orderBy('createdAt', 'desc')))
+      .then((snap) =>
+        setItems(snap.docs.map((doc) => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            imageUrl: d.imageUrl ?? '',
+            category: d.category ?? '',
+            title: d.title ?? '',
+            published: d.published ?? false,
+            createdAt: d.createdAt?.toDate?.().toISOString() ?? d.createdAt ?? '',
+          } as InspirationItem;
+        }))
+      )
+      .finally(() => setLoadingItems(false));
   }, []);
 
   if (!adminUser) return null;
@@ -317,7 +331,8 @@ export default function AdminFlowersPage() {
     setPickerOpen(true);
     if (portfolioProjects.length === 0) {
       setLoadingPortfolio(true);
-      const projects = await getPortfolioProjects();
+      const snap = await getDocs(query(collection(db, 'portfolioProjects'), orderBy('createdAt', 'desc')));
+      const projects: PortfolioProject[] = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as PortfolioProject));
       setPortfolioProjects(projects);
       setLoadingPortfolio(false);
     }

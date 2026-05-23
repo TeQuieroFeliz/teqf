@@ -86,6 +86,25 @@ service cloud.firestore {
       allow write: if canEdit('florals');
     }
 
+    // /portfolioProjects/* — public read, editor to write.
+    match /portfolioProjects/{id} {
+      allow read: if true;
+      allow write: if canEdit('portfolio');
+    }
+
+    // /planners/{uid} — readable by the planner themselves or any active admin.
+    match /planners/{uid} {
+      allow read:  if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) || isAdmin();
+    }
+
+    // /plannerRequests/* — write-only for anonymous (contact form); admin can read.
+    match /plannerRequests/{id} {
+      allow read:   if isAdmin();
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
     // /events/{eventId} — owner or someone with at least view on events.
     match /events/{eventId} {
       allow read:   if isOwner(resource.data.userId) || canView('events');
