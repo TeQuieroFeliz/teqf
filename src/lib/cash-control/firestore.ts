@@ -151,6 +151,16 @@ export async function isUserAssignedToEvent(uid: string, eventId: string): Promi
   return snap.exists();
 }
 
+export async function getAssignmentForUser(uid: string, eventId: string): Promise<CashControlAssignment | null> {
+  const snap = await getDoc(doc(db!, 'cashControlAssignments', `${uid}_${eventId}`));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as CashControlAssignment;
+}
+
+export async function updateAssignmentCanWrite(uid: string, eventId: string, canWrite: boolean): Promise<void> {
+  await updateDoc(doc(db!, 'cashControlAssignments', `${uid}_${eventId}`), { canWrite });
+}
+
 export async function assignUserToEvent(uid: string, eventId: string): Promise<void> {
   const ref = doc(db!, 'cashControlAssignments', `${uid}_${eventId}`);
   const existing = await getDoc(ref);

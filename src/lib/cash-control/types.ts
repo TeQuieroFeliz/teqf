@@ -34,6 +34,7 @@ export interface CashControlAssignment {
   id: string;
   userId: string;
   eventId: string;
+  canWrite?: boolean;
   createdAt: Timestamp;
 }
 

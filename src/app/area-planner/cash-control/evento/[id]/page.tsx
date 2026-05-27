@@ -5,6 +5,7 @@ import { isCashControlAdmin } from '@/lib/cash-control/permissions';
 import {
   getEvent,
   getAllCashControlProfiles,
+  getAssignmentForUser,
   subscribeToEventBalance,
   subscribeToAllUsersEventBalance,
   subscribeToClosureForUserEvent,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/cash-control/firestore';
 import {
   CashControlEvent,
+  CashControlAssignment,
   CashControlClosure,
   EventBalance,
   TransactionRow,
@@ -58,6 +60,7 @@ export default function EventoPage() {
   const isAdmin = isCashControlAdmin(cashControlRole);
 
   const [event, setEvent] = useState<CashControlEvent | null>(null);
+  const [assignment, setAssignment] = useState<CashControlAssignment | null | undefined>(undefined);
   const [balance, setBalance] = useState<EventBalance>(EMPTY_BALANCE);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [closure, setClosure] = useState<CashControlClosure | null>(null);
@@ -162,10 +165,12 @@ export default function EventoPage() {
 
     async function init() {
       try {
-        const [ev, allProfiles] = await Promise.all([
+        const [ev, allProfiles, userAssignment] = await Promise.all([
           getEvent(id),
           getAllCashControlProfiles(),
+          getAssignmentForUser(uid!, id),
         ]);
+        if (mounted) setAssignment(userAssignment);
 
         if (!mounted) return;
 
@@ -261,6 +266,8 @@ export default function EventoPage() {
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const isClosed = !!closure && !closure.isReopened;
+  // Admin always has write access; team users need canWrite !== false on their assignment
+  const canWrite = isAdmin || assignment === undefined || assignment === null || assignment.canWrite !== false;
   const userName = displayName?.trim() || '';
   const safeEventCode = event.eventCode.replace(/undefined/g, '').trim();
   const safeEventName = event.eventName.replace(/undefined/g, '').trim();
@@ -401,8 +408,8 @@ export default function EventoPage() {
             </section>
           )}
 
-          {/* Action buttons — hidden when closed */}
-          {!isClosed && (
+          {/* Action buttons — hidden when closed or write access revoked */}
+          {!isClosed && canWrite && (
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setShowReceived(true)}
@@ -467,10 +474,10 @@ export default function EventoPage() {
             <TransactionList
               transactions={transactions}
               maxVisible={5}
-              onEdit={!isClosed ? handleEdit : undefined}
-              onDelete={!isClosed ? handleDelete : undefined}
-              onRetry={!isClosed ? handleRetry : undefined}
-              onDeletePhoto={!isClosed ? handleDeletePhoto : undefined}
+              onEdit={!isClosed && canWrite ? handleEdit : undefined}
+              onDelete={!isClosed && canWrite ? handleDelete : undefined}
+              onRetry={!isClosed && canWrite ? handleRetry : undefined}
+              onDeletePhoto={!isClosed && canWrite ? handleDeletePhoto : undefined}
             />
           </section>
 
@@ -492,8 +499,8 @@ export default function EventoPage() {
         </main>
       </div>
 
-      {/* ── Sticky bottom — Cerrar cuenta (only when open) ──────────────── */}
-      {!isClosed && (
+      {/* ── Sticky bottom — Cerrar cuenta (only when open and has write) ──────────────── */}
+      {!isClosed && canWrite && (
         <div
           className="fixed bottom-0 left-0 right-0 px-4 z-20"
           style={{

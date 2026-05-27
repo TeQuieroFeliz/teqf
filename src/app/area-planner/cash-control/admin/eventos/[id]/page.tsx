@@ -10,19 +10,28 @@ import {
   getAllClosuresForEvent,
   getAllCashControlProfiles,
   subscribeToAllUsersEventBalance,
+  subscribeToEventBalance,
+  updateAssignmentCanWrite,
 } from '@/lib/cash-control/firestore';
-import { CashControlEvent, CashControlClosure, CashControlProfile, UserEventSummary } from '@/lib/cash-control/types';
+import { CashControlEvent, CashControlAssignment, CashControlClosure, CashControlProfile, EventBalance, TransactionRow, UserEventSummary } from '@/lib/cash-control/types';
 import { formatCurrency } from '@/lib/cash-control/calculations';
-import { Loader2, ArrowLeft, UserPlus, ChevronRight, TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import { SummaryCards } from '@/components/cash-control/SummaryCards';
+import { TransactionList } from '@/components/cash-control/TransactionList';
+import { ReceivedMoneySheet } from '@/components/cash-control/ReceivedMoneySheet';
+import { ExpenseSheet } from '@/components/cash-control/ExpenseSheet';
+import { Loader2, ArrowLeft, UserPlus, ChevronRight, TrendingDown, TrendingUp, Minus, Plus, ShoppingCart, ToggleLeft, ToggleRight } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+const EMPTY_BALANCE: EventBalance = { totalReceived: 0, totalSpent: 0, saldo: 0, totalWithoutSupport: 0 };
+
 interface UserBalance {
   uid: string;
   profile: CashControlProfile | null;
   closure: CashControlClosure | null;
+  assignment: CashControlAssignment | null;
 }
 
 export default function AdminEventDetailPage() {
@@ -42,9 +51,17 @@ export default function AdminEventDetailPage() {
   const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map());
   const unsubLive = useRef<(() => void) | null>(null);
 
+  // Admin expense entry
+  const [adminBalance, setAdminBalance] = useState<EventBalance>(EMPTY_BALANCE);
+  const [adminTransactions, setAdminTransactions] = useState<TransactionRow[]>([]);
+  const [showReceived, setShowReceived] = useState(false);
+  const [showExpense, setShowExpense] = useState(false);
+  const unsubAdminBalance = useRef<(() => void) | null>(null);
+
   // Assign user form
   const [assignEmail, setAssignEmail] = useState('');
   const [assigning, setAssigning] = useState(false);
+  const [togglingCanWrite, setTogglingCanWrite] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -64,7 +81,18 @@ export default function AdminEventDetailPage() {
       setLiveSummaries(summaries);
     });
 
-    return () => { unsubLive.current?.(); };
+    // Admin's own live balance
+    if (adminUid) {
+      unsubAdminBalance.current = subscribeToEventBalance(id, adminUid, (bal, txns) => {
+        setAdminBalance(bal);
+        setAdminTransactions(txns);
+      });
+    }
+
+    return () => {
+      unsubLive.current?.();
+      unsubAdminBalance.current?.();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isAdmin, id]);
 
@@ -83,7 +111,7 @@ export default function AdminEventDetailPage() {
         assignments.map(async a => {
           const profile = await getCashControlProfile(a.userId);
           const closure = closures.find(c => c.userId === a.userId) ?? null;
-          return { uid: a.userId, profile, closure };
+          return { uid: a.userId, profile, closure, assignment: a };
         })
       );
       setUserBalances(balances);
@@ -134,6 +162,27 @@ export default function AdminEventDetailPage() {
     }
   }
 
+  async function handleToggleCanWrite(ub: UserBalance) {
+    const current = ub.assignment?.canWrite !== false;
+    const next = !current;
+    setTogglingCanWrite(ub.uid);
+    try {
+      await updateAssignmentCanWrite(ub.uid, id, next);
+      setUserBalances(prev =>
+        prev.map(u =>
+          u.uid === ub.uid
+            ? { ...u, assignment: u.assignment ? { ...u.assignment, canWrite: next } : u.assignment }
+            : u
+        )
+      );
+      toast.success(next ? 'Permiso de escritura activado.' : 'Permiso de escritura desactivado.');
+    } catch {
+      toast.error('Error al cambiar el permiso.');
+    } finally {
+      setTogglingCanWrite(null);
+    }
+  }
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
@@ -156,6 +205,7 @@ export default function AdminEventDetailPage() {
   }
 
   return (
+    <>
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
       {/* Header */}
       <header
@@ -195,6 +245,43 @@ export default function AdminEventDetailPage() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+
+        {/* Admin expense entry — only when event is active */}
+        {event.status === 'active' && adminUid && (
+          <section>
+            <p
+              className="text-xs uppercase tracking-widest mb-3"
+              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+            >
+              Mis movimientos
+            </p>
+            <SummaryCards balance={adminBalance} />
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <button
+                onClick={() => setShowReceived(true)}
+                className="flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-medium transition-all active:scale-[0.97]"
+                style={{ background: '#166534', color: 'white', fontFamily: 'var(--font-body)' }}
+              >
+                <Plus className="size-4" />
+                Recibir dinero
+              </button>
+              <button
+                onClick={() => setShowExpense(true)}
+                className="flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-medium transition-all active:scale-[0.97]"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+              >
+                <ShoppingCart className="size-4" />
+                Gasto
+              </button>
+            </div>
+            {adminTransactions.length > 0 && (
+              <div className="mt-3">
+                <TransactionList transactions={adminTransactions} maxVisible={5} />
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Assign user form */}
         <form
           onSubmit={handleAssignUser}
@@ -390,6 +477,20 @@ export default function AdminEventDetailPage() {
                         >
                           {isClosed ? 'Cerrada' : 'Activa'}
                         </span>
+                        {/* canWrite toggle */}
+                        {event.status === 'active' && !isClosed && (
+                          <button
+                            onClick={() => handleToggleCanWrite(ub)}
+                            disabled={togglingCanWrite === ub.uid}
+                            title={ub.assignment?.canWrite !== false ? 'Revocar escritura' : 'Permitir escritura'}
+                            className="flex items-center justify-center size-8 rounded-lg transition-opacity hover:opacity-70 disabled:opacity-40"
+                            style={{ border: '1px solid var(--tqf-beige-border)' }}
+                          >
+                            {ub.assignment?.canWrite !== false
+                              ? <ToggleRight className="size-5" style={{ color: '#166534' }} />
+                              : <ToggleLeft className="size-5" style={{ color: '#9ca3af' }} />}
+                          </button>
+                        )}
                         <Link
                           href={`/area-planner/cash-control/admin/eventos/${id}/users/${ub.uid}`}
                           className="flex items-center justify-center size-8 rounded-lg transition-opacity hover:opacity-70"
@@ -443,5 +544,24 @@ export default function AdminEventDetailPage() {
         </section>
       </main>
     </div>
+
+      {/* Sheets for admin expense entry */}
+      {adminUid && (
+        <>
+          <ReceivedMoneySheet
+            open={showReceived}
+            onClose={() => setShowReceived(false)}
+            eventId={id}
+            userId={adminUid}
+          />
+          <ExpenseSheet
+            open={showExpense}
+            onClose={() => setShowExpense(false)}
+            eventId={id}
+            userId={adminUid}
+          />
+        </>
+      )}
+    </>
   );
 }
