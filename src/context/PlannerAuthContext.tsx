@@ -1,19 +1,24 @@
 'use client';
 
-import { auth } from '@/firebase/client';
+import { auth, db } from '@/firebase/client';
 import { getPlannerByEmail, updatePlannerLastLogin } from '@/actions/planner/planner-auth';
 import { getPlannerRequestByEmail } from '@/actions/planner/planner-requests';
+import { getAdminByEmail } from '@/actions/admin/user-crud';
 import { PlannerUser } from '@/lib/planner-types';
+import { AdminUser } from '@/lib/admin-types';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
+import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 type PlannerAuthContextType = {
   isLoading: boolean;
   plannerUser: PlannerUser | null;
+  adminUser: AdminUser | null;
+  isSuperAdmin: boolean;
   mustChangePassword: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -25,6 +30,7 @@ const PlannerAuthContext = createContext<PlannerAuthContextType | null>(null);
 
 export function PlannerAuthContextProvider({ children }: { children: React.ReactNode }) {
   const [plannerUser, setPlannerUser] = useState<PlannerUser | null>(null);
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -32,18 +38,34 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       try {
-        if (user?.email) {
-          const planner = await getPlannerByEmail(user.email);
+        if (user) {
+          const [planner, adminSnap] = await Promise.all([
+            user.email ? getPlannerByEmail(user.email) : Promise.resolve(null),
+            getDoc(doc(db, 'admins', user.uid)),
+          ]);
+
+          const admin: AdminUser | null =
+            adminSnap.exists() && adminSnap.data()?.active === true
+              ? ({ id: adminSnap.id, ...adminSnap.data() } as AdminUser)
+              : null;
+
+          if (admin) {
+            updateDoc(doc(db, 'admins', user.uid), { lastLogin: serverTimestamp() }).catch(console.error);
+          }
+
           setPlannerUser(planner);
+          setAdminUser(admin);
           setMustChangePassword(planner?.mustChangePassword ?? false);
-          if (planner) await updatePlannerLastLogin(user.email);
+          if (planner && user.email) await updatePlannerLastLogin(user.email);
         } else {
           setPlannerUser(null);
+          setAdminUser(null);
           setMustChangePassword(false);
         }
       } catch (err) {
         console.error('[PlannerAuth]', err);
         setPlannerUser(null);
+        setAdminUser(null);
       } finally {
         setIsLoading(false);
       }
@@ -62,11 +84,22 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const loginWithEmail = async (email: string, password: string) => {
     setAuthError(null);
     try {
-      // Check Firestore first: is this planner approved?
       const planner = await getPlannerByEmail(email);
 
       if (!planner) {
-        // Not in planners — check if there's a pending/rejected request
+        // Check if it's an admin user
+        const admin = await getAdminByEmail(email);
+        if (admin) {
+          if (admin.role === 'superadmin') {
+            await signInWithEmailAndPassword(auth, email, password);
+            return;
+          } else {
+            setAuthError('Esta área es exclusiva para planners.');
+            return;
+          }
+        }
+
+        // Not in planners or admins — check request status
         const request = await getPlannerRequestByEmail(email);
         if (request?.status === 'pending') {
           setAuthError('La tua richiesta è in attesa di approvazione. Ti contatteremo presto.');
@@ -78,17 +111,15 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
         return;
       }
 
-      // Planner is approved — sign in, or create Firebase Auth account if missing
+      // Planner approved — sign in or create Firebase Auth account on first login
       try {
         await signInWithEmailAndPassword(auth, email, password);
       } catch (signInErr: any) {
         if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
-          // Firebase Auth account may not exist yet (admin-created planner, first login)
           try {
             await createUserWithEmailAndPassword(auth, email, password);
           } catch (createErr: any) {
             if (createErr.code === 'auth/email-already-in-use') {
-              // Account exists but password is wrong
               setAuthError('Email o password errata.');
             } else {
               throw createErr;
@@ -112,11 +143,26 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const logout = async () => {
     await signOut(auth);
     setPlannerUser(null);
+    setAdminUser(null);
     setMustChangePassword(false);
   };
 
+  const isSuperAdmin = adminUser?.role === 'superadmin';
+
   return (
-    <PlannerAuthContext.Provider value={{ plannerUser, mustChangePassword, isLoading, loginWithEmail, logout, refreshPlannerUser, authError }}>
+    <PlannerAuthContext.Provider
+      value={{
+        plannerUser,
+        adminUser,
+        isSuperAdmin,
+        mustChangePassword,
+        isLoading,
+        loginWithEmail,
+        logout,
+        refreshPlannerUser,
+        authError,
+      }}
+    >
       {children}
     </PlannerAuthContext.Provider>
   );

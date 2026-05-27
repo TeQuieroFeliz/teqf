@@ -115,4 +115,15 @@ export interface TransactionRow {
   uploadStatus?: 'pending' | 'uploaded' | 'failed' | null;
   date?: string; // YYYY-MM-DD
   createdAt: Timestamp;
+  userId?: string;
+  userName?: string;
+}
+
+export interface UserEventSummary {
+  userId: string;
+  totalReceived: number;
+  totalSpent: number;
+  /** positive = user received more than spent (must return to company); negative = company owes user */
+  netBalance: number;
+  transactions: TransactionRow[];
 }

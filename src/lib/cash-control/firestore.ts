@@ -36,6 +36,7 @@ import {
   CashControlClosure,
   EventBalance,
   TransactionRow,
+  UserEventSummary,
   PaymentMethod,
 } from './types';
 import { deleteFileByUrl } from '@/lib/cash-control/storage';
@@ -60,6 +61,11 @@ export async function getCashControlProfile(uid: string): Promise<CashControlPro
 
 export async function getTeamProfiles(): Promise<CashControlProfile[]> {
   const snap = await getDocs(query(profilesCol(), where('role', '==', 'team')));
+  return snap.docs.map(d => ({ uid: d.id, ...d.data() } as CashControlProfile));
+}
+
+export async function getAllCashControlProfiles(): Promise<CashControlProfile[]> {
+  const snap = await getDocs(profilesCol());
   return snap.docs.map(d => ({ uid: d.id, ...d.data() } as CashControlProfile));
 }
 
@@ -407,6 +413,65 @@ export function subscribeToClosureForUserEvent(
     if (snap.empty) { callback(null); return; }
     callback({ id: snap.docs[0].id, ...snap.docs[0].data() } as CashControlClosure);
   });
+}
+
+// ─── All-users event balance (live) ──────────────────────────────────────────
+
+export function subscribeToAllUsersEventBalance(
+  eventId: string,
+  callback: (summaries: UserEventSummary[], allTransactions: TransactionRow[]) => void
+): () => void {
+  let allReceived: MoneyReceived[] = [];
+  let allExpenses: Expense[] = [];
+
+  function sortRows(a: TransactionRow, b: TransactionRow) {
+    const aMs = a.date
+      ? new Date(a.date + 'T12:00:00').getTime()
+      : (a.createdAt?.toMillis?.() ?? 0);
+    const bMs = b.date
+      ? new Date(b.date + 'T12:00:00').getTime()
+      : (b.createdAt?.toMillis?.() ?? 0);
+    if (bMs !== aMs) return bMs - aMs;
+    return (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0);
+  }
+
+  function emit() {
+    const userIds = Array.from(
+      new Set([...allReceived.map(r => r.userId), ...allExpenses.map(e => e.userId)])
+    );
+
+    const summaries: UserEventSummary[] = userIds.map(uid => {
+      const received = allReceived.filter(r => r.userId === uid);
+      const expenses = allExpenses.filter(e => e.userId === uid);
+
+      const totalReceived = received.reduce((s, r) => s + r.amount, 0);
+      const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
+
+      const transactions: TransactionRow[] = [
+        ...received.map(r => ({
+          id: r.id, kind: 'received' as const, amount: r.amount, method: r.method,
+          tags: [], note: r.note, isWithoutSupport: false,
+          uploadStatus: r.uploadStatus ?? null, date: r.date, createdAt: r.createdAt,
+          userId: uid,
+        })),
+        ...expenses.map(e => ({
+          id: e.id, kind: 'expense' as const, amount: e.amount, method: e.method,
+          tags: e.tags, note: e.note, isWithoutSupport: e.isWithoutSupport,
+          uploadStatus: e.uploadStatus ?? null, date: e.date, createdAt: e.createdAt,
+          userId: uid,
+        })),
+      ].sort(sortRows);
+
+      return { userId: uid, totalReceived, totalSpent, netBalance: totalReceived - totalSpent, transactions };
+    });
+
+    const allTransactions = summaries.flatMap(s => s.transactions).sort(sortRows);
+    callback(summaries, allTransactions);
+  }
+
+  const unsubR = subscribeToAllMoneyReceived(eventId, items => { allReceived = items; emit(); });
+  const unsubE = subscribeToAllExpenses(eventId, items => { allExpenses = items; emit(); });
+  return () => { unsubR(); unsubE(); };
 }
 
 // ─── Computed balance (live) ──────────────────────────────────────────────────

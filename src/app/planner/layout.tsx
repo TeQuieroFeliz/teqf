@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 function PlannerGuard({ children }: { children: React.ReactNode }) {
-  const { plannerUser, mustChangePassword, isLoading } = usePlannerAuth();
+  const { plannerUser, adminUser, isSuperAdmin, mustChangePassword, isLoading } = usePlannerAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -17,27 +17,33 @@ function PlannerGuard({ children }: { children: React.ReactNode }) {
     const isRegisterPage       = pathname === '/planner/register';
     const isChangePasswordPage = pathname === '/planner/change-password';
 
-    if (!plannerUser && !isLoginPage && !isRegisterPage) {
+    const hasAccess = !!plannerUser || isSuperAdmin;
+
+    if (!hasAccess && !isLoginPage && !isRegisterPage) {
       router.replace('/planner/login');
       return;
     }
 
-    if (plannerUser && (isLoginPage || isRegisterPage)) {
+    if (hasAccess && (isLoginPage || isRegisterPage)) {
       router.replace(mustChangePassword ? '/planner/change-password' : '/planner');
       return;
     }
 
-    // Planner autenticata ma deve cambiare password: blocca tutto tranne change-password
+    // Team-only admins (not superadmin, not planner) have no business in /planner
+    if (!plannerUser && adminUser && !isSuperAdmin && !isLoginPage && !isRegisterPage) {
+      router.replace('/area-planner');
+      return;
+    }
+
     if (plannerUser && mustChangePassword && !isChangePasswordPage) {
       router.replace('/planner/change-password');
       return;
     }
 
-    // Se ha già cambiato la password, non può tornare su change-password
     if (plannerUser && !mustChangePassword && isChangePasswordPage) {
       router.replace('/planner');
     }
-  }, [plannerUser, mustChangePassword, isLoading, pathname, router]);
+  }, [plannerUser, adminUser, isSuperAdmin, mustChangePassword, isLoading, pathname, router]);
 
   if (isLoading) {
     return (

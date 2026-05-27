@@ -8,13 +8,15 @@ import {
   getEventAssignments,
   getCashControlProfile,
   getAllClosuresForEvent,
+  getAllCashControlProfiles,
+  subscribeToAllUsersEventBalance,
 } from '@/lib/cash-control/firestore';
-import { CashControlEvent, CashControlClosure, CashControlProfile } from '@/lib/cash-control/types';
+import { CashControlEvent, CashControlClosure, CashControlProfile, UserEventSummary } from '@/lib/cash-control/types';
 import { formatCurrency } from '@/lib/cash-control/calculations';
-import { Loader2, ArrowLeft, UserPlus, ChevronRight } from 'lucide-react';
+import { Loader2, ArrowLeft, UserPlus, ChevronRight, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 interface UserBalance {
@@ -35,6 +37,11 @@ export default function AdminEventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  // Live report data
+  const [liveSummaries, setLiveSummaries] = useState<UserEventSummary[]>([]);
+  const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map());
+  const unsubLive = useRef<(() => void) | null>(null);
+
   // Assign user form
   const [assignEmail, setAssignEmail] = useState('');
   const [assigning, setAssigning] = useState(false);
@@ -46,6 +53,18 @@ export default function AdminEventDetailPage() {
       return;
     }
     loadData();
+
+    // Load profiles for attribution
+    getAllCashControlProfiles().then(profiles => {
+      setProfileNames(new Map(profiles.map(p => [p.uid, p.fullName || p.email])));
+    });
+
+    // Live report subscription
+    unsubLive.current = subscribeToAllUsersEventBalance(id, (summaries) => {
+      setLiveSummaries(summaries);
+    });
+
+    return () => { unsubLive.current?.(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isAdmin, id]);
 
@@ -222,6 +241,103 @@ export default function AdminEventDetailPage() {
             El usuario debe tener acceso Cash Control asignado desde /admin/cash-control/users
           </p>
         </form>
+
+        {/* Live report */}
+        {liveSummaries.length > 0 && (
+          <section>
+            <p
+              className="text-xs uppercase tracking-widest mb-3"
+              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+            >
+              Reporte en tiempo real
+            </p>
+
+            {/* Per-user cards */}
+            <div className="space-y-2 mb-3">
+              {liveSummaries.map(s => {
+                const name = profileNames.get(s.userId) || s.userId;
+                const companyOwes = s.netBalance < 0;
+                const userOwes = s.netBalance > 0;
+                return (
+                  <div
+                    key={s.userId}
+                    className="rounded-2xl p-4"
+                    style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p
+                          className="font-medium truncate"
+                          style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
+                        >
+                          {name}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                          Recibido ${formatCurrency(s.totalReceived)} · Gastado ${formatCurrency(s.totalSpent)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {companyOwes ? (
+                          <span
+                            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-xl font-medium"
+                            style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontFamily: 'var(--font-body)' }}
+                          >
+                            <TrendingDown className="size-3" />
+                            Empresa debe ${formatCurrency(Math.abs(s.netBalance))}
+                          </span>
+                        ) : userOwes ? (
+                          <span
+                            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-xl font-medium"
+                            style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontFamily: 'var(--font-body)' }}
+                          >
+                            <TrendingUp className="size-3" />
+                            Devolver ${formatCurrency(s.netBalance)}
+                          </span>
+                        ) : (
+                          <span
+                            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-xl"
+                            style={{ background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }}
+                          >
+                            <Minus className="size-3" />
+                            Cuadrado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Event totals */}
+            {liveSummaries.length > 1 && (() => {
+              const totalReceived = liveSummaries.reduce((s, u) => s + u.totalReceived, 0);
+              const totalSpent = liveSummaries.reduce((s, u) => s + u.totalSpent, 0);
+              const netTotal = totalReceived - totalSpent;
+              return (
+                <div
+                  className="rounded-2xl p-4 grid grid-cols-3 gap-3"
+                  style={{ background: 'var(--tqf-cipria-light)', border: '1px solid var(--tqf-cipria)' }}
+                >
+                  {[
+                    { label: 'Total recibido', value: totalReceived, color: '#166534' },
+                    { label: 'Total gastado', value: totalSpent, color: '#991b1b' },
+                    { label: 'Saldo neto', value: netTotal, color: netTotal >= 0 ? '#166534' : '#991b1b' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="text-center">
+                      <p className="text-xs mb-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        {label}
+                      </p>
+                      <p className="text-sm font-semibold" style={{ color, fontFamily: 'var(--font-body)' }}>
+                        {value < 0 ? '-' : ''}${formatCurrency(Math.abs(value))}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </section>
+        )}
 
         {/* Users / balances */}
         <section>

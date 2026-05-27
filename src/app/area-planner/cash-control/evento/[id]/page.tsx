@@ -4,8 +4,9 @@ import { useCashControlAuth } from '@/context/CashControlAuthContext';
 import { isCashControlAdmin } from '@/lib/cash-control/permissions';
 import {
   getEvent,
-  isUserAssignedToEvent,
+  getAllCashControlProfiles,
   subscribeToEventBalance,
+  subscribeToAllUsersEventBalance,
   subscribeToClosureForUserEvent,
   deleteExpense,
   deleteMoneyReceived,
@@ -17,12 +18,14 @@ import {
   CashControlClosure,
   EventBalance,
   TransactionRow,
+  UserEventSummary,
 } from '@/lib/cash-control/types';
 import {
   retryCachedProofUpload,
   retryCachedReceiptUpload,
   deleteFileByUrl,
 } from '@/lib/cash-control/storage';
+import { formatCurrency } from '@/lib/cash-control/calculations';
 import { SummaryCards } from '@/components/cash-control/SummaryCards';
 import { TransactionList } from '@/components/cash-control/TransactionList';
 import { ReceivedMoneySheet } from '@/components/cash-control/ReceivedMoneySheet';
@@ -34,6 +37,7 @@ import {
   Plus,
   ShoppingCart,
   Lock,
+  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -52,13 +56,18 @@ export default function EventoPage() {
   const { uid, displayName, cashControlRole, isLoading: authLoading } =
     useCashControlAuth();
   const isAdmin = isCashControlAdmin(cashControlRole);
-const [event, setEvent] = useState<CashControlEvent | null>(null);
+
+  const [event, setEvent] = useState<CashControlEvent | null>(null);
   const [balance, setBalance] = useState<EventBalance>(EMPTY_BALANCE);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [closure, setClosure] = useState<CashControlClosure | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [notAssigned, setNotAssigned] = useState(false);
+
+  // Team data
+  const [teamSummaries, setTeamSummaries] = useState<UserEventSummary[]>([]);
+  const [allTransactions, setAllTransactions] = useState<TransactionRow[]>([]);
+  const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map());
 
   // Sheet visibility
   const [showReceived, setShowReceived] = useState(false);
@@ -123,17 +132,12 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
         toast.error('No hay foto para eliminar.');
         return;
       }
-      
-      // Delete from Storage
       await deleteFileByUrl(photoUrl);
-      
-      // Delete from Firestore
       if (row.kind === 'expense') {
         await updateExpense(row.id, { receiptImageUrl: null, uploadStatus: null }, photoUrl);
       } else {
         await updateMoneyReceived(row.id, { proofImageUrl: null, uploadStatus: null }, photoUrl);
       }
-      
       toast.success('Foto eliminada correctamente');
     } catch (error) {
       console.error('Failed to delete photo:', error);
@@ -144,11 +148,12 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
   // Keep stable unsubscribe refs
   const unsubBalance = useRef<(() => void) | null>(null);
   const unsubClosure = useRef<(() => void) | null>(null);
+  const unsubAllBalance = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
     if (!uid) {
-      setNotAssigned(true);
+      setNotFound(true);
       setLoading(false);
       return;
     }
@@ -157,40 +162,59 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
 
     async function init() {
       try {
-      // Admin users can access any event without assignment check
-      const [ev, assigned] = await Promise.all([
-        getEvent(id),
-        isAdmin ? Promise.resolve(true) : isUserAssignedToEvent(uid!, id),
-      ]);
+        const [ev, allProfiles] = await Promise.all([
+          getEvent(id),
+          getAllCashControlProfiles(),
+        ]);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (!ev) { setNotFound(true); setLoading(false); return; }
-      if (!assigned) { setNotAssigned(true); setLoading(false); return; }
+        if (!ev) { setNotFound(true); setLoading(false); return; }
+        setEvent(ev);
 
-      setEvent(ev);
-      setLoading(false);
+        // Build name map for attribution
+        const nameMap = new Map<string, string>(
+          allProfiles.map(p => [p.uid, p.fullName || p.email])
+        );
+        if (uid && displayName && !nameMap.has(uid)) nameMap.set(uid, displayName);
+        setProfileNames(nameMap);
 
-      // Live balance (only meaningful for team/own data; admin will see same for now)
-      unsubBalance.current = subscribeToEventBalance(
-        id,
-        uid!,
-        (bal, txns) => {
-          if (!mounted) return;
-          setBalance(bal);
-          setTransactions(txns);
-        }
-      );
+        setLoading(false);
 
-      // Live closure
-      unsubClosure.current = subscribeToClosureForUserEvent(
-        uid!,
-        id,
-        cl => {
-          if (!mounted) return;
-          setClosure(cl);
-        }
-      );
+        // Live personal balance
+        unsubBalance.current = subscribeToEventBalance(
+          id,
+          uid!,
+          (bal, txns) => {
+            if (!mounted) return;
+            setBalance(bal);
+            setTransactions(txns);
+          }
+        );
+
+        // Live closure
+        unsubClosure.current = subscribeToClosureForUserEvent(
+          uid!,
+          id,
+          cl => {
+            if (!mounted) return;
+            setClosure(cl);
+          }
+        );
+
+        // Live all-users balance for team report
+        unsubAllBalance.current = subscribeToAllUsersEventBalance(
+          id,
+          (summaries, allTxns) => {
+            if (!mounted) return;
+            const withNames = allTxns.map(t => ({
+              ...t,
+              userName: t.userId ? (nameMap.get(t.userId) || undefined) : undefined,
+            }));
+            setTeamSummaries(summaries);
+            setAllTransactions(withNames);
+          }
+        );
       } catch {
         if (mounted) setLoading(false);
       }
@@ -202,6 +226,7 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
       mounted = false;
       unsubBalance.current?.();
       unsubClosure.current?.();
+      unsubAllBalance.current?.();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, uid, id]);
@@ -231,15 +256,6 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
     );
   }
 
-  if (notAssigned) {
-    return (
-      <ErrorScreen
-        message="No tienes acceso a este evento."
-        back="/area-planner/cash-control"
-      />
-    );
-  }
-
   if (!event || !uid) return null;
 
   // ── Derived state ──────────────────────────────────────────────────────────
@@ -253,6 +269,10 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
   const backHref = isAdmin
     ? `/area-planner/cash-control/admin/eventos/${id}`
     : '/area-planner/cash-control';
+
+  // Other users' transactions (for team section)
+  const otherUsersTransactions = allTransactions.filter(t => t.userId !== uid);
+  const hasTeamData = teamSummaries.length > 1;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -315,8 +335,71 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
         {/* ── Main content ──────────────────────────────────────────────── */}
         <main className="max-w-lg mx-auto px-4 py-5 space-y-5">
 
-          {/* Balance cards */}
+          {/* Personal balance cards */}
           <SummaryCards balance={balance} />
+
+          {/* Team summary — only shown when multiple users have data */}
+          {hasTeamData && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="size-3.5" style={{ color: 'var(--tqf-muted)' }} />
+                <p
+                  className="text-xs uppercase tracking-widest"
+                  style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+                >
+                  Resumen del equipo
+                </p>
+              </div>
+              <div className="space-y-2">
+                {teamSummaries.map(s => {
+                  const name = profileNames.get(s.userId) || s.userId;
+                  const isMe = s.userId === uid;
+                  const companyOwes = s.netBalance < 0;
+                  const userOwes = s.netBalance > 0;
+                  return (
+                    <div
+                      key={s.userId}
+                      className="rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
+                      style={{
+                        background: 'white',
+                        border: `1px solid ${isMe ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
+                      }}
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className="text-sm font-medium truncate"
+                          style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}
+                        >
+                          {name}{isMe ? ' (tú)' : ''}
+                        </p>
+                        <p
+                          className="text-xs mt-0.5"
+                          style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+                        >
+                          Recibido ${formatCurrency(s.totalReceived)} · Gastado ${formatCurrency(s.totalSpent)}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p
+                          className="text-sm font-semibold"
+                          style={{
+                            color: companyOwes ? '#166534' : userOwes ? '#991b1b' : 'var(--tqf-muted)',
+                            fontFamily: 'var(--font-body)',
+                          }}
+                        >
+                          {companyOwes
+                            ? `Empresa debe $${formatCurrency(Math.abs(s.netBalance))}`
+                            : userOwes
+                            ? `Devolver $${formatCurrency(s.netBalance)}`
+                            : 'Cuadrado'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* Action buttons — hidden when closed */}
           {!isClosed && (
@@ -373,13 +456,13 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
             </div>
           )}
 
-          {/* Transaction list */}
+          {/* Personal transaction list */}
           <section>
             <p
               className="text-xs uppercase tracking-widest mb-3"
               style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
             >
-              Últimos movimientos
+              Mis movimientos
             </p>
             <TransactionList
               transactions={transactions}
@@ -390,6 +473,22 @@ const [event, setEvent] = useState<CashControlEvent | null>(null);
               onDeletePhoto={!isClosed ? handleDeletePhoto : undefined}
             />
           </section>
+
+          {/* Other users' transactions */}
+          {otherUsersTransactions.length > 0 && (
+            <section>
+              <p
+                className="text-xs uppercase tracking-widest mb-3"
+                style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+              >
+                Movimientos de compañeros
+              </p>
+              <TransactionList
+                transactions={otherUsersTransactions}
+                maxVisible={Infinity}
+              />
+            </section>
+          )}
         </main>
       </div>
 

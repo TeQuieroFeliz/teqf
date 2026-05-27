@@ -41,7 +41,7 @@ export function CashControlAuthContextProvider({ children }: { children: ReactNo
         return;
       }
       try {
-        const tokenResult = await user.getIdTokenResult(false);
+        const tokenResult = await user.getIdTokenResult(true);
         const role = (tokenResult.claims.cashControlRole as CashControlRole) ?? null;
         setState({
           isLoading: false,

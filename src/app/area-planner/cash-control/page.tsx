@@ -2,7 +2,7 @@
 
 import { useCashControlAuth } from '@/context/CashControlAuthContext';
 import { isCashControlAdmin } from '@/lib/cash-control/permissions';
-import { getAssignedEvents } from '@/lib/cash-control/firestore';
+import { getAllEvents } from '@/lib/cash-control/firestore';
 import { CashControlEvent } from '@/lib/cash-control/types';
 import { CreateEventSheet } from '@/components/cash-control/CreateEventSheet';
 import { Loader2, Calendar, ArrowLeft, ArrowRight, Plus } from 'lucide-react';
@@ -30,7 +30,7 @@ export default function CashControlIndexPage() {
       return;
     }
 
-    getAssignedEvents(uid)
+    getAllEvents()
       .then(evs => {
         setEvents(evs.filter(e => e.status === 'active'));
       })

@@ -95,12 +95,26 @@ export function TransactionList({ transactions, maxVisible = 5, onEdit, onDelete
                 >
                   {isReceived ? '+' : '-'}${formatCurrency(row.amount)}
                 </p>
-                <p
-                  className="text-xs flex-shrink-0"
-                  style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-                >
-                  {formatDate(row.date, row.createdAt)}
-                </p>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {row.userName && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full"
+                      style={{
+                        background: 'var(--tqf-cipria-light)',
+                        color: 'var(--tqf-bordeaux)',
+                        fontFamily: 'var(--font-body)',
+                      }}
+                    >
+                      {row.userName}
+                    </span>
+                  )}
+                  <p
+                    className="text-xs"
+                    style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+                  >
+                    {formatDate(row.date, row.createdAt)}
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center flex-wrap gap-1.5 mt-1">
