@@ -1,9 +1,8 @@
 'use client';
 
 import { auth, db } from '@/firebase/client';
-import { getPlannerByEmail, updatePlannerLastLogin } from '@/actions/planner/planner-auth';
+import { updatePlannerLastLogin } from '@/actions/planner/planner-auth';
 import { getPlannerRequestByEmail } from '@/actions/planner/planner-requests';
-import { getAdminByEmail } from '@/actions/admin/user-crud';
 import { PlannerUser } from '@/lib/planner-types';
 import { AdminUser } from '@/lib/admin-types';
 import {
@@ -11,7 +10,17 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 type PlannerAuthContextType = {
@@ -28,6 +37,14 @@ type PlannerAuthContextType = {
 
 const PlannerAuthContext = createContext<PlannerAuthContextType | null>(null);
 
+async function fetchPlannerByEmail(email: string): Promise<PlannerUser | null> {
+  const snap = await getDocs(
+    query(collection(db, 'planners'), where('email', '==', email), where('active', '==', true), limit(1))
+  );
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, ...snap.docs[0].data() } as PlannerUser;
+}
+
 export function PlannerAuthContextProvider({ children }: { children: React.ReactNode }) {
   const [plannerUser, setPlannerUser] = useState<PlannerUser | null>(null);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
@@ -39,11 +56,8 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       try {
         if (user) {
-          const [planner, adminSnap] = await Promise.all([
-            user.email ? getPlannerByEmail(user.email) : Promise.resolve(null),
-            getDoc(doc(db, 'admins', user.uid)),
-          ]);
-
+          // 1. Admin check first (client-side, no serverless cold-start)
+          const adminSnap = await getDoc(doc(db, 'admins', user.uid));
           const admin: AdminUser | null =
             adminSnap.exists() && adminSnap.data()?.active === true
               ? ({ id: adminSnap.id, ...adminSnap.data() } as AdminUser)
@@ -53,10 +67,19 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
             updateDoc(doc(db, 'admins', user.uid), { lastLogin: serverTimestamp() }).catch(console.error);
           }
 
+          // 2. Skip planners check for superadmin (they have no planner record)
+          let planner: PlannerUser | null = null;
+          if (user.email && admin?.role !== 'superadmin') {
+            planner = await fetchPlannerByEmail(user.email);
+            if (planner) {
+              // fire-and-forget, doesn't block rendering
+              updatePlannerLastLogin(user.email).catch(console.error);
+            }
+          }
+
           setPlannerUser(planner);
           setAdminUser(admin);
           setMustChangePassword(planner?.mustChangePassword ?? false);
-          if (planner && user.email) await updatePlannerLastLogin(user.email);
         } else {
           setPlannerUser(null);
           setAdminUser(null);
@@ -76,7 +99,7 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const refreshPlannerUser = async () => {
     const user = auth.currentUser;
     if (!user?.email) return;
-    const planner = await getPlannerByEmail(user.email);
+    const planner = await fetchPlannerByEmail(user.email);
     setPlannerUser(planner);
     setMustChangePassword(planner?.mustChangePassword ?? false);
   };
@@ -84,30 +107,23 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const loginWithEmail = async (email: string, password: string) => {
     setAuthError(null);
     try {
-      const planner = await getPlannerByEmail(email);
+      // Client-side planners check (works after Firestore rules update)
+      const planner = await fetchPlannerByEmail(email);
 
       if (!planner) {
-        // Check if it's an admin user
-        const admin = await getAdminByEmail(email);
-        if (admin) {
-          if (admin.role === 'superadmin') {
-            await signInWithEmailAndPassword(auth, email, password);
-            return;
-          } else {
-            setAuthError('Esta área es exclusiva para planners.');
-            return;
-          }
-        }
-
-        // Not in planners or admins — check request status
+        // Not a planner. Check for pending/rejected requests for clear error messages.
+        // If the user is a superadmin, sign-in will succeed and onAuthStateChanged handles it.
         const request = await getPlannerRequestByEmail(email);
         if (request?.status === 'pending') {
           setAuthError('La tua richiesta è in attesa di approvazione. Ti contatteremo presto.');
-        } else if (request?.status === 'rejected') {
-          setAuthError('La tua richiesta è stata rifiutata. Contatta l\'amministratore.');
-        } else {
-          setAuthError('Non sei autorizzata. Contatta l\'amministratore.');
+          return;
         }
+        if (request?.status === 'rejected') {
+          setAuthError('La tua richiesta è stata rifiutata. Contatta l\'amministratore.');
+          return;
+        }
+        // Could be a superadmin — attempt sign-in and let onAuthStateChanged + guard decide
+        await signInWithEmailAndPassword(auth, email, password);
         return;
       }
 
@@ -131,10 +147,12 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
       }
     } catch (err: any) {
       const msg =
-        err.code === 'auth/wrong-password'
+        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
           ? 'Email o password errata.'
           : err.code === 'auth/invalid-email'
           ? 'Email non valida.'
+          : err.code === 'auth/user-not-found'
+          ? 'Non sei autorizzata. Contatta l\'amministratore.'
           : 'Errore durante il login. Riprova.';
       setAuthError(msg);
     }

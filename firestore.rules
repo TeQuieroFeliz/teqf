@@ -92,10 +92,13 @@ service cloud.firestore {
       allow write: if canEdit('portfolio');
     }
 
-    // /planners/{uid} — readable by the planner themselves or any active admin.
-    match /planners/{uid} {
-      allow read:  if isOwner(uid) || isAdmin();
-      allow write: if isOwner(uid) || isAdmin();
+    // /planners/{docId} — readable by the planner (email match) or any active admin.
+    // docId is an auto-generated ID, not the Firebase UID, so isOwner(docId) is kept
+    // for legacy compatibility; email match covers the normal planner case.
+    match /planners/{docId} {
+      allow read:  if isOwner(docId) || isAdmin()
+        || (isAuth() && resource.data.email == request.auth.token.email);
+      allow write: if isOwner(docId) || isAdmin();
     }
 
     // /plannerRequests/* — write-only for anonymous (contact form); admin can read.

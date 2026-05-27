@@ -1,6 +1,8 @@
 'use client';
 
-import { deletePlannerEvent, getAllPlannerEvents, getPlannerEvents } from '@/actions/planner/planner-event-crud';
+import { deletePlannerEvent, getPlannerEvents } from '@/actions/planner/planner-event-crud';
+import { db } from '@/firebase/client';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
 import { Lang, LANG_OPTIONS, T } from '@/lib/planner-i18n';
@@ -95,8 +97,8 @@ function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAllPlannerEvents()
-      .then(setEvents)
+    getDocs(query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc')))
+      .then(snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerEvent))))
       .finally(() => setLoading(false));
   }, []);
 

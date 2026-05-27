@@ -1,11 +1,12 @@
 'use client';
 
-import { addPlanner, deletePlanner, getAllPlanners, togglePlannerActive } from '@/actions/planner/planner-auth';
-import { getAllPlannerEvents } from '@/actions/planner/planner-event-crud';
-import { approvePlannerRequest, getPendingRequests, rejectPlannerRequest } from '@/actions/planner/planner-requests';
-import { getAllAdminUsers, grantPlannerAdminAccess } from '@/actions/admin/user-crud';
+import { addPlanner, deletePlanner, togglePlannerActive } from '@/actions/planner/planner-auth';
+import { approvePlannerRequest, rejectPlannerRequest } from '@/actions/planner/planner-requests';
+import { grantPlannerAdminAccess } from '@/actions/admin/user-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
-import { AdminPermissions, AdminRole, ALL_PERMISSIONS, PERMISSION_LEVELS, PLANNER_DEFAULT_PERMISSIONS } from '@/lib/admin-types';
+import { db } from '@/firebase/client';
+import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { AdminPermissions, AdminRole, AdminUser, ALL_PERMISSIONS, PERMISSION_LEVELS, PLANNER_DEFAULT_PERMISSIONS } from '@/lib/admin-types';
 import { CITIES, PlannerEvent, PlannerRequest, PlannerUser } from '@/lib/planner-types';
 import {
   ArrowLeft,
@@ -100,9 +101,18 @@ export default function AdminPlannersPage() {
   const [resetting, setResetting]         = useState(false);
 
   useEffect(() => {
-    Promise.all([getAllPlanners(), getAllPlannerEvents(), getPendingRequests(), getAllAdminUsers()])
-      .then(([p, e, r, a]) => { setPlanners(p); setEvents(e); setRequests(r); setAdminUsers(a); })
-      .finally(() => setLoading(false));
+    const toIso = (v: any) => (typeof v?.toDate === 'function' ? v.toDate().toISOString() : v ?? null);
+    Promise.all([
+      getDocs(query(collection(db, 'planners'), orderBy('createdAt', 'desc'))),
+      getDocs(query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc'))),
+      getDocs(query(collection(db, 'plannerRequests'), where('status', '==', 'pending'))),
+      getDocs(query(collection(db, 'admins'), orderBy('createdAt', 'desc'))),
+    ]).then(([pSnap, eSnap, rSnap, aSnap]) => {
+      setPlanners(pSnap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toIso(d.data().createdAt), lastLogin: toIso(d.data().lastLogin) } as PlannerUser)));
+      setEvents(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerEvent)));
+      setRequests(rSnap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toIso(d.data().createdAt) ?? d.data().createdAt } as PlannerRequest)).sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '')));
+      setAdminUsers(aSnap.docs.map(d => ({ id: d.id, email: d.data().email, name: d.data().name, role: d.data().role, permissions: d.data().permissions, active: d.data().active, mustChangePassword: d.data().mustChangePassword, createdAt: toIso(d.data().createdAt), lastLogin: toIso(d.data().lastLogin) } as AdminUser)));
+    }).finally(() => setLoading(false));
   }, []);
 
   if (!adminUser) return null;
@@ -120,8 +130,9 @@ export default function AdminPlannersPage() {
       await callPlannerAdminApi(newEmail.trim().toLowerCase(), newPassword);
       // 2. Save in Firestore
       await addPlanner(newEmail.trim().toLowerCase(), newName.trim());
-      const updated = await getAllPlanners();
-      setPlanners(updated);
+      const toIso = (v: any) => (typeof v?.toDate === 'function' ? v.toDate().toISOString() : v ?? null);
+      const pSnap = await getDocs(query(collection(db, 'planners'), orderBy('createdAt', 'desc')));
+      setPlanners(pSnap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toIso(d.data().createdAt), lastLogin: toIso(d.data().lastLogin) } as PlannerUser)));
       setNewEmail(''); setNewName(''); setNewPassword('');
       setShowAddForm(false);
       toast.success('Planner aggiunta. La password temporanea è stata impostata.');
@@ -196,8 +207,9 @@ export default function AdminPlannersPage() {
     }
 
     setRequests((prev) => prev.filter((r) => r.id !== req.id));
-    const updated = await getAllPlanners();
-    setPlanners(updated);
+    const toIso2 = (v: any) => (typeof v?.toDate === 'function' ? v.toDate().toISOString() : v ?? null);
+    const pSnap2 = await getDocs(query(collection(db, 'planners'), orderBy('createdAt', 'desc')));
+    setPlanners(pSnap2.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toIso2(d.data().createdAt), lastLogin: toIso2(d.data().lastLogin) } as PlannerUser)));
     setApprovalReq(null);
     setApproving(false);
 
@@ -226,8 +238,9 @@ export default function AdminPlannersPage() {
       if (editCCRole !== 'none') {
         await setCashControlRole(editPermTarget.email, fullName, editCCRole);
       }
-      const updated = await getAllAdminUsers();
-      setAdminUsers(updated);
+      const toIso3 = (v: any) => (typeof v?.toDate === 'function' ? v.toDate().toISOString() : v ?? null);
+      const aSnap3 = await getDocs(query(collection(db, 'admins'), orderBy('createdAt', 'desc')));
+      setAdminUsers(aSnap3.docs.map(d => ({ id: d.id, email: d.data().email, name: d.data().name, role: d.data().role, permissions: d.data().permissions, active: d.data().active, mustChangePassword: d.data().mustChangePassword, createdAt: toIso3(d.data().createdAt), lastLogin: toIso3(d.data().lastLogin) } as AdminUser)));
       toast.success(`Permessi di ${editPermTarget.name} aggiornati.`);
       setEditPermTarget(null);
     } else {

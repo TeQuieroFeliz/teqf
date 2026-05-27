@@ -1,7 +1,9 @@
 'use client';
 
-import { getAllPlannerEvents, deletePlannerEvent, updatePlannerEventStatus } from '@/actions/planner/planner-event-crud';
+import { deletePlannerEvent, updatePlannerEventStatus } from '@/actions/planner/planner-event-crud';
 import { useAdminAuth } from '@/context/AdminAuthContext';
+import { db } from '@/firebase/client';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { PlannerEvent } from '@/lib/planner-types';
 import {
   ArrowLeft,
@@ -30,10 +32,9 @@ export default function AdminEventsPage() {
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    getAllPlannerEvents().then(evs => {
-      setEvents(evs);
-      setLoading(false);
-    });
+    getDocs(query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc')))
+      .then(snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerEvent))))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = events.filter(ev => {

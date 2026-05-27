@@ -3,14 +3,14 @@
 import {
   createAdminUser,
   deleteAdminUser,
-  getAllAdminUsers,
   grantPlannerAdminAccess,
   revokeAdminAccess,
   toggleAdminUserActive,
   updateAdminUser,
 } from '@/actions/admin/user-crud';
-import { getAllPlanners } from '@/actions/planner/planner-auth';
 import { useAdminAuth } from '@/context/AdminAuthContext';
+import { db } from '@/firebase/client';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import {
   AdminPermissionLevel,
   AdminPermissions,
@@ -315,9 +315,13 @@ export default function AdminUsersPage() {
 
   async function loadData() {
     setLoading(true);
-    const [users, pl] = await Promise.all([getAllAdminUsers(), getAllPlanners()]);
-    setAdminUsers(users);
-    setPlanners(pl);
+    const toIso = (v: any) => (typeof v?.toDate === 'function' ? v.toDate().toISOString() : v ?? null);
+    const [aSnap, pSnap] = await Promise.all([
+      getDocs(query(collection(db, 'admins'), orderBy('createdAt', 'desc'))),
+      getDocs(query(collection(db, 'planners'), orderBy('createdAt', 'desc'))),
+    ]);
+    setAdminUsers(aSnap.docs.map(d => ({ id: d.id, email: d.data().email, name: d.data().name, role: d.data().role, permissions: d.data().permissions, active: d.data().active, mustChangePassword: d.data().mustChangePassword, createdAt: toIso(d.data().createdAt), lastLogin: toIso(d.data().lastLogin) } as AdminUser)));
+    setPlanners(pSnap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toIso(d.data().createdAt), lastLogin: toIso(d.data().lastLogin) } as PlannerUser)));
     setLoading(false);
   }
 
