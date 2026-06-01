@@ -291,13 +291,16 @@ function SuperAdminDashboard() {
                 const furnitureCount = (evt.days?.flatMap((d) => d.selectedFurniture ?? []) ?? evt.selectedFurniture ?? []).reduce((s, i) => s + i.quantity, 0);
                 const flowerCount    = (evt.days?.flatMap((d) => d.selectedFlowers ?? [])   ?? evt.selectedFlowers   ?? []).reduce((s, i) => s + i.quantity, 0);
                 return (
-                  <Link
+                  <div
                     key={evt.id}
-                    href={`/planner/planners/events/${evt.id}`}
-                    className="flex items-center justify-between rounded-xl px-4 py-3 transition-opacity hover:opacity-80 active:scale-[0.99]"
-                    style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
+                    className="flex items-center justify-between rounded-xl px-4 py-3"
+                    style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <Link
+                      href={`/planner/planners/events/${evt.id}`}
+                      className="flex items-center gap-3 min-w-0 flex-1 transition-opacity hover:opacity-80"
+                      style={{ textDecoration: 'none' }}
+                    >
                       <div
                         className="p-2 rounded-lg flex-shrink-0"
                         style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
@@ -337,18 +340,29 @@ function SuperAdminDashboard() {
                           )}
                         </div>
                       </div>
+                    </Link>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      <Link
+                        href={`/planner/projects/${evt.id}/cash-control`}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-80"
+                        style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
+                        title="Gastos"
+                      >
+                        <Wallet className="size-3" />
+                        <span className="hidden sm:inline">Gastos</span>
+                      </Link>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-full"
+                        style={
+                          evt.status === 'submitted'
+                            ? { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
+                            : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }
+                        }
+                      >
+                        {evt.status === 'submitted' ? 'Inviato' : 'Bozza'}
+                      </span>
                     </div>
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-3"
-                      style={
-                        evt.status === 'submitted'
-                          ? { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
-                          : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }
-                      }
-                    >
-                      {evt.status === 'submitted' ? 'Inviato' : 'Bozza'}
-                    </span>
-                  </Link>
+                  </div>
                 );
               })}
             </div>

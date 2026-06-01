@@ -1,0 +1,952 @@
+'use client';
+
+import {
+  addCashMovement,
+  approveCashMovement,
+  deleteCashMovement,
+  updateCashMovement,
+  updateEventCashBudget,
+} from '@/actions/planner/event-cash-control';
+import { getPlannerEvent } from '@/actions/planner/planner-event-crud';
+import { db, storage } from '@/firebase/client';
+import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import {
+  CASH_CATEGORIES,
+  CashControlCategory,
+  CashMovement,
+  CashPaymentMethod,
+  PlannerEvent,
+} from '@/lib/planner-types';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
+import {
+  ArrowLeft,
+  Camera,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Edit2,
+  Loader2,
+  PencilLine,
+  ShieldCheck,
+  Trash2,
+  Wallet,
+  X,
+} from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function nowHHMM() {
+  return new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+function fmtCurrency(n: number) {
+  return `$${Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
+}
+function fmtDate(dateStr: string) {
+  const today = todayISO();
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (dateStr === today) return 'Oggi';
+  if (dateStr === yesterday) return 'Ieri';
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+}
+
+// ── sub-components ────────────────────────────────────────────────────────────
+
+function BalanceCard({
+  movements,
+  budget,
+  onEditBudget,
+  canAdmin,
+}: {
+  movements: CashMovement[];
+  budget: number;
+  onEditBudget: () => void;
+  canAdmin: boolean;
+}) {
+  const totalSpent   = movements.reduce((s, m) => s + m.amount, 0);
+  const totalPending = movements.filter(m => m.status === 'pending').reduce((s, m) => s + m.amount, 0);
+  const balance      = budget - totalSpent;
+  const hasBudget    = budget > 0;
+
+  return (
+    <div
+      className="mx-4 mt-4 rounded-3xl px-5 pt-5 pb-4"
+      style={{
+        background: hasBudget
+          ? balance >= 0 ? '#0f2e1a' : '#2a0e0e'
+          : '#1a0f0a',
+        color: 'white',
+      }}
+    >
+      {/* Budget row */}
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs uppercase tracking-widest opacity-50" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.16em' }}>
+          {hasBudget ? 'Saldo attuale' : 'Spesa totale'}
+        </p>
+        {canAdmin && (
+          <button
+            onClick={onEditBudget}
+            className="flex items-center gap-1 text-xs opacity-50 hover:opacity-90 transition-opacity"
+            style={{ fontFamily: 'var(--font-body)' }}
+          >
+            <PencilLine className="size-3" />
+            {hasBudget ? 'budget' : 'set budget'}
+          </button>
+        )}
+      </div>
+
+      {/* Big balance */}
+      <p
+        className="text-5xl font-light leading-none mb-1"
+        style={{
+          fontFamily: 'var(--font-display)',
+          color: hasBudget
+            ? balance >= 0 ? '#6aff9e' : '#ff6a6a'
+            : 'white',
+        }}
+      >
+        {hasBudget ? (balance < 0 ? '-' : '') + fmtCurrency(balance) : fmtCurrency(totalSpent)}
+      </p>
+
+      {/* Sub-stats */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
+        {hasBudget && (
+          <span className="text-xs opacity-60" style={{ fontFamily: 'var(--font-body)' }}>
+            Budget {fmtCurrency(budget)}
+          </span>
+        )}
+        <span className="text-xs opacity-60" style={{ fontFamily: 'var(--font-body)' }}>
+          Gastato {fmtCurrency(totalSpent)}
+        </span>
+        {totalPending > 0 && (
+          <span className="text-xs" style={{ color: '#fbbf24', fontFamily: 'var(--font-body)' }}>
+            In attesa {fmtCurrency(totalPending)}
+          </span>
+        )}
+        <span className="text-xs opacity-50" style={{ fontFamily: 'var(--font-body)' }}>
+          {movements.length} movimenti
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Movement row ──────────────────────────────────────────────────────────────
+
+function MovementRow({
+  movement,
+  canAdmin,
+  canEdit,
+  onTap,
+}: {
+  movement: CashMovement;
+  canAdmin: boolean;
+  canEdit: boolean;
+  onTap: () => void;
+}) {
+  const cat = CASH_CATEGORIES.find(c => c.value === movement.category);
+
+  return (
+    <button
+      onClick={onTap}
+      className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors active:scale-[0.99]"
+      style={{ borderBottom: '1px solid var(--tqf-beige-border)', background: 'white' }}
+      disabled={!canEdit && !canAdmin}
+    >
+      {/* Category icon */}
+      <div
+        className="size-10 rounded-2xl flex items-center justify-center text-lg flex-shrink-0"
+        style={{ background: 'var(--tqf-cipria-light)' }}
+      >
+        {cat?.icon ?? '📦'}
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+            {cat?.label ?? movement.category}
+          </span>
+          {movement.paymentMethod === 'tarjeta'
+            ? <CreditCard className="size-3.5 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+            : <Wallet className="size-3.5 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+          }
+          <span
+            className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+            style={movement.status === 'approved'
+              ? { background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }
+              : { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
+            }
+          >
+            {movement.status === 'approved' ? '✓' : '·'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          {movement.note && (
+            <p className="text-xs truncate max-w-[160px]" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              {movement.note}
+            </p>
+          )}
+          <p className="text-xs flex-shrink-0" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            {fmtDate(movement.date)} {movement.time}
+          </p>
+        </div>
+      </div>
+
+      {/* Amount */}
+      <div className="flex-shrink-0 text-right">
+        <p className="text-base font-semibold" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+          -{fmtCurrency(movement.amount)}
+        </p>
+        <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+          {movement.registeredByName?.split(' ')[0]}
+        </p>
+      </div>
+
+      {(canEdit || canAdmin) && (
+        <ChevronDown className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+      )}
+    </button>
+  );
+}
+
+// ── Edit / Detail modal ───────────────────────────────────────────────────────
+
+function EditModal({
+  movement,
+  eventId,
+  canAdmin,
+  onClose,
+  onUpdated,
+  onDeleted,
+}: {
+  movement: CashMovement;
+  eventId: string;
+  canAdmin: boolean;
+  onClose: () => void;
+  onUpdated: () => void;
+  onDeleted: () => void;
+}) {
+  const [date, setDate]       = useState(movement.date);
+  const [time, setTime]       = useState(movement.time);
+  const [amount, setAmount]   = useState(String(movement.amount));
+  const [category, setCategory] = useState<CashControlCategory>(movement.category);
+  const [method, setMethod]   = useState<CashPaymentMethod>(movement.paymentMethod);
+  const [note, setNote]       = useState(movement.note ?? '');
+  const [saving, setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [approving, setApproving] = useState(false);
+
+  const cat = CASH_CATEGORIES.find(c => c.value === movement.category);
+
+  async function handleSave() {
+    const parsed = parseFloat(amount.replace(',', '.'));
+    if (isNaN(parsed) || parsed <= 0) { toast.error('Importo non valido.'); return; }
+    setSaving(true);
+    const result = await updateCashMovement(eventId, movement.id, {
+      date, time,
+      ...(canAdmin ? { amount: parsed, category, paymentMethod: method, note } : {}),
+    });
+    if (result.success) { toast.success('Aggiornato.'); onUpdated(); onClose(); }
+    else toast.error(result.error ?? 'Errore aggiornamento.');
+    setSaving(false);
+  }
+
+  async function handleDelete() {
+    if (!confirm('Eliminare questo movimento?')) return;
+    setDeleting(true);
+    const result = await deleteCashMovement(eventId, movement.id);
+    if (result.success) { toast.success('Movimento eliminato.'); onDeleted(); onClose(); }
+    else toast.error(result.error ?? 'Errore eliminazione.');
+    setDeleting(false);
+  }
+
+  async function handleApprove() {
+    setApproving(true);
+    const result = await approveCashMovement(eventId, movement.id);
+    if (result.success) { toast.success('Approvato.'); onUpdated(); onClose(); }
+    else toast.error(result.error ?? 'Errore approvazione.');
+    setApproving(false);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.5rem 0.75rem',
+    borderRadius: '0.625rem',
+    border: '1px solid var(--tqf-beige-border)',
+    fontFamily: 'var(--font-body)',
+    fontSize: '0.875rem',
+    color: 'var(--tqf-dark)',
+    background: 'white',
+    outline: 'none',
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-t-3xl p-5 pb-8 space-y-4"
+        style={{ background: 'white', maxHeight: '90vh', overflowY: 'auto' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="flex justify-center mb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{cat?.icon ?? '📦'}</span>
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              {fmtCurrency(movement.amount)} — {cat?.label}
+            </h2>
+          </div>
+          <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}>
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {/* Amount (SuperAdmin only) */}
+        {canAdmin && (
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Importo</p>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              style={{ ...inputStyle, fontSize: '1.125rem', fontWeight: 600 }}
+            />
+          </div>
+        )}
+
+        {/* Category (SuperAdmin only) */}
+        {canAdmin && (
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Categoria</p>
+            <div className="grid grid-cols-3 gap-2">
+              {CASH_CATEGORIES.map(c => (
+                <button
+                  key={c.value}
+                  onClick={() => setCategory(c.value)}
+                  className="flex items-center gap-1.5 px-2 py-2 rounded-xl text-sm transition-all"
+                  style={{
+                    border: `1px solid ${category === c.value ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
+                    background: category === c.value ? 'var(--tqf-cipria-light)' : 'white',
+                    color: category === c.value ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  <span>{c.icon}</span>
+                  <span className="text-xs truncate">{c.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Payment method (SuperAdmin only) */}
+        {canAdmin && (
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Metodo</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['tarjeta', 'efectivo'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setMethod(m)}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-all"
+                  style={{
+                    border: `1px solid ${method === m ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
+                    background: method === m ? 'var(--tqf-bordeaux)' : 'white',
+                    color: method === m ? 'white' : 'var(--tqf-muted)',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  {m === 'tarjeta' ? <CreditCard className="size-4" /> : <Wallet className="size-4" />}
+                  {m === 'tarjeta' ? 'Tarjeta' : 'Efectivo'}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Date + Time */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Data</p>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Ora</p>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+
+        {/* Note (SuperAdmin only) */}
+        {canAdmin && (
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Nota</p>
+            <input
+              type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Nota opzionale..."
+              style={inputStyle}
+            />
+          </div>
+        )}
+
+        {/* Receipt preview */}
+        {movement.receiptUrl && (
+          <div>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Ricevuta</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={movement.receiptUrl}
+              alt="Ricevuta"
+              className="w-full rounded-xl object-contain max-h-48"
+              style={{ border: '1px solid var(--tqf-beige-border)' }}
+            />
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+            Salva
+          </button>
+
+          {canAdmin && movement.status === 'pending' && (
+            <button
+              onClick={handleApprove}
+              disabled={approving}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontFamily: 'var(--font-body)' }}
+            >
+              {approving ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+            </button>
+          )}
+
+          {canAdmin && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontFamily: 'var(--font-body)' }}
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            </button>
+          )}
+        </div>
+
+        {/* Registered by info */}
+        <p className="text-xs text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+          Registrato da {movement.registeredByName} · {fmtDate(movement.date)} alle {movement.time}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Budget edit modal ─────────────────────────────────────────────────────────
+
+function BudgetModal({
+  eventId,
+  currentBudget,
+  onClose,
+  onSaved,
+}: {
+  eventId: string;
+  currentBudget: number;
+  onClose: () => void;
+  onSaved: (b: number) => void;
+}) {
+  const [value, setValue] = useState(currentBudget > 0 ? String(currentBudget) : '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const parsed = parseFloat(value.replace(',', '.'));
+    if (isNaN(parsed) || parsed < 0) { toast.error('Valore non valido.'); return; }
+    setSaving(true);
+    const result = await updateEventCashBudget(eventId, parsed);
+    if (result.success) { toast.success('Budget impostato.'); onSaved(parsed); onClose(); }
+    else toast.error(result.error ?? 'Errore.');
+    setSaving(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-sm rounded-t-3xl p-6 pb-8 space-y-4" style={{ background: 'white' }} onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center mb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+        <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+          Budget evento
+        </h2>
+        <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+          Importo totale disponibile per le spese di questo evento.
+        </p>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold" style={{ color: 'var(--tqf-muted)' }}>$</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder="0"
+            autoFocus
+            onKeyDown={e => e.key === 'Enter' && handleSave()}
+            className="w-full pl-8 pr-4 py-3 rounded-2xl text-2xl font-semibold outline-none"
+            style={{ border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)', background: 'var(--tqf-beige)' }}
+          />
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+          style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+        >
+          {saving && <Loader2 className="size-4 animate-spin" />}
+          Imposta budget
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function CashControlPage() {
+  const params = useParams();
+  const router = useRouter();
+  const eventId = params?.id as string;
+
+  const { plannerUser, isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
+
+  const [event, setEvent]       = useState<PlannerEvent | null>(null);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
+  const [budget, setBudget]     = useState(0);
+  const [eventLoading, setEventLoading] = useState(true);
+
+  // Form state
+  const [amount, setAmount]     = useState('');
+  const [method, setMethod]     = useState<CashPaymentMethod | null>(null);
+  const [category, setCategory] = useState<CashControlCategory | null>(null);
+  const [note, setNote]         = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Receipt upload
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pendingReceipt, setPendingReceipt] = useState<File | null>(null);
+  const [uploadingFor, setUploadingFor]     = useState<string | null>(null);
+
+  // Modals
+  const [editTarget, setEditTarget]   = useState<CashMovement | null>(null);
+  const [showBudget, setShowBudget]   = useState(false);
+  const [showAllMoves, setShowAllMoves] = useState(false);
+
+  // Load event once
+  useEffect(() => {
+    if (!eventId) return;
+    getPlannerEvent(eventId).then(e => {
+      if (!e) { router.replace('/planner'); return; }
+      setEvent(e);
+      setBudget((e as any).cashControlBudget ?? 0);
+      setEventLoading(false);
+    });
+  }, [eventId, router]);
+
+  // Real-time movements via onSnapshot
+  useEffect(() => {
+    if (!eventId) return;
+    const q = query(
+      collection(db, 'plannerEvents', eventId, 'cashControl'),
+      orderBy('timestamp', 'desc')
+    );
+    const unsub = onSnapshot(q, snap => {
+      setMovements(snap.docs.map(d => ({ id: d.id, ...d.data() } as CashMovement)));
+    });
+    return () => unsub();
+  }, [eventId]);
+
+  // Access control — wait for both auth and event to load
+  if (authLoading || eventLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
+        <Loader2 className="size-8 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+      </div>
+    );
+  }
+
+  // XB Planner: only their own events
+  const isOwnEvent = plannerUser?.id === event?.plannerId;
+  const canView = isSuperAdmin || canManageCashControl || (canCreateProjects && isOwnEvent);
+  const canAdd  = isSuperAdmin || canManageCashControl;
+
+  if (!canView) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--tqf-beige)' }}>
+        <div className="text-center">
+          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>Accesso non autorizzato</p>
+          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>← Dashboard</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const displayedMoves = showAllMoves ? movements : movements.slice(0, 10);
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
+  async function handleSubmit() {
+    const parsed = parseFloat(amount.replace(',', '.'));
+    if (!parsed || parsed <= 0) { toast.error('Inserisci un importo valido.'); return; }
+    if (!method)   { toast.error('Seleziona il metodo di pagamento.'); return; }
+    if (!category) { toast.error('Seleziona una categoria.'); return; }
+    if (!plannerUser) return;
+
+    setSubmitting(true);
+    try {
+      const now = new Date();
+      const result = await addCashMovement(eventId, {
+        amount: parsed,
+        paymentMethod: method,
+        category,
+        note: note.trim(),
+        registeredBy: plannerUser.id,
+        registeredByName: plannerUser.name + (plannerUser.lastName ? ' ' + plannerUser.lastName : ''),
+        date: now.toISOString().slice(0, 10),
+        time: now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      });
+
+      if (!result.success) { toast.error(result.error ?? 'Errore.'); return; }
+
+      // Upload pending receipt if any
+      if (pendingReceipt && result.id) {
+        setUploadingFor(result.id);
+        try {
+          const sRef = storageRef(storage, `plannerCashControl/${eventId}/${result.id}/${Date.now()}_${pendingReceipt.name}`);
+          const task = uploadBytesResumable(sRef, pendingReceipt, { contentType: pendingReceipt.type });
+          await new Promise<void>((res, rej) => {
+            task.on('state_changed', () => {}, rej, async () => {
+              const url = await getDownloadURL(task.snapshot.ref);
+              await updateCashMovement(eventId, result.id!, { receiptUrl: url });
+              res();
+            });
+          });
+        } catch {
+          toast.warning('Spesa registrata, ma caricamento ricevuta fallito.');
+        }
+        setUploadingFor(null);
+        setPendingReceipt(null);
+        if (fileRef.current) fileRef.current.value = '';
+      }
+
+      toast.success('Movimento registrato.');
+      setAmount('');
+      setMethod(null);
+      setCategory(null);
+      setNote('');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleReceiptPick(files: FileList | null) {
+    if (!files || !files[0]) return;
+    const file = files[0];
+    if (!file.type.startsWith('image/')) { toast.error('Seleziona un file immagine.'); return; }
+    if (file.size > 8 * 1024 * 1024) { toast.error('Immagine troppo grande (max 8 MB).'); return; }
+    setPendingReceipt(file);
+    toast.success(`📎 ${file.name} allegata.`);
+  }
+
+  const canEditMove = (m: CashMovement) =>
+    isSuperAdmin || (canManageCashControl && m.registeredBy === plannerUser?.id);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen pb-8" style={{ background: 'var(--tqf-beige)' }}>
+
+      {/* Header */}
+      <header
+        className="sticky top-0 z-10 flex items-center justify-between px-4 py-3"
+        style={{ background: 'white', borderBottom: '1px solid var(--tqf-beige-border)' }}
+      >
+        <Link
+          href={`/planner/events/${eventId}`}
+          className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
+          style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+        >
+          <ArrowLeft className="size-4" />
+          <span className="hidden xs:inline">Evento</span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <p
+            className="text-sm font-medium truncate max-w-[160px]"
+            style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}
+          >
+            {event?.eventCode || event?.clientName || 'Evento'}
+          </p>
+          <span
+            className="text-xs px-2 py-0.5 rounded-full"
+            style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
+          >
+            Gastos
+          </span>
+        </div>
+
+        <div className="w-16" /> {/* spacer */}
+      </header>
+
+      {/* Balance card */}
+      <BalanceCard
+        movements={movements}
+        budget={budget}
+        onEditBudget={() => setShowBudget(true)}
+        canAdmin={isSuperAdmin}
+      />
+
+      {/* Entry form — shown only if canAdd */}
+      {canAdd && (
+        <div
+          className="mx-4 mt-4 rounded-3xl p-5 space-y-4"
+          style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
+        >
+          {/* Amount input */}
+          <div className="relative">
+            <span
+              className="absolute left-5 top-1/2 -translate-y-1/2 text-3xl font-light"
+              style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-display)' }}
+            >
+              $
+            </span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={e => setAmount(e.target.value.replace(/[^0-9.,]/g, ''))}
+              placeholder="0"
+              className="w-full pl-10 pr-4 py-4 text-4xl font-light rounded-2xl outline-none text-center"
+              style={{
+                fontFamily: 'var(--font-display)',
+                color: 'var(--tqf-dark)',
+                background: 'var(--tqf-beige)',
+                border: '1px solid var(--tqf-beige-border)',
+                letterSpacing: '-0.01em',
+              }}
+            />
+            {amount.length > 0 && (
+              <button
+                onClick={() => setAmount('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2"
+                style={{ color: 'var(--tqf-muted)' }}
+              >
+                <X className="size-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Payment method */}
+          <div className="grid grid-cols-2 gap-2">
+            {(['tarjeta', 'efectivo'] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setMethod(method === m ? null : m)}
+                className="flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-medium transition-all"
+                style={{
+                  border: `1.5px solid ${method === m ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
+                  background: method === m ? 'var(--tqf-bordeaux)' : 'white',
+                  color: method === m ? 'white' : 'var(--tqf-muted)',
+                  fontFamily: 'var(--font-body)',
+                }}
+              >
+                {m === 'tarjeta'
+                  ? <CreditCard className="size-4" />
+                  : <Wallet className="size-4" />
+                }
+                {m === 'tarjeta' ? 'Tarjeta' : 'Efectivo'}
+              </button>
+            ))}
+          </div>
+
+          {/* Category chips */}
+          <div className="grid grid-cols-3 gap-2">
+            {CASH_CATEGORIES.map(c => (
+              <button
+                key={c.value}
+                onClick={() => setCategory(category === c.value ? null : c.value)}
+                className="flex flex-col items-center gap-1 py-2.5 px-2 rounded-2xl text-xs transition-all"
+                style={{
+                  border: `1.5px solid ${category === c.value ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
+                  background: category === c.value ? 'var(--tqf-cipria-light)' : 'white',
+                  color: category === c.value ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                  fontFamily: 'var(--font-body)',
+                  fontWeight: category === c.value ? 600 : 400,
+                }}
+              >
+                <span className="text-lg leading-none">{c.icon}</span>
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Note */}
+          <input
+            type="text"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Nota (opzionale)"
+            className="w-full px-4 py-2.5 rounded-2xl text-sm outline-none"
+            style={{
+              border: '1px solid var(--tqf-beige-border)',
+              fontFamily: 'var(--font-body)',
+              color: 'var(--tqf-dark)',
+              background: 'var(--tqf-beige)',
+            }}
+          />
+
+          {/* Receipt preview */}
+          {pendingReceipt && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--tqf-cipria-light)', border: '1px solid var(--tqf-cipria)' }}>
+              <Camera className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-bordeaux)' }} />
+              <p className="text-xs flex-1 truncate" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+                {pendingReceipt.name}
+              </p>
+              <button onClick={() => { setPendingReceipt(null); if (fileRef.current) fileRef.current.value = ''; }}>
+                <X className="size-3.5" style={{ color: 'var(--tqf-bordeaux)' }} />
+              </button>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            {/* Receipt */}
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-3.5 rounded-2xl text-sm transition-opacity hover:opacity-80"
+              style={{
+                border: '1.5px solid var(--tqf-beige-border)',
+                color: pendingReceipt ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                fontFamily: 'var(--font-body)',
+                background: pendingReceipt ? 'var(--tqf-cipria-light)' : 'white',
+              }}
+            >
+              <Camera className="size-4" />
+              <span className="hidden sm:inline">Ricevuta</span>
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={e => handleReceiptPick(e.target.files)}
+            />
+
+            {/* Submit */}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || uploadingFor !== null}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-base font-semibold transition-all hover:opacity-90 disabled:opacity-50 active:scale-[0.98]"
+              style={{
+                background: amount && method && category ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)',
+                color: amount && method && category ? 'white' : 'var(--tqf-muted)',
+                fontFamily: 'var(--font-body)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {(submitting || uploadingFor !== null) && <Loader2 className="size-5 animate-spin" />}
+              Registra
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Movements list */}
+      <div className="mx-4 mt-4 rounded-3xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--tqf-beige-border)' }}>
+          <h2 className="text-sm font-medium" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+            Movimenti recenti
+          </h2>
+          <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            {movements.length}
+          </span>
+        </div>
+
+        {movements.length === 0 ? (
+          <div className="py-10 text-center">
+            <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              {canAdd ? 'Registra il primo movimento qui sopra.' : 'Nessun movimento ancora.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            {displayedMoves.map(m => (
+              <MovementRow
+                key={m.id}
+                movement={m}
+                canAdmin={isSuperAdmin}
+                canEdit={canEditMove(m)}
+                onTap={() => (canEditMove(m) || isSuperAdmin) && setEditTarget(m)}
+              />
+            ))}
+
+            {movements.length > 10 && (
+              <button
+                onClick={() => setShowAllMoves(v => !v)}
+                className="w-full flex items-center justify-center gap-1.5 py-3 text-sm transition-opacity hover:opacity-70"
+                style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', borderTop: '1px solid var(--tqf-beige-border)' }}
+              >
+                {showAllMoves
+                  ? <><ChevronUp className="size-4" /> Mostra meno</>
+                  : <><ChevronDown className="size-4" /> Vedi tutti ({movements.length})</>
+                }
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Modals */}
+      {editTarget && (
+        <EditModal
+          movement={editTarget}
+          eventId={eventId}
+          canAdmin={isSuperAdmin}
+          onClose={() => setEditTarget(null)}
+          onUpdated={() => setEditTarget(null)}
+          onDeleted={() => setEditTarget(null)}
+        />
+      )}
+
+      {showBudget && (
+        <BudgetModal
+          eventId={eventId}
+          currentBudget={budget}
+          onClose={() => setShowBudget(false)}
+          onSaved={b => setBudget(b)}
+        />
+      )}
+    </div>
+  );
+}

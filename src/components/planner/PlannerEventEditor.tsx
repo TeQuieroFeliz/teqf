@@ -18,7 +18,7 @@ import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebas
 import {
   ArrowLeft, Calendar, ChevronDown, ChevronUp,
   Download, FileText, Flower2, ImagePlus, Loader2, LogOut,
-  Minus, Plus, Save, Send, Sofa, Trash2, Upload, X,
+  Minus, Plus, Save, Send, Sofa, Trash2, Upload, Wallet, X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -724,7 +724,7 @@ const EMPTY: FormState = { eventCode: '', clientName: '', city: '', days: [] };
 const LANG_KEY = 'tqf-planner-lang';
 
 export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Props) {
-  const { plannerUser, logout } = usePlannerAuth();
+  const { plannerUser, logout, canManageCashControl, canCreateProjects, isSuperAdmin } = usePlannerAuth();
   const router = useRouter();
 
   const [lang, setLang] = useState<Lang>(() => {
@@ -914,6 +914,18 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
               </button>
             ))}
           </div>
+
+          {/* Cash Control link — visible when event exists and user has access */}
+          {!isNew && (isSuperAdmin || canManageCashControl || canCreateProjects) && (
+            <Link
+              href={`/planner/projects/${eventId}/cash-control`}
+              className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+              style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
+            >
+              <Wallet className="size-4" />
+              <span className="hidden sm:inline">Gastos</span>
+            </Link>
+          )}
 
           <button onClick={downloadPdf} disabled={downloading || saving}
             className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"

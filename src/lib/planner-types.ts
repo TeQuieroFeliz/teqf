@@ -1,3 +1,36 @@
+// ── Cash Control ──────────────────────────────────────────────────────────────
+
+export const CASH_CATEGORIES = [
+  { value: 'fiori',      label: 'Fiori',      icon: '🌸' },
+  { value: 'ferreteria', label: 'Ferreteria', icon: '🔧' },
+  { value: 'trasporto',  label: 'Trasporto',  icon: '🚗' },
+  { value: 'cibo',       label: 'Cibo',       icon: '🍽️' },
+  { value: 'lavanderia', label: 'Lavanderia', icon: '👗' },
+  { value: 'otro',       label: 'Otro',       icon: '📦' },
+] as const;
+
+export type CashControlCategory = typeof CASH_CATEGORIES[number]['value'];
+export type CashPaymentMethod   = 'tarjeta' | 'efectivo';
+export type CashMovementStatus  = 'pending' | 'approved';
+
+export type CashMovement = {
+  id: string;
+  amount: number;
+  paymentMethod: CashPaymentMethod;
+  category: CashControlCategory;
+  note?: string;
+  registeredBy: string;
+  registeredByName: string;
+  date: string;       // "YYYY-MM-DD"
+  time: string;       // "HH:MM"
+  timestamp: number;  // epoch ms — used for ordering
+  receiptUrl?: string;
+  status: CashMovementStatus;
+  createdAt: string;
+};
+
+// ── Furniture ─────────────────────────────────────────────────────────────────
+
 export type FurnitureCategory =
   | 'sedie'
   | 'tavoli'
