@@ -17,7 +17,7 @@ import {
   CashPaymentMethod,
   PlannerEvent,
 } from '@/lib/planner-types';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import {
   PencilLine,
   ShieldCheck,
   Trash2,
+  User,
   Wallet,
   X,
 } from 'lucide-react';
@@ -465,6 +466,78 @@ function EditModal({
   );
 }
 
+// ── User picker sheet ─────────────────────────────────────────────────────────
+
+type UserOption = { id: string; name: string; email?: string };
+
+function UserPickerSheet({
+  options,
+  currentId,
+  onSelect,
+  onClose,
+}: {
+  options: UserOption[];
+  currentId: string;
+  onSelect: (u: UserOption) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-t-3xl pb-8"
+        style={{ background: 'white' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+
+        <p
+          className="px-5 pb-3 text-xs uppercase tracking-widest"
+          style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+        >
+          Cambia utente registrante
+        </p>
+
+        <div className="divide-y" style={{ borderColor: 'var(--tqf-beige-border)' }}>
+          {options.map(u => (
+            <button
+              key={u.id}
+              onClick={() => { onSelect(u); onClose(); }}
+              className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:opacity-80 active:scale-[0.99]"
+            >
+              <div
+                className="size-9 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0"
+                style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
+              >
+                {u.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                  {u.name}
+                </p>
+                {u.email && (
+                  <p className="text-xs truncate" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                    {u.email}
+                  </p>
+                )}
+              </div>
+              {u.id === currentId && (
+                <Check className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-bordeaux)' }} />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Budget edit modal ─────────────────────────────────────────────────────────
 
 function BudgetModal({
@@ -538,7 +611,7 @@ export default function CashControlPage() {
   const router = useRouter();
   const eventId = params?.id as string;
 
-  const { plannerUser, isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
+  const { plannerUser, adminUser, isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
 
   const [event, setEvent]       = useState<PlannerEvent | null>(null);
   const [movements, setMovements] = useState<CashMovement[]>([]);
@@ -551,6 +624,11 @@ export default function CashControlPage() {
   const [category, setCategory] = useState<CashControlCategory | null>(null);
   const [note, setNote]         = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // "Registrado por" — defaults to the logged-in user, changeable
+  const [registeredAsUser, setRegisteredAsUser] = useState<UserOption | null>(null);
+  const [plannerOptions, setPlannerOptions]     = useState<UserOption[]>([]);
+  const [showUserPicker, setShowUserPicker]     = useState(false);
 
   // Receipt upload
   const fileRef = useRef<HTMLInputElement>(null);
@@ -572,6 +650,48 @@ export default function CashControlPage() {
       setEventLoading(false);
     });
   }, [eventId, router]);
+
+  // Set default "registrado por" when auth resolves, and load picker options
+  useEffect(() => {
+    if (authLoading) return;
+
+    // Derive the current user's author entry
+    const self: UserOption | null = plannerUser
+      ? {
+          id: plannerUser.id,
+          name: plannerUser.name + (plannerUser.lastName ? ' ' + plannerUser.lastName : ''),
+          email: plannerUser.email,
+        }
+      : isSuperAdmin && adminUser
+      ? { id: adminUser.id, name: adminUser.name ?? adminUser.email, email: adminUser.email }
+      : null;
+
+    if (self) setRegisteredAsUser(prev => prev ?? self);
+
+    // Load all active planners for the picker (one-time, not real-time)
+    getDocs(query(collection(db, 'planners'), where('active', '==', true))).then(snap => {
+      const options: UserOption[] = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name + (data.lastName ? ' ' + data.lastName : ''),
+          email: data.email,
+        };
+      });
+      // Put self first, then others alphabetically
+      options.sort((a, b) => {
+        if (a.id === self?.id) return -1;
+        if (b.id === self?.id) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      // If superadmin isn't in planners, prepend them
+      if (self && !options.find(o => o.id === self.id)) {
+        options.unshift(self);
+      }
+      setPlannerOptions(options);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading]);
 
   // Real-time movements via onSnapshot
   useEffect(() => {
@@ -618,9 +738,9 @@ export default function CashControlPage() {
   async function handleSubmit() {
     const parsed = parseFloat(amount.replace(',', '.'));
     if (!parsed || parsed <= 0) { toast.error('Inserisci un importo valido.'); return; }
-    if (!method)   { toast.error('Seleziona il metodo di pagamento.'); return; }
-    if (!category) { toast.error('Seleziona una categoria.'); return; }
-    if (!plannerUser) return;
+    if (!method)            { toast.error('Seleziona il metodo di pagamento.'); return; }
+    if (!category)          { toast.error('Seleziona una categoria.'); return; }
+    if (!registeredAsUser)  { toast.error('Nessun utente selezionato.'); return; }
 
     setSubmitting(true);
     try {
@@ -630,8 +750,8 @@ export default function CashControlPage() {
         paymentMethod: method,
         category,
         note: note.trim(),
-        registeredBy: plannerUser.id,
-        registeredByName: plannerUser.name + (plannerUser.lastName ? ' ' + plannerUser.lastName : ''),
+        registeredBy: registeredAsUser.id,
+        registeredByName: registeredAsUser.name,
         date: now.toISOString().slice(0, 10),
         time: now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
       });
@@ -762,6 +882,24 @@ export default function CashControlPage() {
                 style={{ color: 'var(--tqf-muted)' }}
               >
                 <X className="size-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Registrado por */}
+          <div className="flex items-center gap-2 px-1">
+            <User className="size-3.5 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+            <p className="text-xs flex-1 truncate" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              {registeredAsUser?.name ?? '—'}
+            </p>
+            {plannerOptions.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowUserPicker(true)}
+                className="text-xs flex-shrink-0 transition-opacity hover:opacity-70"
+                style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
+              >
+                Cambiar
               </button>
             )}
           </div>
@@ -945,6 +1083,15 @@ export default function CashControlPage() {
           currentBudget={budget}
           onClose={() => setShowBudget(false)}
           onSaved={b => setBudget(b)}
+        />
+      )}
+
+      {showUserPicker && (
+        <UserPickerSheet
+          options={plannerOptions}
+          currentId={registeredAsUser?.id ?? ''}
+          onSelect={u => setRegisteredAsUser(u)}
+          onClose={() => setShowUserPicker(false)}
         />
       )}
     </div>
