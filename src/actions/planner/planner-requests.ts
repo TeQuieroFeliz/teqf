@@ -1,31 +1,29 @@
 'use server';
 
 import { auth, firestore } from '@/firebase/server';
-import { PlannerRequest } from '@/lib/planner-types';
+import { PlannerRequest, TeamRole } from '@/lib/planner-types';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error('Missing RESEND_API_KEY environment variable.');
-  }
+  if (!apiKey) throw new Error('Missing RESEND_API_KEY environment variable.');
   return new Resend(apiKey);
 }
 
-const FROM   = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
-const SITE   = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+const FROM = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
 const reqRef  = firestore.collection('plannerRequests');
 const planRef = firestore.collection('planners');
 
-// ── Email helpers ────────────────────────────────────────────────────────────
+// ── Email helpers ─────────────────────────────────────────────────────────────
 
-async function sendAdminNewRequestEmail(name: string, email: string): Promise<void> {
+async function sendAdminNewRequestEmail(name: string, email: string, phone?: string): Promise<void> {
   const resend = getResendClient();
   const { error } = await resend.emails.send({
     from: FROM,
-    to: ['admin@tequierofeliz.mx'],
+    to: ['admin@tequierofeliz.com'],
     subject: `Nuova richiesta di accesso — ${name}`,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a0f0a;">
@@ -36,15 +34,15 @@ async function sendAdminNewRequestEmail(name: string, email: string): Promise<vo
         <div style="background:#fff;padding:32px;border:1px solid #e5d9d0;border-top:none;border-radius:0 0 12px 12px;">
           <p style="margin:0 0 16px;font-size:16px;">Nuova richiesta di accesso</p>
           <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#555;">
-            <strong>${name}</strong> (<a href="mailto:${email}" style="color:#6b1a2a;">${email}</a>)
+            <strong>${name}</strong> (<a href="mailto:${email}" style="color:#6b1a2a;">${email}</a>${phone ? ` · ${phone}` : ''})
             ha inviato una richiesta di accesso all'<strong>Area Planner</strong>.
           </p>
           <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#555;">
-            Accedi al pannello admin per approvarla o rifiutarla.
+            Accedi al pannello per approvarla o rifiutarla.
           </p>
-          <a href="${SITE}/admin/planners"
+          <a href="${SITE}/planner/requests"
              style="display:inline-block;background:#6b1a2a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;">
-            Vai al pannello admin
+            Vai al pannello
           </a>
         </div>
       </div>
@@ -72,7 +70,7 @@ async function sendApprovalEmail(name: string, email: string): Promise<void> {
             è stata <strong style="color:#15803d;">approvata</strong>! 🎉
           </p>
           <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#555;">
-            Puoi ora accedere con l'email e la password che hai scelto durante la registrazione.
+            Hai ricevuto le credenziali di accesso. Accedi con l'email e la password temporanea che ti è stata fornita.
           </p>
           <a href="${SITE}/planner/login"
              style="display:inline-block;background:#6b1a2a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;">
@@ -123,11 +121,13 @@ async function sendRejectionEmail(name: string, email: string): Promise<void> {
   if (error) throw new Error(`Resend: ${(error as any).message ?? JSON.stringify(error)}`);
 }
 
-// ── Public actions ───────────────────────────────────────────────────────────
+// ── Public actions ────────────────────────────────────────────────────────────
 
-export async function createPlannerRequest(
+// Called from the public /sign-up page (no password — admin sets one during approval)
+export async function createSignupRequest(
   name: string,
-  email: string
+  email: string,
+  phone: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const existing = await reqRef.where('email', '==', email).limit(1).get();
@@ -141,14 +141,22 @@ export async function createPlannerRequest(
     if (!alreadyPlanner.empty) {
       return { success: false, error: 'Sei già registrata. Accedi con le tue credenziali.' };
     }
-    await reqRef.add({ name, email, status: 'pending', createdAt: new Date().toISOString() });
-    sendAdminNewRequestEmail(name, email).catch((e) =>
-      console.error('[createPlannerRequest] admin email error:', e.message)
+    await reqRef.add({ name, email, phone, status: 'pending', createdAt: new Date().toISOString() });
+    sendAdminNewRequestEmail(name, email, phone).catch((e) =>
+      console.error('[createSignupRequest] admin email error:', e.message)
     );
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
   }
+}
+
+// Legacy: kept for backward compat with old /planner/register page
+export async function createPlannerRequest(
+  name: string,
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  return createSignupRequest(name, email, '');
 }
 
 export async function getPlannerRequestByEmail(email: string): Promise<PlannerRequest | null> {
@@ -165,18 +173,45 @@ export async function getPendingRequests(): Promise<PlannerRequest[]> {
     .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
 }
 
+// Called during approval — creates Firebase Auth account + planner record with teamRole
 export async function approvePlannerRequest(
   requestId: string,
   email: string,
-  name: string
+  name: string,
+  teamRole: TeamRole,
+  tempPassword: string,
+  phone?: string
 ): Promise<{ success: boolean; emailSent: boolean; error?: string; emailError?: string }> {
   try {
+    // Create or update Firebase Auth account with the temp password set by admin
+    let uid: string;
+    try {
+      const existingUser = await auth!.getUserByEmail(email);
+      uid = existingUser.uid;
+      await auth!.updateUser(uid, { password: tempPassword });
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/user-not-found') {
+        const newUser = await auth!.createUser({ email, password: tempPassword });
+        uid = newUser.uid;
+      } else {
+        throw authErr;
+      }
+    }
+
+    // Create planner record
     await planRef.add({
-      email, name, active: true, mustChangePassword: false,
-      createdAt: new Date().toISOString(), lastLogin: null,
+      email,
+      name,
+      phone: phone ?? '',
+      teamRole,
+      active: true,
+      mustChangePassword: false,
+      createdAt: new Date().toISOString(),
+      lastLogin: null,
     });
+
     await reqRef.doc(requestId).update({ status: 'approved' });
-    revalidatePath('/admin/planners');
+    revalidatePath('/planner/requests');
 
     let emailSent = false;
     let emailError: string | undefined;
@@ -201,8 +236,9 @@ export async function rejectPlannerRequest(
 ): Promise<{ success: boolean; emailSent: boolean; error?: string; emailError?: string }> {
   try {
     await reqRef.doc(requestId).update({ status: 'rejected' });
-    revalidatePath('/admin/planners');
+    revalidatePath('/planner/requests');
 
+    // Clean up any Firebase Auth account created at sign-up time
     try {
       const user = await auth!.getUserByEmail(email);
       await auth!.deleteUser(user.uid);

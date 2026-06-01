@@ -36,11 +36,11 @@ export async function saveFlowerItem(
     const { id, ...data } = input;
     if (id) {
       await ref.doc(id).update({ ...data, updatedAt: now });
-      revalidatePath('/admin/flowers');
+      revalidatePath('/planner/flowers');
       return { success: true, id };
     }
     const docRef = await ref.add({ ...data, images: [], createdAt: now, updatedAt: now });
-    revalidatePath('/admin/flowers');
+    revalidatePath('/planner/flowers');
     return { success: true, id: docRef.id };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -53,7 +53,7 @@ export async function updateFlowerImages(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await ref.doc(id).update({ images, updatedAt: new Date().toISOString() });
-    revalidatePath('/admin/flowers');
+    revalidatePath('/planner/flowers');
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -63,7 +63,7 @@ export async function updateFlowerImages(
 export async function deleteFlowerItem(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     await ref.doc(id).delete();
-    revalidatePath('/admin/flowers');
+    revalidatePath('/planner/flowers');
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };

@@ -38,6 +38,6 @@ export async function createArticle(
     publishedAt: input.status === 'published' ? now : null,
   });
 
-  revalidatePath('/admin/blog');
+  revalidatePath('/planner/blog');
   return { success: true, id: ref.id };
 }

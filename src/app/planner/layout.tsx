@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 function PlannerGuard({ children }: { children: React.ReactNode }) {
-  const { plannerUser, adminUser, isSuperAdmin, mustChangePassword, isLoading } = usePlannerAuth();
+  const { plannerUser, isSuperAdmin, mustChangePassword, isLoading } = usePlannerAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -14,24 +14,17 @@ function PlannerGuard({ children }: { children: React.ReactNode }) {
     if (isLoading) return;
 
     const isLoginPage          = pathname === '/planner/login';
-    const isRegisterPage       = pathname === '/planner/register';
     const isChangePasswordPage = pathname === '/planner/change-password';
 
     const hasAccess = !!plannerUser || isSuperAdmin;
 
-    if (!hasAccess && !isLoginPage && !isRegisterPage) {
+    if (!hasAccess && !isLoginPage) {
       router.replace('/planner/login');
       return;
     }
 
-    if (hasAccess && (isLoginPage || isRegisterPage)) {
+    if (hasAccess && isLoginPage) {
       router.replace(mustChangePassword ? '/planner/change-password' : '/planner');
-      return;
-    }
-
-    // Team-only admins (not superadmin, not planner) have no business in /planner
-    if (!plannerUser && adminUser && !isSuperAdmin && !isLoginPage && !isRegisterPage) {
-      router.replace('/area-planner');
       return;
     }
 
@@ -43,7 +36,7 @@ function PlannerGuard({ children }: { children: React.ReactNode }) {
     if (plannerUser && !mustChangePassword && isChangePasswordPage) {
       router.replace('/planner');
     }
-  }, [plannerUser, adminUser, isSuperAdmin, mustChangePassword, isLoading, pathname, router]);
+  }, [plannerUser, isSuperAdmin, mustChangePassword, isLoading, pathname, router]);
 
   if (isLoading) {
     return (

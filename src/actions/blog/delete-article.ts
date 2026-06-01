@@ -8,6 +8,6 @@ export async function deleteArticle(
   if (!firestore) return { success: false, error: 'Database not available.' };
 
   await firestore.collection('articles').doc(id).delete();
-  revalidatePath('/admin/blog');
+  revalidatePath('/planner/blog');
   return { success: true };
 }

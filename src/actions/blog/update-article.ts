@@ -48,7 +48,7 @@ export async function updateArticle(
         : currentData.publishedAt ?? null,
   });
 
-  revalidatePath('/admin/blog');
+  revalidatePath('/planner/blog');
   revalidatePath(`/admin/blog/${id}`);
   return { success: true };
 }

@@ -151,9 +151,16 @@ export type PlannerRequest = {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   status: PlannerRequestStatus;
   createdAt: string;
 };
+
+// Team role assigned during approval
+// xb_planner: XB Team — can create/manage own planner events
+// teqf_user:  TeQF Team — can manage cash control, nomina, catalogs
+// both:       full access to both
+export type TeamRole = 'xb_planner' | 'teqf_user' | 'both';
 
 export type PlannerUser = {
   id: string;
@@ -166,6 +173,7 @@ export type PlannerUser = {
   phone?: string;
   contactEmail?: string;
   role?: string;
+  teamRole?: TeamRole;
   avatarUrl?: string;
   active: boolean;
   mustChangePassword: boolean;

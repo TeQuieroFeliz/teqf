@@ -152,7 +152,7 @@ export default function AdminCashControlPage() {
       >
         <div className="flex items-center gap-3">
           <Link
-            href="/admin"
+            href="/planner"
             className="flex items-center justify-center size-9 rounded-lg"
             style={{ border: '1px solid var(--tqf-beige-border)' }}
           >
@@ -170,7 +170,7 @@ export default function AdminCashControlPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/admin/cash-control/users"
+            href="/planner/cash-control-users"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
             style={{
               color: 'var(--tqf-bordeaux)',

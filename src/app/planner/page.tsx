@@ -7,6 +7,7 @@ import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
 import { Lang, LANG_OPTIONS, T } from '@/lib/planner-i18n';
 import {
+  Bell,
   BookOpen,
   Calendar,
   ClipboardList,
@@ -30,22 +31,30 @@ import { toast } from 'sonner';
 
 const LANG_KEY = 'tqf-planner-lang';
 
-// ─── SuperAdmin ───────────────────────────────────────────────────────────────
+// ─── SuperAdmin dashboard sections ────────────────────────────────────────────
 
 const ADMIN_SECTIONS = [
   {
+    key: 'requests',
+    label: 'Richieste',
+    description: 'Approva o rifiuta richieste di accesso',
+    icon: <Bell className="size-5" />,
+    href: '/planner/requests',
+    badge: true,
+  },
+  {
     key: 'planners',
     label: 'Planner',
-    description: 'Gestisci planner, eventi e richieste di accesso',
+    description: 'Gestisci planner, ruoli e permessi',
     icon: <ClipboardList className="size-5" />,
-    href: '/admin/planners',
+    href: '/planner/planners',
   },
   {
     key: 'users',
     label: 'Utenti Admin',
     description: 'Ruoli, permessi e gestione accessi',
     icon: <Users className="size-5" />,
-    href: '/admin/users',
+    href: '/planner/users',
   },
   {
     key: 'cashControl',
@@ -59,35 +68,35 @@ const ADMIN_SECTIONS = [
     label: 'Blog',
     description: 'Articoli e contenuti editoriali',
     icon: <BookOpen className="size-5" />,
-    href: '/admin/blog',
+    href: '/planner/blog',
   },
   {
     key: 'portfolio',
     label: 'Portfolio',
     description: 'Galleria progetti realizzati',
     icon: <ImageIcon className="size-5" />,
-    href: '/admin/portfolio',
+    href: '/planner/portfolio',
   },
   {
     key: 'furniture',
     label: 'Mobili',
     description: 'Sedie, tavoli e allestimenti',
     icon: <Sofa className="size-5" />,
-    href: '/admin/furniture',
+    href: '/planner/furniture',
   },
   {
     key: 'florals',
     label: 'Fiori',
     description: 'Fiori e composizioni floreali',
     icon: <Flower2 className="size-5" />,
-    href: '/admin/flowers',
+    href: '/planner/flowers',
   },
   {
     key: 'events',
     label: 'Eventi',
     description: 'Gestione eventi e sotto-eventi',
     icon: <Calendar className="size-5" />,
-    href: '/admin/events',
+    href: '/planner/admin-events',
   },
 ];
 
@@ -95,11 +104,16 @@ function SuperAdminDashboard() {
   const { adminUser, logout } = usePlannerAuth();
   const [events, setEvents] = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    getDocs(query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc')))
-      .then(snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerEvent))))
-      .finally(() => setLoading(false));
+    Promise.all([
+      getDocs(query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc'))),
+      getDocs(query(collection(db, 'plannerRequests'))),
+    ]).then(([eSnap, rSnap]) => {
+      setEvents(eSnap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerEvent)));
+      setPendingCount(rSnap.docs.filter(d => d.data().status === 'pending').length);
+    }).finally(() => setLoading(false));
   }, []);
 
   if (!adminUser) return null;
@@ -175,6 +189,25 @@ function SuperAdminDashboard() {
           </p>
         </div>
 
+        {/* Pending requests banner */}
+        {pendingCount > 0 && (
+          <Link
+            href="/planner/requests"
+            className="flex items-center gap-3 rounded-2xl px-5 py-4 mb-6 transition-opacity hover:opacity-90"
+            style={{ background: '#fef9ee', border: '2px solid #fbbf24', textDecoration: 'none' }}
+          >
+            <Bell className="size-5 flex-shrink-0" style={{ color: '#d97706' }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>
+                {pendingCount} {pendingCount === 1 ? 'richiesta di accesso in attesa' : 'richieste di accesso in attesa'}
+              </p>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0" style={{ background: '#d97706', color: 'white', fontFamily: 'var(--font-body)' }}>
+              Gestisci →
+            </span>
+          </Link>
+        )}
+
         {/* Section tiles */}
         <div className="mb-10">
           <h2
@@ -188,9 +221,17 @@ function SuperAdminDashboard() {
               <a
                 key={section.key}
                 href={section.href}
-                className="group block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
+                className="group relative block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
                 style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
               >
+                {section.badge && pendingCount > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 size-5 rounded-full text-xs flex items-center justify-center font-semibold"
+                    style={{ background: '#d97706', color: 'white', fontFamily: 'var(--font-body)' }}
+                  >
+                    {pendingCount > 9 ? '9+' : pendingCount}
+                  </span>
+                )}
                 <div
                   className="size-10 rounded-xl flex items-center justify-center mb-3"
                   style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
@@ -252,7 +293,7 @@ function SuperAdminDashboard() {
                 return (
                   <Link
                     key={evt.id}
-                    href={`/admin/planners/events/${evt.id}`}
+                    href={`/planner/planners/events/${evt.id}`}
                     className="flex items-center justify-between rounded-xl px-4 py-3 transition-opacity hover:opacity-80 active:scale-[0.99]"
                     style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
                   >
@@ -318,10 +359,124 @@ function SuperAdminDashboard() {
   );
 }
 
-// ─── Regular planner ──────────────────────────────────────────────────────────
+// ─── TeQF User dashboard ──────────────────────────────────────────────────────
+
+function TeQFUserDashboard() {
+  const { plannerUser, logout } = usePlannerAuth();
+  if (!plannerUser) return null;
+
+  const sections = [
+    {
+      key: 'cashControl',
+      label: 'Cash Control',
+      description: 'Gestisci entrate e uscite per ogni evento',
+      icon: <Wallet className="size-5" />,
+      href: '/planner/cash-control',
+    },
+    {
+      key: 'furniture',
+      label: 'Catalogo Mobili',
+      description: 'Modifica il catalogo sedie, tavoli e allestimenti',
+      icon: <Sofa className="size-5" />,
+      href: '/planner/furniture',
+    },
+    {
+      key: 'florals',
+      label: 'Catalogo Fiori',
+      description: 'Modifica il catalogo fiori e composizioni',
+      icon: <Flower2 className="size-5" />,
+      href: '/planner/flowers',
+    },
+    {
+      key: 'events',
+      label: 'Tutti i Progetti',
+      description: 'Visualizza tutti i progetti planner',
+      icon: <ClipboardList className="size-5" />,
+      href: '/planner/planners',
+    },
+  ];
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
+      <header
+        className="border-b px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between"
+        style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
+      >
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 transition-opacity hover:opacity-75 flex-shrink-0">
+          <Image
+            src="/logo.png"
+            alt="Te Quiero Feliz"
+            width={32}
+            height={32}
+            className="object-contain"
+            style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
+          />
+          <div className="hidden xs:block">
+            <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1rem', fontWeight: 300, lineHeight: 1.2 }}>
+              Te Quiero Feliz
+            </p>
+            <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
+              AREA PLANNER
+            </p>
+          </div>
+        </Link>
+        <div className="flex items-center gap-2">
+          <span className="text-sm hidden sm:block" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+            {plannerUser.name}
+          </span>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 text-sm px-2.5 py-2 rounded-lg transition-colors hover:opacity-80"
+            style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
+          >
+            <LogOut className="size-4" />
+            <span className="hidden sm:inline">Esci</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
+            Benvenuta, {plannerUser.name}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            TeQF Team
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+          {sections.map((section) => (
+            <a
+              key={section.key}
+              href={section.href}
+              className="block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
+              style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
+            >
+              <div
+                className="size-10 rounded-xl flex items-center justify-center mb-3"
+                style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
+              >
+                {section.icon}
+              </div>
+              <h3 className="text-sm mb-0.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+                {section.label}
+              </h3>
+              <p className="text-xs leading-relaxed hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                {section.description}
+              </p>
+            </a>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ─── XB Planner dashboard ─────────────────────────────────────────────────────
 
 function PlannerDashboard() {
-  const { plannerUser, logout } = usePlannerAuth();
+  const { plannerUser, logout, canManageCashControl } = usePlannerAuth();
   const [events, setEvents] = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -422,16 +577,17 @@ function PlannerDashboard() {
             <span className="hidden sm:inline">{t.newEvent}</span>
           </Link>
 
-          {/* Cash control */}
-          <Link
-            href="/planner/cash-control"
-            className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
-            style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
-            title="Control de Gastos"
-          >
-            <Wallet className="size-4" />
-            <span className="hidden sm:inline">Gastos</span>
-          </Link>
+          {canManageCashControl && (
+            <Link
+              href="/planner/cash-control"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
+              style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
+              title="Control de Gastos"
+            >
+              <Wallet className="size-4" />
+              <span className="hidden sm:inline">Gastos</span>
+            </Link>
+          )}
 
           {/* Profile pill */}
           <Link
@@ -610,6 +766,14 @@ export default function PlannerPage() {
   }
 
   if (isSuperAdmin) return <SuperAdminDashboard />;
-  if (plannerUser)  return <PlannerDashboard />;
+
+  if (plannerUser) {
+    const teamRole = plannerUser.teamRole;
+    // TeQF users (and both) get the TeQF dashboard as primary
+    if (teamRole === 'teqf_user') return <TeQFUserDashboard />;
+    // Both: show planner dashboard (they have cash control button in header)
+    return <PlannerDashboard />;
+  }
+
   return null;
 }

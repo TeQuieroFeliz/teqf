@@ -81,11 +81,11 @@ export async function saveFurnitureItem(
     const { id, ...data } = input;
     if (id) {
       await col().doc(id).update({ ...data, updatedAt: now });
-      revalidatePath('/admin/furniture');
+      revalidatePath('/planner/furniture');
       return { success: true, id };
     }
     const docRef = await col().add({ ...data, images: [], createdAt: now, updatedAt: now });
-    revalidatePath('/admin/furniture');
+    revalidatePath('/planner/furniture');
     return { success: true, id: docRef.id };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -99,7 +99,7 @@ export async function updateFurnitureImages(
   if (!firestore) return { success: false, error: 'Database non disponibile.' };
   try {
     await col().doc(id).update({ images, updatedAt: new Date().toISOString() });
-    revalidatePath('/admin/furniture');
+    revalidatePath('/planner/furniture');
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -110,7 +110,7 @@ export async function deleteFurnitureItem(id: string): Promise<{ success: boolea
   if (!firestore) return { success: false, error: 'Database non disponibile.' };
   try {
     await col().doc(id).delete();
-    revalidatePath('/admin/furniture');
+    revalidatePath('/planner/furniture');
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };

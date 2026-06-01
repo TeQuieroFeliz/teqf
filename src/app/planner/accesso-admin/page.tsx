@@ -125,7 +125,7 @@ export default function PlannerAdminAccessPage() {
               </div>
 
               <Link
-                href="/admin"
+                href="/planner"
                 target="_blank"
                 className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm transition-opacity hover:opacity-80"
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}

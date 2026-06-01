@@ -37,11 +37,11 @@ export async function saveInspirationItem(
       await col().doc(id).update({ ...data, updatedAt: now });
     } else {
       const ref = await col().add({ ...data, createdAt: now, updatedAt: now });
-      revalidatePath('/admin/flowers');
+      revalidatePath('/planner/flowers');
       revalidatePath('/flowers');
       return { success: true, id: ref.id };
     }
-    revalidatePath('/admin/flowers');
+    revalidatePath('/planner/flowers');
     revalidatePath('/flowers');
     return { success: true, id };
   } catch (e: any) {
@@ -53,7 +53,7 @@ export async function deleteInspirationItem(id: string): Promise<{ success: bool
   if (!firestore) return { success: false, error: 'Database non disponibile.' };
   try {
     await col().doc(id).delete();
-    revalidatePath('/admin/flowers');
+    revalidatePath('/planner/flowers');
     revalidatePath('/flowers');
     return { success: true };
   } catch (e: any) {

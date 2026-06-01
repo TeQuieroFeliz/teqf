@@ -96,7 +96,7 @@ export async function savePortfolioProject(
     });
   }
 
-  revalidatePath('/admin/portfolio');
+  revalidatePath('/planner/portfolio');
   revalidatePath('/portfolio');
   return { success: true };
 }
@@ -106,7 +106,7 @@ export async function deletePortfolioProject(
 ): Promise<{ success: boolean; error?: string }> {
   if (!firestore) return { success: false, error: 'Database not available.' };
   await firestore.collection('portfolioProjects').doc(id).delete();
-  revalidatePath('/admin/portfolio');
+  revalidatePath('/planner/portfolio');
   revalidatePath('/portfolio');
   return { success: true };
 }
@@ -122,7 +122,7 @@ export async function updatePortfolioImages(
     coverImage,
     updatedAt: Timestamp.now(),
   });
-  revalidatePath('/admin/portfolio');
+  revalidatePath('/planner/portfolio');
   revalidatePath('/portfolio');
   return { success: true };
 }

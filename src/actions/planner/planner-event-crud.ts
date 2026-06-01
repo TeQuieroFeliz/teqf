@@ -36,12 +36,12 @@ export async function savePlannerEvent(
     if (id) {
       await ref.doc(id).update({ ...data, updatedAt: now });
       revalidatePath('/planner');
-      revalidatePath('/admin/planners');
+      revalidatePath('/planner/planners');
       return { success: true, id };
     }
     const docRef = await ref.add({ ...data, createdAt: now, updatedAt: now });
     revalidatePath('/planner');
-    revalidatePath('/admin/planners');
+    revalidatePath('/planner/planners');
     return { success: true, id: docRef.id };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -55,7 +55,7 @@ export async function updatePlannerEventStatus(
   try {
     const now = new Date().toISOString();
     await ref.doc(id).update({ status, updatedAt: now });
-    revalidatePath('/admin/events');
+    revalidatePath('/planner/admin-events');
     revalidatePath('/planner');
     return { success: true };
   } catch (e: any) {
@@ -67,7 +67,7 @@ export async function deletePlannerEvent(id: string): Promise<{ success: boolean
   try {
     await ref.doc(id).delete();
     revalidatePath('/planner');
-    revalidatePath('/admin/planners');
+    revalidatePath('/planner/planners');
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };
