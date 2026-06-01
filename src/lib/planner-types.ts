@@ -1,3 +1,22 @@
+// ── Nomina ────────────────────────────────────────────────────────────────────
+
+export type NominaEntry = {
+  id: string;
+  personName: string;
+  userId: string;          // planner id or '' for manual entries
+  entryTimeAM: string;     // "HH:MM" or ""
+  exitTimeAM: string;
+  hoursAM: number;         // stored, auto-calculated client-side
+  entryTimePM: string;     // "HH:MM" or ""
+  exitTimePM: string;
+  hoursPM: number;
+  totalHours: number;      // hoursAM + hoursPM
+  desmontajeCount: number;
+  approvedBy: string | null; // userId of approver, or null
+  createdAt: string;
+  updatedAt: string;
+};
+
 // ── Cash Control ──────────────────────────────────────────────────────────────
 
 export const CASH_CATEGORIES = [

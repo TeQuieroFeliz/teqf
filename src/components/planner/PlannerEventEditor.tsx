@@ -18,7 +18,7 @@ import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebas
 import {
   ArrowLeft, Calendar, ChevronDown, ChevronUp,
   Download, FileText, Flower2, ImagePlus, Loader2, LogOut,
-  Minus, Plus, Save, Send, Sofa, Trash2, Upload, Wallet, X,
+  Minus, Plus, Save, Send, Sofa, Trash2, Upload, Users, Wallet, X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -915,7 +915,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
             ))}
           </div>
 
-          {/* Cash Control link — visible when event exists and user has access */}
+          {/* Cash Control link */}
           {!isNew && (isSuperAdmin || canManageCashControl || canCreateProjects) && (
             <Link
               href={`/planner/projects/${eventId}/cash-control`}
@@ -924,6 +924,18 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
             >
               <Wallet className="size-4" />
               <span className="hidden sm:inline">Gastos</span>
+            </Link>
+          )}
+
+          {/* Nomina link */}
+          {!isNew && (isSuperAdmin || canManageCashControl || canCreateProjects) && (
+            <Link
+              href={`/planner/projects/${eventId}/nomina`}
+              className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+              style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
+            >
+              <Users className="size-4" />
+              <span className="hidden sm:inline">Nómina</span>
             </Link>
           )}
 
