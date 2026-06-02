@@ -11,6 +11,7 @@ import {
   BookOpen,
   Calendar,
   ClipboardList,
+  Clock,
   Edit2,
   Flower2,
   Image as ImageIcon,
@@ -97,6 +98,13 @@ const ADMIN_SECTIONS = [
     description: 'Gestione eventi e sotto-eventi',
     icon: <Calendar className="size-5" />,
     href: '/planner/admin-events',
+  },
+  {
+    key: 'orario',
+    label: 'Orario di Lavoro',
+    description: 'Ore, turni e desmontaje per ogni evento',
+    icon: <Clock className="size-5" />,
+    href: '/planner/planners',
   },
 ];
 
