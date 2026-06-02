@@ -44,67 +44,11 @@ const ADMIN_SECTIONS = [
     badge: true,
   },
   {
-    key: 'planners',
-    label: 'Planner',
-    description: 'Gestisci planner, ruoli e permessi',
-    icon: <ClipboardList className="size-5" />,
-    href: '/planner/planners',
-  },
-  {
     key: 'users',
     label: 'Gestione Utenti',
-    description: 'Assegna team e permessi automatici',
+    description: 'Assegna team e permessi (XB / TeQF)',
     icon: <Users className="size-5" />,
     href: '/admin/users',
-  },
-  {
-    key: 'cashControl',
-    label: 'Cash Control',
-    description: 'Tutti gli eventi, bilanci e chiusure',
-    icon: <Wallet className="size-5" />,
-    href: '/area-planner/cash-control/admin',
-  },
-  {
-    key: 'blog',
-    label: 'Blog',
-    description: 'Articoli e contenuti editoriali',
-    icon: <BookOpen className="size-5" />,
-    href: '/planner/blog',
-  },
-  {
-    key: 'portfolio',
-    label: 'Portfolio',
-    description: 'Galleria progetti realizzati',
-    icon: <ImageIcon className="size-5" />,
-    href: '/planner/portfolio',
-  },
-  {
-    key: 'furniture',
-    label: 'Mobili',
-    description: 'Sedie, tavoli e allestimenti',
-    icon: <Sofa className="size-5" />,
-    href: '/planner/furniture',
-  },
-  {
-    key: 'florals',
-    label: 'Fiori',
-    description: 'Fiori e composizioni floreali',
-    icon: <Flower2 className="size-5" />,
-    href: '/planner/flowers',
-  },
-  {
-    key: 'events',
-    label: 'Eventi',
-    description: 'Gestione eventi e sotto-eventi',
-    icon: <Calendar className="size-5" />,
-    href: '/planner/admin-events',
-  },
-  {
-    key: 'orario',
-    label: 'Orario di Lavoro',
-    description: 'Ore, turni e desmontaje per ogni evento',
-    icon: <Clock className="size-5" />,
-    href: '/planner/orario',
   },
 ];
 
@@ -396,32 +340,18 @@ function TeQFUserDashboard() {
       href: '/planner/cash-control',
     },
     {
-      key: 'furniture',
-      label: 'Catalogo Mobili',
-      description: 'Modifica il catalogo sedie, tavoli e allestimenti',
-      icon: <Sofa className="size-5" />,
-      href: '/planner/furniture',
-    },
-    {
-      key: 'florals',
-      label: 'Catalogo Fiori',
-      description: 'Modifica il catalogo fiori e composizioni',
-      icon: <Flower2 className="size-5" />,
-      href: '/planner/flowers',
-    },
-    {
-      key: 'events',
-      label: 'Eventi',
-      description: 'Visualizza tutti gli eventi XB',
-      icon: <Calendar className="size-5" />,
-      href: '/planner/events',
-    },
-    {
       key: 'orario',
       label: 'Orario di Lavoro',
       description: 'Ore, turni e desmontaje per ogni evento',
       icon: <Clock className="size-5" />,
       href: '/planner/orario-di-lavoro',
+    },
+    {
+      key: 'events',
+      label: 'Eventi XB',
+      description: 'Visualizza gli eventi creati dal team XB',
+      icon: <Calendar className="size-5" />,
+      href: '/planner/events',
     },
   ];
 
@@ -651,6 +581,38 @@ function PlannerDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Cataloghi (XB team manages catalogs) */}
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          <a href="/planner/furniture"
+            className="block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
+            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
+            <div className="size-10 rounded-xl flex items-center justify-center mb-3"
+              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
+              <Sofa className="size-5" />
+            </div>
+            <h3 className="text-sm mb-0.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              Catalogo Mobili
+            </h3>
+            <p className="text-xs hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              Sedie, tavoli, allestimenti
+            </p>
+          </a>
+          <a href="/planner/flowers"
+            className="block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
+            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
+            <div className="size-10 rounded-xl flex items-center justify-center mb-3"
+              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
+              <Flower2 className="size-5" />
+            </div>
+            <h3 className="text-sm mb-0.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              Catalogo Fiori
+            </h3>
+            <p className="text-xs hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              Fiori e composizioni floreali
+            </p>
+          </a>
+        </div>
+
         <div className="mb-6">
           <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
             {t.yourEvents}

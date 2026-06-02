@@ -2,55 +2,53 @@
 
 import { firestore } from '@/firebase/server';
 
-export type UserTeam = 'XB' | 'TeQF' | 'none';
 export type UserStatus = 'active' | 'inactive';
 
-function permissionsFor(team: UserTeam) {
+// teams is now an array: [] | ['XB'] | ['TeQF'] | ['XB','TeQF']
+export function permissionsFor(teams: string[]) {
   return {
-    canCreateEvents:      team === 'XB',
-    canModifyEvents:      team === 'XB',
-    canViewEvents:        team !== 'none',
-    canManageCashControl: team === 'TeQF',
-    canManageOrario:      team === 'TeQF',
+    canCreateEvents:      teams.includes('XB'),
+    canModifyEvents:      teams.includes('XB'),
+    canViewEvents:        teams.length > 0,
+    canManageCashControl: teams.includes('TeQF'),
+    canManageOrario:      teams.includes('TeQF'),
   };
 }
 
-function teamRoleFor(team: UserTeam): string | null {
-  if (team === 'XB')   return 'xb_planner';
-  if (team === 'TeQF') return 'teqf_user';
+function teamRoleFor(teams: string[]): string | null {
+  const hasXB   = teams.includes('XB');
+  const hasTeQF = teams.includes('TeQF');
+  if (hasXB && hasTeQF) return 'both';
+  if (hasXB)            return 'xb_planner';
+  if (hasTeQF)          return 'teqf_user';
   return null;
 }
 
 export async function saveUserManagement(
   userId: string,
-  team: UserTeam,
+  teams: string[],
   status: UserStatus
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const now         = new Date().toISOString();
-    const permissions = permissionsFor(team);
-    const teamRole    = teamRoleFor(team);
+    const permissions = permissionsFor(teams);
+    const teamRole    = teamRoleFor(teams);
     const active      = status === 'active';
 
-    // ── 1. Update planners/{userId} (PlannerAuthContext reads this) ───────────
+    // ── 1. planners/{userId} — PlannerAuthContext reads this ─────────────────
     await firestore.collection('planners').doc(userId).update({
-      team, teamRole, permissions, active, updatedAt: now,
+      team:        teams,
+      teamRole,
+      permissions,
+      active,
+      updatedAt:   now,
     });
 
-    // ── 2. Upsert users/{userId} (canonical source of truth per spec) ─────────
+    // ── 2. users/{userId} — canonical source of truth ────────────────────────
     const plannerSnap = await firestore.collection('planners').doc(userId).get();
-    const plannerData = plannerSnap.data() ?? {};
+    const pd          = plannerSnap.data() ?? {};
     await firestore.collection('users').doc(userId).set(
-      {
-        email:       plannerData.email       ?? '',
-        name:        plannerData.name        ?? '',
-        role:        'user',
-        team,
-        permissions,
-        active,
-        updatedAt:   now,
-        // Only set createdAt on first write (set with merge keeps existing value)
-      },
+      { email: pd.email ?? '', name: pd.name ?? '', role: 'user', team: teams, permissions, active, updatedAt: now },
       { merge: true }
     );
 

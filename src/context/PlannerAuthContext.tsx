@@ -184,9 +184,20 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const isSuperAdmin = adminUser?.role === 'superadmin';
   const teamRole = plannerUser?.teamRole;
 
-  const canCreateProjects  = isSuperAdmin || teamRole === 'xb_planner' || teamRole === 'both';
-  const canManageCashControl = isSuperAdmin || teamRole === 'teqf_user' || teamRole === 'both';
-  const canManageCatalogs  = isSuperAdmin || teamRole === 'teqf_user' || teamRole === 'both';
+  // Support both new team-array format and legacy teamRole string
+  const rawTeam = (plannerUser as any)?.team;
+  const teamArr: string[] = Array.isArray(rawTeam)
+    ? rawTeam
+    : rawTeam === 'XB'   ? ['XB']
+    : rawTeam === 'TeQF' ? ['TeQF']
+    : teamRole === 'xb_planner' ? ['XB']
+    : teamRole === 'teqf_user'  ? ['TeQF']
+    : teamRole === 'both'       ? ['XB', 'TeQF']
+    : [];
+
+  const canCreateProjects    = isSuperAdmin || teamArr.includes('XB')   || teamRole === 'xb_planner' || teamRole === 'both';
+  const canManageCashControl = isSuperAdmin || teamArr.includes('TeQF') || teamRole === 'teqf_user'  || teamRole === 'both';
+  const canManageCatalogs    = isSuperAdmin || teamArr.includes('XB')   || teamRole === 'xb_planner' || teamRole === 'both';
 
   return (
     <PlannerAuthContext.Provider
