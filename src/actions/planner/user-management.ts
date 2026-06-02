@@ -1,28 +1,10 @@
 'use server';
 
 import { firestore } from '@/firebase/server';
+import { permissionsFor, teamRoleFor } from '@/lib/user-permissions';
 
+export type { UserTeams, UserPermissions } from '@/lib/user-permissions';
 export type UserStatus = 'active' | 'inactive';
-
-// teams is now an array: [] | ['XB'] | ['TeQF'] | ['XB','TeQF']
-export function permissionsFor(teams: string[]) {
-  return {
-    canCreateEvents:      teams.includes('XB'),
-    canModifyEvents:      teams.includes('XB'),
-    canViewEvents:        teams.length > 0,
-    canManageCashControl: teams.includes('TeQF'),
-    canManageOrario:      teams.includes('TeQF'),
-  };
-}
-
-function teamRoleFor(teams: string[]): string | null {
-  const hasXB   = teams.includes('XB');
-  const hasTeQF = teams.includes('TeQF');
-  if (hasXB && hasTeQF) return 'both';
-  if (hasXB)            return 'xb_planner';
-  if (hasTeQF)          return 'teqf_user';
-  return null;
-}
 
 export async function saveUserManagement(
   userId: string,
@@ -37,11 +19,7 @@ export async function saveUserManagement(
 
     // ── 1. planners/{userId} — PlannerAuthContext reads this ─────────────────
     await firestore.collection('planners').doc(userId).update({
-      team:        teams,
-      teamRole,
-      permissions,
-      active,
-      updatedAt:   now,
+      team: teams, teamRole, permissions, active, updatedAt: now,
     });
 
     // ── 2. users/{userId} — canonical source of truth ────────────────────────

@@ -1,6 +1,7 @@
 'use client';
 
-import { saveUserManagement, UserStatus, permissionsFor } from '@/actions/planner/user-management';
+import { saveUserManagement, UserStatus } from '@/actions/planner/user-management';
+import { permissionsFor, deriveTeams } from '@/lib/user-permissions';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { db } from '@/firebase/client';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -27,18 +28,6 @@ interface PlannerRaw {
   team?: unknown;
   active?: boolean;
   [k: string]: unknown;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function deriveTeams(u: PlannerRaw): string[] {
-  if (Array.isArray(u.team)) return u.team as string[];
-  if (u.team === 'XB')   return ['XB'];
-  if (u.team === 'TeQF') return ['TeQF'];
-  if (u.teamRole === 'xb_planner') return ['XB'];
-  if (u.teamRole === 'teqf_user')  return ['TeQF'];
-  if (u.teamRole === 'both')       return ['XB', 'TeQF'];
-  return [];
 }
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
@@ -71,11 +60,13 @@ const TEAM_BG: Record<string, string> = {
 
 // ─── Permission rows ──────────────────────────────────────────────────────────
 
-const PERM_ROWS = [
-  { key: 'crea',   label: 'Crea / Modifica Eventi',  tag: 'XB',        get: (p: ReturnType<typeof permissionsFor>) => p.canCreateEvents },
-  { key: 'view',   label: 'Visualizza Eventi',        tag: 'XB / TeQF', get: (p: ReturnType<typeof permissionsFor>) => p.canViewEvents },
-  { key: 'cash',   label: 'Gestione Cash Control',    tag: 'TeQF',      get: (p: ReturnType<typeof permissionsFor>) => p.canManageCashControl },
-  { key: 'orario', label: 'Gestione Orario',          tag: 'TeQF',      get: (p: ReturnType<typeof permissionsFor>) => p.canManageOrario },
+import type { UserPermissions } from '@/lib/user-permissions';
+
+const PERM_ROWS: { key: string; label: string; tag: string; get: (p: UserPermissions) => boolean }[] = [
+  { key: 'crea',   label: 'Crea / Modifica Eventi',  tag: 'XB',        get: p => p.canCreateEvents },
+  { key: 'view',   label: 'Visualizza Eventi',        tag: 'XB / TeQF', get: p => p.canViewEvents },
+  { key: 'cash',   label: 'Gestione Cash Control',    tag: 'TeQF',      get: p => p.canManageCashControl },
+  { key: 'orario', label: 'Gestione Orario',          tag: 'TeQF',      get: p => p.canManageOrario },
 ];
 
 // ─── User card ────────────────────────────────────────────────────────────────
