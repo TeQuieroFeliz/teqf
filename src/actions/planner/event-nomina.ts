@@ -1,7 +1,7 @@
 'use server';
 
 import { firestore } from '@/firebase/server';
-import { NominaEntry } from '@/lib/planner-types';
+import { NominaEntry, NominaRole, NominaTurno } from '@/lib/planner-types';
 
 function col(eventId: string) {
   return firestore
@@ -10,29 +10,28 @@ function col(eventId: string) {
     .collection('nomina');
 }
 
-// ── Add entry ─────────────────────────────────────────────────────────────────
+const emptyTurno = (): NominaTurno => ({ entrata: '', uscita: '', ore: 0 });
+
+// ── Add ───────────────────────────────────────────────────────────────────────
 
 export async function addNominaEntry(
   eventId: string,
-  personName: string,
-  userId: string = ''
+  data: {
+    name: string;
+    role: NominaRole;
+    turnoAM: NominaTurno;
+    turnoPM: NominaTurno;
+    totaleOre: number;
+    desmontaje: number;
+    createdBy: string;
+  }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const now = new Date().toISOString();
     const docRef = await col(eventId).add({
-      personName,
-      userId,
-      entryTimeAM: '',
-      exitTimeAM: '',
-      hoursAM: 0,
-      entryTimePM: '',
-      exitTimePM: '',
-      hoursPM: 0,
-      totalHours: 0,
-      desmontajeCount: 0,
-      approvedBy: null,
+      ...data,
+      ultimaModifica: now,
       createdAt: now,
-      updatedAt: now,
     });
     return { success: true, id: docRef.id };
   } catch (e: any) {
@@ -40,17 +39,24 @@ export async function addNominaEntry(
   }
 }
 
-// ── Update entry ──────────────────────────────────────────────────────────────
+// ── Update ────────────────────────────────────────────────────────────────────
 
 export async function updateNominaEntry(
   eventId: string,
   entryId: string,
-  data: Partial<Omit<NominaEntry, 'id' | 'createdAt' | 'approvedBy'>>
+  data: {
+    name: string;
+    role: NominaRole;
+    turnoAM: NominaTurno;
+    turnoPM: NominaTurno;
+    totaleOre: number;
+    desmontaje: number;
+  }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await col(eventId).doc(entryId).update({
       ...data,
-      updatedAt: new Date().toISOString(),
+      ultimaModifica: new Date().toISOString(),
     });
     return { success: true };
   } catch (e: any) {
@@ -58,42 +64,7 @@ export async function updateNominaEntry(
   }
 }
 
-// ── Approve entry (SuperAdmin only) ──────────────────────────────────────────
-
-export async function approveNominaEntry(
-  eventId: string,
-  entryId: string,
-  approvedBy: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await col(eventId).doc(entryId).update({
-      approvedBy,
-      updatedAt: new Date().toISOString(),
-    });
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
-}
-
-// ── Revoke approval (SuperAdmin only) ────────────────────────────────────────
-
-export async function revokeNominaApproval(
-  eventId: string,
-  entryId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await col(eventId).doc(entryId).update({
-      approvedBy: null,
-      updatedAt: new Date().toISOString(),
-    });
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message };
-  }
-}
-
-// ── Delete entry (SuperAdmin only) ───────────────────────────────────────────
+// ── Delete ────────────────────────────────────────────────────────────────────
 
 export async function deleteNominaEntry(
   eventId: string,
@@ -107,7 +78,7 @@ export async function deleteNominaEntry(
   }
 }
 
-// ── Get all entries (for PDF generation) ─────────────────────────────────────
+// ── Get all (PDF generation) ──────────────────────────────────────────────────
 
 export async function getNominaEntries(
   eventId: string

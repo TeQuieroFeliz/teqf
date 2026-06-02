@@ -1,20 +1,25 @@
 // ── Nomina ────────────────────────────────────────────────────────────────────
 
+export const NOMINA_ROLES = ['Fiorista', 'Staff', 'Supervisore'] as const;
+export type NominaRole = typeof NOMINA_ROLES[number];
+
+export type NominaTurno = {
+  entrata: string;  // "HH:MM" or ""
+  uscita: string;   // "HH:MM" or ""
+  ore: number;      // auto-calculated
+};
+
 export type NominaEntry = {
   id: string;
-  personName: string;
-  userId: string;          // planner id or '' for manual entries
-  entryTimeAM: string;     // "HH:MM" or ""
-  exitTimeAM: string;
-  hoursAM: number;         // stored, auto-calculated client-side
-  entryTimePM: string;     // "HH:MM" or ""
-  exitTimePM: string;
-  hoursPM: number;
-  totalHours: number;      // hoursAM + hoursPM
-  desmontajeCount: number;
-  approvedBy: string | null; // userId of approver, or null
+  name: string;
+  role: NominaRole;
+  turnoAM: NominaTurno;
+  turnoPM: NominaTurno;
+  totaleOre: number;
+  desmontaje: number;
+  ultimaModifica: string;   // ISO timestamp
+  createdBy: string;
   createdAt: string;
-  updatedAt: string;
 };
 
 // ── Cash Control ──────────────────────────────────────────────────────────────

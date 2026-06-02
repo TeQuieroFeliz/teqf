@@ -2,20 +2,24 @@
 
 import {
   addNominaEntry,
-  approveNominaEntry,
   deleteNominaEntry,
-  revokeNominaApproval,
   updateNominaEntry,
 } from '@/actions/planner/event-nomina';
 import { getPlannerEvent } from '@/actions/planner/planner-event-crud';
 import { db } from '@/firebase/client';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
-import { CashMovement, NominaEntry, PlannerEvent } from '@/lib/planner-types';
+import {
+  CashMovement,
+  NominaEntry,
+  NominaRole,
+  NominaTurno,
+  NOMINA_ROLES,
+  PlannerEvent,
+} from '@/lib/planner-types';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
   Calendar,
-  Check,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -24,41 +28,41 @@ import {
   Loader2,
   MapPin,
   Minus,
+  Pencil,
   Plus,
-  ShieldCheck,
-  ShieldOff,
   Trash2,
   Users,
   Wallet,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-// ─── Hour helpers ─────────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
-function calcHours(entry: string, exit: string): number {
-  if (!entry || !exit) return 0;
-  const [eh, em] = entry.split(':').map(Number);
-  const [xh, xm] = exit.split(':').map(Number);
-  let mins = xh * 60 + xm - (eh * 60 + em);
+function calcOre(entrata: string, uscita: string): number {
+  if (!entrata || !uscita) return 0;
+  const [eh, em] = entrata.split(':').map(Number);
+  const [uh, um] = uscita.split(':').map(Number);
+  let mins = uh * 60 + um - (eh * 60 + em);
   if (mins < 0) mins += 1440;
   return parseFloat((mins / 60).toFixed(2));
 }
-function fmtHours(h: number) {
-  if (h === 0) return '—';
+function fmtOre(h: number) {
+  if (!h) return '—';
   const hrs = Math.floor(h);
   const m   = Math.round((h - hrs) * 60);
   return m > 0 ? `${hrs}h ${m}m` : `${hrs}h`;
 }
-function hoursColor(h: number) {
+function oreColor(h: number) {
   if (h >= 12) return '#991b1b';
   if (h >= 10) return '#b45309';
   if (h > 0)  return '#15803d';
   return 'var(--tqf-muted)';
 }
-function hoursBg(h: number) {
+function oreBg(h: number) {
   if (h >= 12) return '#fef2f2';
   if (h >= 10) return '#fef9ee';
   if (h > 0)  return '#f0fdf4';
@@ -67,85 +71,315 @@ function hoursBg(h: number) {
 function fmtCurrency(n: number) {
   return `$${Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 }
+function fmtDataOra(iso: string) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+}
 
-// ─── NominaCard ───────────────────────────────────────────────────────────────
+const ROLE_COLORS: Record<NominaRole, { bg: string; text: string }> = {
+  Fiorista:   { bg: '#fdf2f4', text: 'var(--tqf-bordeaux)' },
+  Staff:      { bg: '#eff6ff', text: '#1d4ed8' },
+  Supervisore:{ bg: '#f0fdf4', text: '#15803d' },
+};
 
-function NominaCard({
-  entry, eventId, canEdit, canApprove, approverName, onDeleted,
+// ─── Add / Edit Modal ─────────────────────────────────────────────────────────
+
+type ModalMode = 'add' | 'edit';
+
+type FormState = {
+  name: string;
+  role: NominaRole;
+  entrataAM: string;
+  uscitaAM: string;
+  entrataPM: string;
+  uscitaPM: string;
+  desmontaje: number;
+};
+
+const EMPTY_FORM: FormState = {
+  name: '', role: 'Fiorista',
+  entrataAM: '', uscitaAM: '',
+  entrataPM: '', uscitaPM: '',
+  desmontaje: 0,
+};
+
+function NominaModal({
+  mode,
+  eventId,
+  entry,
+  createdBy,
+  onClose,
+  onSaved,
 }: {
-  entry: NominaEntry; eventId: string;
-  canEdit: boolean; canApprove: boolean;
-  approverName: string; onDeleted: () => void;
+  mode: ModalMode;
+  eventId: string;
+  entry?: NominaEntry;
+  createdBy: string;
+  onClose: () => void;
+  onSaved: () => void;
 }) {
-  const [entryAM, setEntryAM] = useState(entry.entryTimeAM);
-  const [exitAM,  setExitAM]  = useState(entry.exitTimeAM);
-  const [entryPM, setEntryPM] = useState(entry.entryTimePM);
-  const [exitPM,  setExitPM]  = useState(entry.exitTimePM);
-  const [desm,    setDesm]    = useState(entry.desmontajeCount ?? 0);
-  const [saving,    setSaving]    = useState(false);
-  const [approving, setApproving] = useState(false);
-  const [deleting,  setDeleting]  = useState(false);
-  const [expanded,  setExpanded]  = useState(false);
-
-  const lastUpdated = useRef(entry.updatedAt);
-  useEffect(() => {
-    if (entry.updatedAt !== lastUpdated.current) {
-      lastUpdated.current = entry.updatedAt;
-      setEntryAM(entry.entryTimeAM); setExitAM(entry.exitTimeAM);
-      setEntryPM(entry.entryTimePM); setExitPM(entry.exitTimePM);
-      setDesm(entry.desmontajeCount ?? 0);
+  const [form, setForm] = useState<FormState>(() => {
+    if (mode === 'edit' && entry) {
+      return {
+        name: entry.name,
+        role: entry.role,
+        entrataAM: entry.turnoAM.entrata,
+        uscitaAM:  entry.turnoAM.uscita,
+        entrataPM: entry.turnoPM.entrata,
+        uscitaPM:  entry.turnoPM.uscita,
+        desmontaje: entry.desmontaje,
+      };
     }
-  }, [entry.updatedAt, entry.entryTimeAM, entry.exitTimeAM, entry.entryTimePM, entry.exitTimePM, entry.desmontajeCount]);
+    return EMPTY_FORM;
+  });
+  const [saving, setSaving] = useState(false);
 
-  const hoursAM  = calcHours(entryAM, exitAM);
-  const hoursPM  = calcHours(entryPM, exitPM);
-  const total    = parseFloat((hoursAM + hoursPM).toFixed(2));
-  const isApproved = !!entry.approvedBy;
+  const oreAM    = calcOre(form.entrataAM, form.uscitaAM);
+  const orePM    = calcOre(form.entrataPM, form.uscitaPM);
+  const totale   = parseFloat((oreAM + orePM).toFixed(2));
 
-  const timeInput: React.CSSProperties = {
-    width: '100%', padding: '0.5rem', borderRadius: '0.625rem',
-    border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)',
-    fontSize: '1rem', fontWeight: 600, color: 'var(--tqf-dark)',
-    background: isApproved ? 'var(--tqf-beige)' : 'white',
-    outline: 'none', textAlign: 'center' as const,
-  };
-  const shiftLbl: React.CSSProperties = {
-    fontSize: '0.6rem', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)',
-    textTransform: 'uppercase' as const, letterSpacing: '0.12em',
-  };
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
+    setForm(f => ({ ...f, [k]: v }));
 
   async function handleSave() {
+    if (!form.name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
+
+    const turnoAM: NominaTurno = { entrata: form.entrataAM, uscita: form.uscitaAM, ore: oreAM };
+    const turnoPM: NominaTurno = { entrata: form.entrataPM, uscita: form.uscitaPM, ore: orePM };
+
     setSaving(true);
-    const r = await updateNominaEntry(eventId, entry.id, {
-      entryTimeAM: entryAM, exitTimeAM: exitAM, hoursAM,
-      entryTimePM: entryPM, exitTimePM: exitPM, hoursPM,
-      totalHours: total, desmontajeCount: desm,
-    });
-    if (r.success) toast.success(`${entry.personName} — salvato.`);
-    else toast.error(r.error ?? 'Errore.');
+    let result: { success: boolean; error?: string };
+    if (mode === 'add') {
+      result = await addNominaEntry(eventId, {
+        name: form.name.trim(), role: form.role,
+        turnoAM, turnoPM, totaleOre: totale,
+        desmontaje: form.desmontaje, createdBy,
+      });
+    } else {
+      result = await updateNominaEntry(eventId, entry!.id, {
+        name: form.name.trim(), role: form.role,
+        turnoAM, turnoPM, totaleOre: totale,
+        desmontaje: form.desmontaje,
+      });
+    }
+
+    if (result.success) {
+      toast.success(mode === 'add' ? 'Persona aggiunta.' : 'Aggiornato.');
+      onSaved();
+      onClose();
+    } else {
+      toast.error(result.error ?? 'Errore.');
+    }
     setSaving(false);
   }
 
-  async function handleApprove() {
-    setApproving(true);
-    const r = isApproved
-      ? await revokeNominaApproval(eventId, entry.id)
-      : await approveNominaEntry(eventId, entry.id, approverName);
-    if (!r.success) toast.error(r.error ?? 'Errore.');
-    setApproving(false);
-  }
-
-  async function handleDelete() {
-    if (!confirm(`Eliminare ${entry.personName} dalla nómina?`)) return;
-    setDeleting(true);
-    const r = await deleteNominaEntry(eventId, entry.id);
-    if (r.success) onDeleted();
-    else { toast.error(r.error ?? 'Errore.'); setDeleting(false); }
-  }
+  const inputSt: React.CSSProperties = {
+    width: '100%', padding: '0.55rem 0.75rem',
+    borderRadius: '0.625rem', border: '1px solid var(--tqf-beige-border)',
+    fontFamily: 'var(--font-body)', fontSize: '0.9rem',
+    color: 'var(--tqf-dark)', background: 'white', outline: 'none',
+  };
+  const lbl: React.CSSProperties = {
+    fontSize: '0.6rem', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)',
+    textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '0.3rem',
+  };
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-      {/* Header row — always visible */}
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-t-3xl overflow-y-auto"
+        style={{ background: 'white', maxHeight: '92dvh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+
+        <div className="px-5 pb-8 space-y-4">
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              {mode === 'add' ? 'Aggiungi persona' : 'Modifica persona'}
+            </h2>
+            <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}>
+              <X className="size-5" />
+            </button>
+          </div>
+
+          {/* Name */}
+          <div>
+            <label style={lbl}>Nome e cognome *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              placeholder="Maria García"
+              autoFocus={mode === 'add'}
+              style={inputSt}
+            />
+          </div>
+
+          {/* Role */}
+          <div>
+            <label style={lbl}>Ruolo *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {NOMINA_ROLES.map(r => {
+                const c = ROLE_COLORS[r];
+                const active = form.role === r;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => set('role', r)}
+                    className="py-2.5 rounded-xl text-sm font-medium transition-all"
+                    style={{
+                      border: `1.5px solid ${active ? c.text : 'var(--tqf-beige-border)'}`,
+                      background: active ? c.bg : 'white',
+                      color: active ? c.text : 'var(--tqf-muted)',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    {r}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* AM shift */}
+          <div>
+            <label style={lbl}>🌅 Turno Mattina</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
+                <input type="time" value={form.entrataAM}
+                  onChange={e => set('entrataAM', e.target.value)}
+                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
+              </div>
+              <div>
+                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
+                <input type="time" value={form.uscitaAM}
+                  onChange={e => set('uscitaAM', e.target.value)}
+                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
+              </div>
+            </div>
+            {oreAM > 0 && (
+              <p className="text-xs mt-1 text-right font-semibold"
+                style={{ color: oreColor(oreAM), fontFamily: 'var(--font-body)' }}>
+                {fmtOre(oreAM)}
+              </p>
+            )}
+          </div>
+
+          {/* PM shift */}
+          <div>
+            <label style={lbl}>🌆 Turno Pomeriggio</label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
+                <input type="time" value={form.entrataPM}
+                  onChange={e => set('entrataPM', e.target.value)}
+                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
+              </div>
+              <div>
+                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
+                <input type="time" value={form.uscitaPM}
+                  onChange={e => set('uscitaPM', e.target.value)}
+                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
+              </div>
+            </div>
+            {orePM > 0 && (
+              <p className="text-xs mt-1 text-right font-semibold"
+                style={{ color: oreColor(orePM), fontFamily: 'var(--font-body)' }}>
+                {fmtOre(orePM)}
+              </p>
+            )}
+          </div>
+
+          {/* Total preview */}
+          {totale > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+              style={{ background: oreBg(totale) }}>
+              <Clock className="size-4" style={{ color: oreColor(totale) }} />
+              <span className="text-sm font-semibold" style={{ color: oreColor(totale), fontFamily: 'var(--font-body)' }}>
+                {fmtOre(totale)} totali
+              </span>
+            </div>
+          )}
+
+          {/* Desmontaje */}
+          <div>
+            <label style={lbl}>Desmontaje</label>
+            <div className="flex items-center gap-0 w-fit">
+              <button type="button" disabled={form.desmontaje <= 0}
+                onClick={() => set('desmontaje', Math.max(0, form.desmontaje - 1))}
+                className="size-10 flex items-center justify-center rounded-l-xl disabled:opacity-30"
+                style={{ border: '1px solid var(--tqf-beige-border)', background: 'white' }}>
+                <Minus className="size-4" />
+              </button>
+              <div className="w-12 h-10 flex items-center justify-center text-base font-semibold"
+                style={{ borderTop: '1px solid var(--tqf-beige-border)', borderBottom: '1px solid var(--tqf-beige-border)', background: 'var(--tqf-beige)', fontFamily: 'var(--font-body)' }}>
+                {form.desmontaje}
+              </div>
+              <button type="button"
+                onClick={() => set('desmontaje', form.desmontaje + 1)}
+                className="size-10 flex items-center justify-center rounded-r-xl"
+                style={{ border: '1px solid var(--tqf-beige-border)', background: 'white' }}>
+                <Plus className="size-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              {mode === 'add' ? 'Aggiungi' : 'Salva modifiche'}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-5 py-3.5 rounded-2xl text-sm"
+              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Employee card ────────────────────────────────────────────────────────────
+
+function NominaCard({
+  entry, canEdit, onEdit, onDelete,
+}: {
+  entry: NominaEntry;
+  canEdit: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const roleColor = ROLE_COLORS[entry.role] ?? ROLE_COLORS.Staff;
+
+  return (
+    <div className="rounded-2xl overflow-hidden"
+      style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+
+      {/* Header — always visible */}
       <div
         className="flex items-center justify-between px-4 py-3.5 cursor-pointer"
         style={{ borderBottom: expanded ? '1px solid var(--tqf-beige-border)' : 'none' }}
@@ -154,37 +388,40 @@ function NominaCard({
         <div className="flex items-center gap-3 min-w-0">
           <div
             className="size-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0"
-            style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
+            style={{ background: roleColor.bg, color: roleColor.text, fontFamily: 'var(--font-body)' }}
           >
-            {entry.personName.charAt(0).toUpperCase()}
+            {entry.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-              {entry.personName}
-            </p>
             <div className="flex items-center gap-2 flex-wrap">
-              {total > 0 && (
+              <p className="text-sm font-medium" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                {entry.name}
+              </p>
+              <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+                style={{ background: roleColor.bg, color: roleColor.text, fontFamily: 'var(--font-body)' }}>
+                {entry.role}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+              {entry.totaleOre > 0 && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full"
-                  style={{ background: hoursBg(total), color: hoursColor(total), fontFamily: 'var(--font-body)' }}>
-                  {fmtHours(total)}
+                  style={{ background: oreBg(entry.totaleOre), color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
+                  {fmtOre(entry.totaleOre)}
                 </span>
               )}
-              {(entryAM || exitAM) && (
+              {entry.turnoAM?.entrata && (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  AM {entryAM || '?'}–{exitAM || '?'}
+                  AM {entry.turnoAM.entrata}–{entry.turnoAM.uscita || '?'}
                 </span>
               )}
-              {(entryPM || exitPM) && (
+              {entry.turnoPM?.entrata && (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  PM {entryPM || '?'}–{exitPM || '?'}
+                  PM {entry.turnoPM.entrata}–{entry.turnoPM.uscita || '?'}
                 </span>
               )}
-              {desm > 0 && (
-                <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{desm} desm.</span>
-              )}
-              {isApproved && (
-                <span className="text-xs flex items-center gap-0.5" style={{ color: '#15803d', fontFamily: 'var(--font-body)' }}>
-                  <Check className="size-3" /> Approvato
+              {entry.desmontaje > 0 && (
+                <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  {entry.desmontaje} desm.
                 </span>
               )}
             </div>
@@ -196,126 +433,83 @@ function NominaCard({
         }
       </div>
 
-      {/* Expanded: shift inputs + actions */}
+      {/* Expanded detail */}
       {expanded && (
-        <div className="px-4 pb-4 pt-3 space-y-4">
-
-          {/* AM */}
-          <div>
-            <p style={shiftLbl} className="mb-2">🌅 Turno Mattina</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p style={{ ...shiftLbl, marginBottom: '0.25rem' }}>Entrata</p>
-                <input type="time" value={entryAM}
-                  onChange={e => setEntryAM(e.target.value)}
-                  disabled={!canEdit || isApproved} style={timeInput} />
-              </div>
-              <div>
-                <p style={{ ...shiftLbl, marginBottom: '0.25rem' }}>Uscita</p>
-                <input type="time" value={exitAM}
-                  onChange={e => setExitAM(e.target.value)}
-                  disabled={!canEdit || isApproved} style={timeInput} />
+        <div className="px-4 pb-4 pt-3 space-y-3">
+          {/* Shift rows */}
+          {[
+            { label: '🌅 Turno Mattina', turno: entry.turnoAM },
+            { label: '🌆 Turno Pomeriggio', turno: entry.turnoPM },
+          ].map(({ label, turno }) => (
+            <div key={label} className="rounded-xl p-3"
+              style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
+              <p className="text-xs mb-2 font-medium" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                {label}
+              </p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Entrata</p>
+                    <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                      {turno?.entrata || '—'}
+                    </p>
+                  </div>
+                  <div className="w-px h-8" style={{ background: 'var(--tqf-beige-border)' }} />
+                  <div>
+                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Uscita</p>
+                    <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                      {turno?.uscita || '—'}
+                    </p>
+                  </div>
+                </div>
+                {(turno?.ore ?? 0) > 0 && (
+                  <span className="text-sm font-semibold px-2.5 py-1 rounded-lg"
+                    style={{ background: oreBg(turno!.ore), color: oreColor(turno!.ore), fontFamily: 'var(--font-body)' }}>
+                    {fmtOre(turno!.ore)}
+                  </span>
+                )}
               </div>
             </div>
-            {hoursAM > 0 && (
-              <p className="text-xs mt-1 text-right font-semibold"
-                style={{ color: hoursColor(hoursAM), fontFamily: 'var(--font-body)' }}>
-                {fmtHours(hoursAM)}
-              </p>
-            )}
-          </div>
+          ))}
 
-          {/* PM */}
-          <div>
-            <p style={shiftLbl} className="mb-2">🌆 Turno Pomeriggio</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p style={{ ...shiftLbl, marginBottom: '0.25rem' }}>Entrata</p>
-                <input type="time" value={entryPM}
-                  onChange={e => setEntryPM(e.target.value)}
-                  disabled={!canEdit || isApproved} style={timeInput} />
-              </div>
-              <div>
-                <p style={{ ...shiftLbl, marginBottom: '0.25rem' }}>Uscita</p>
-                <input type="time" value={exitPM}
-                  onChange={e => setExitPM(e.target.value)}
-                  disabled={!canEdit || isApproved} style={timeInput} />
-              </div>
-            </div>
-            {hoursPM > 0 && (
-              <p className="text-xs mt-1 text-right font-semibold"
-                style={{ color: hoursColor(hoursPM), fontFamily: 'var(--font-body)' }}>
-                {fmtHours(hoursPM)}
-              </p>
-            )}
-          </div>
-
-          {/* Total + Desmontaje */}
+          {/* Totals row */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
-              style={{ background: total > 0 ? hoursBg(total) : '#f3f4f6' }}>
-              <Clock className="size-4" style={{ color: hoursColor(total) }} />
-              <span className="text-base font-semibold" style={{ color: hoursColor(total), fontFamily: 'var(--font-body)' }}>
-                {total > 0 ? fmtHours(total) : '—'}
+              style={{ background: oreBg(entry.totaleOre) }}>
+              <Clock className="size-4" style={{ color: oreColor(entry.totaleOre) }} />
+              <span className="text-sm font-semibold" style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
+                {fmtOre(entry.totaleOre)}
               </span>
-              <span className="text-xs opacity-70" style={{ color: hoursColor(total), fontFamily: 'var(--font-body)' }}>totali</span>
+              <span className="text-xs opacity-70" style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
+                totali
+              </span>
             </div>
-
-            <div className="flex items-center">
-              <p className="text-xs mr-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Desmontaje</p>
-              <button type="button" disabled={!canEdit || isApproved || desm <= 0}
-                onClick={() => setDesm(v => Math.max(0, v - 1))}
-                className="size-8 flex items-center justify-center rounded-l-xl disabled:opacity-30"
-                style={{ border: '1px solid var(--tqf-beige-border)', background: 'white' }}>
-                <Minus className="size-3.5" />
-              </button>
-              <div className="size-8 flex items-center justify-center text-sm font-semibold"
-                style={{ borderTop: '1px solid var(--tqf-beige-border)', borderBottom: '1px solid var(--tqf-beige-border)', background: 'var(--tqf-beige)', fontFamily: 'var(--font-body)' }}>
-                {desm}
-              </div>
-              <button type="button" disabled={!canEdit || isApproved}
-                onClick={() => setDesm(v => v + 1)}
-                className="size-8 flex items-center justify-center rounded-r-xl disabled:opacity-30"
-                style={{ border: '1px solid var(--tqf-beige-border)', background: 'white' }}>
-                <Plus className="size-3.5" />
-              </button>
-            </div>
+            {entry.desmontaje > 0 && (
+              <span className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                {entry.desmontaje} desmontaje
+              </span>
+            )}
           </div>
 
-          {/* Actions */}
-          {(canEdit || canApprove) && (
+          {/* Ultima modifica */}
+          <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            Ultima modifica: {fmtDataOra(entry.ultimaModifica)}
+          </p>
+
+          {/* Edit / Delete */}
+          {canEdit && (
             <div className="flex gap-2 pt-1">
-              {canEdit && !isApproved && (
-                <button onClick={handleSave} disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium disabled:opacity-50"
-                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-                  {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                  Salva
-                </button>
-              )}
-              {canApprove && (
-                <button onClick={handleApprove} disabled={approving}
-                  className="flex items-center justify-center px-4 py-3 rounded-2xl text-sm disabled:opacity-50"
-                  style={isApproved
-                    ? { background: '#fef9ee', color: '#b45309', border: '1px solid #fde68a', fontFamily: 'var(--font-body)' }
-                    : { background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontFamily: 'var(--font-body)' }}>
-                  {approving ? <Loader2 className="size-4 animate-spin" />
-                    : isApproved ? <ShieldOff className="size-4" /> : <ShieldCheck className="size-4" />}
-                </button>
-              )}
-              {canApprove && (
-                <button onClick={handleDelete} disabled={deleting}
-                  className="flex items-center justify-center px-4 py-3 rounded-2xl text-sm disabled:opacity-50"
-                  style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontFamily: 'var(--font-body)' }}>
-                  {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                </button>
-              )}
+              <button onClick={onEdit}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm"
+                style={{ border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+                <Pencil className="size-3.5" /> Editar
+              </button>
+              <button onClick={onDelete}
+                className="flex items-center justify-center px-4 py-2.5 rounded-xl text-sm"
+                style={{ border: '1px solid #fecaca', background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                <Trash2 className="size-3.5" />
+              </button>
             </div>
-          )}
-          {isApproved && (
-            <p className="text-xs text-center" style={{ color: '#15803d', fontFamily: 'var(--font-body)' }}>
-              ✓ Approvato da {entry.approvedBy}
-            </p>
           )}
         </div>
       )}
@@ -338,17 +532,20 @@ export default function ProjectPage() {
     isLoading: authLoading,
   } = usePlannerAuth();
 
-  const [event,    setEvent]    = useState<PlannerEvent | null>(null);
-  const [entries,  setEntries]  = useState<NominaEntry[]>([]);
+  const [event,     setEvent]     = useState<PlannerEvent | null>(null);
+  const [entries,   setEntries]   = useState<NominaEntry[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [cashBudget, setCashBudget] = useState(0);
-  const [loading,  setLoading]  = useState(true);
+  const [loading,   setLoading]   = useState(true);
+
+  // Tabs — default to nomina only if user can see it, else gastos
+  const canNomina = isSuperAdmin || canManageCashControl;
   const [activeTab, setActiveTab] = useState<Tab>('nomina');
 
-  // Add-person form
-  const [showAdd,   setShowAdd]   = useState(false);
-  const [newName,   setNewName]   = useState('');
-  const [addingPerson, setAddingPerson] = useState(false);
+  // Modal state
+  const [modalMode, setModalMode]   = useState<ModalMode>('add');
+  const [editEntry, setEditEntry]   = useState<NominaEntry | undefined>();
+  const [showModal, setShowModal]   = useState(false);
   const [downloading, setDownloading] = useState(false);
 
   // Load event once
@@ -362,15 +559,20 @@ export default function ProjectPage() {
     });
   }, [eventId, router]);
 
+  // Default tab: gastos for XB-only users
+  useEffect(() => {
+    if (!authLoading && !canNomina) setActiveTab('gastos');
+  }, [authLoading, canNomina]);
+
   // Real-time nomina
   useEffect(() => {
-    if (!eventId) return;
+    if (!eventId || !canNomina) return;
     const unsub = onSnapshot(
       query(collection(db, 'plannerEvents', eventId, 'nomina'), orderBy('createdAt', 'asc')),
       snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as NominaEntry)))
     );
     return () => unsub();
-  }, [eventId]);
+  }, [eventId, canNomina]);
 
   // Real-time cash movements
   useEffect(() => {
@@ -390,11 +592,8 @@ export default function ProjectPage() {
     );
   }
 
-  const isOwnEvent  = plannerUser?.id === event?.plannerId;
-  const canView  = isSuperAdmin || canManageCashControl || (canCreateProjects && isOwnEvent);
-  const canEdit  = isSuperAdmin || canManageCashControl;
-  const canApprove = isSuperAdmin;
-  const approverName = adminUser?.name ?? adminUser?.email ?? plannerUser?.name ?? 'Admin';
+  const isOwnEvent = plannerUser?.id === event?.plannerId;
+  const canView    = isSuperAdmin || canManageCashControl || (canCreateProjects && isOwnEvent);
 
   if (!canView) {
     return (
@@ -407,27 +606,24 @@ export default function ProjectPage() {
     );
   }
 
-  // Cash stats
-  const totalSpent = movements.reduce((s, m) => s + m.amount, 0);
-  const balance    = cashBudget - totalSpent;
-
-  // Nomina stats
-  const totalHours = entries.reduce((s, e) => s + (e.totalHours ?? 0), 0);
-  const approved   = entries.filter(e => !!e.approvedBy).length;
-
-  // First event day date display
-  const firstDay = event?.days?.[0];
+  const createdBy   = adminUser?.id ?? plannerUser?.id ?? '';
+  const totalOre    = entries.reduce((s, e) => s + (e.totaleOre ?? 0), 0);
+  const totalDesm   = entries.reduce((s, e) => s + (e.desmontaje ?? 0), 0);
+  const totalSpent  = movements.reduce((s, m) => s + m.amount, 0);
+  const balance     = cashBudget - totalSpent;
+  const firstDay    = event?.days?.[0];
   const eventDateLabel = firstDay
     ? new Date(firstDay.date + 'T12:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
 
-  async function handleAddPerson() {
-    if (!newName.trim()) { toast.error('Inserisci il nome della persona.'); return; }
-    setAddingPerson(true);
-    const r = await addNominaEntry(eventId, newName.trim());
-    if (r.success) { toast.success(`${newName.trim()} aggiunta.`); setNewName(''); setShowAdd(false); }
+  function openAdd()  { setModalMode('add'); setEditEntry(undefined); setShowModal(true); }
+  function openEdit(e: NominaEntry) { setModalMode('edit'); setEditEntry(e); setShowModal(true); }
+
+  async function handleDelete(entry: NominaEntry) {
+    if (!confirm(`Eliminare ${entry.name}?`)) return;
+    const r = await deleteNominaEntry(eventId, entry.id);
+    if (r.success) toast.success('Persona rimossa.');
     else toast.error(r.error ?? 'Errore.');
-    setAddingPerson(false);
   }
 
   async function handleDownloadPdf() {
@@ -445,29 +641,24 @@ export default function ProjectPage() {
       a.download = `TQF_Nomina_${(event?.eventCode || 'evento').replace(/\s+/g, '_')}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      toast.error(e.message ?? 'Errore download PDF.');
-    }
+    } catch (e: any) { toast.error(e.message); }
     setDownloading(false);
   }
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen pb-8" style={{ background: 'var(--tqf-beige)' }}>
 
-      {/* ── Sticky header ────────────────────────────────────────────────── */}
+      {/* Sticky header */}
       <header
         className="sticky top-0 z-10 px-4 pt-3 pb-0"
         style={{ background: 'white', borderBottom: '1px solid var(--tqf-beige-border)' }}
       >
-        {/* Top row */}
-        <div className="flex items-center justify-between mb-3">
-          <Link
-            href="/planner"
+        <div className="flex items-center justify-between mb-2">
+          <Link href="/planner"
             className="flex items-center gap-1.5 text-sm"
-            style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-          >
+            style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             <ArrowLeft className="size-4" />
             <span className="hidden xs:inline">Dashboard</span>
           </Link>
@@ -484,20 +675,19 @@ export default function ProjectPage() {
             )}
           </div>
 
-          <Link
-            href={`/planner/events/${eventId}`}
-            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
-            style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
-          >
+          <Link href={`/planner/events/${eventId}`}
+            className="text-xs px-2.5 py-1.5 rounded-lg"
+            style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
             Modifica
           </Link>
         </div>
 
         {/* Event meta */}
         {(eventDateLabel || firstDay?.venue) && (
-          <div className="flex items-center gap-3 pb-3 flex-wrap">
+          <div className="flex items-center gap-3 pb-2 flex-wrap">
             {eventDateLabel && (
-              <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              <span className="flex items-center gap-1 text-xs"
+                style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                 <Calendar className="size-3.5" /> {eventDateLabel}
               </span>
             )}
@@ -510,60 +700,74 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {/* Tab bar */}
+        {/* Tabs */}
         <div className="flex -mx-4 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-          {([
-            { id: 'nomina' as Tab, icon: <Users className="size-4" />, label: 'Nómina',
-              badge: `${entries.length}` },
-            { id: 'gastos' as Tab, icon: <Wallet className="size-4" />, label: 'Gastos',
-              badge: movements.length > 0 ? fmtCurrency(cashBudget > 0 ? balance : totalSpent) : null },
-          ] as const).map(tab => (
+          {/* Nomina tab — only for SuperAdmin and TeQF */}
+          {canNomina && (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors relative"
+              onClick={() => setActiveTab('nomina')}
+              className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
               style={{
-                color: activeTab === tab.id ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                color: activeTab === 'nomina' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
                 fontFamily: 'var(--font-body)',
-                borderBottom: activeTab === tab.id ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
+                borderBottom: activeTab === 'nomina' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
                 background: 'white',
               }}
             >
-              {tab.icon}
-              {tab.label}
-              {tab.badge && (
-                <span
-                  className="text-xs px-1.5 py-0.5 rounded-full"
-                  style={{
-                    background: activeTab === tab.id ? 'var(--tqf-cipria-light)' : '#f3f4f6',
-                    color: activeTab === tab.id ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
-                    fontFamily: 'var(--font-body)',
-                  }}
-                >
-                  {tab.badge}
-                </span>
-              )}
+              <Users className="size-4" />
+              Nómina
+              <span className="text-xs px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: activeTab === 'nomina' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
+                  color: activeTab === 'nomina' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                  fontFamily: 'var(--font-body)',
+                }}>
+                {entries.length}
+              </span>
             </button>
-          ))}
+          )}
+
+          {/* Gastos tab */}
+          <button
+            onClick={() => setActiveTab('gastos')}
+            className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
+            style={{
+              color: activeTab === 'gastos' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+              fontFamily: 'var(--font-body)',
+              borderBottom: activeTab === 'gastos' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
+              background: 'white',
+            }}
+          >
+            <Wallet className="size-4" />
+            Gastos
+            {movements.length > 0 && (
+              <span className="text-xs px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: activeTab === 'gastos' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
+                  color: activeTab === 'gastos' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                  fontFamily: 'var(--font-body)',
+                }}>
+                {cashBudget > 0 ? fmtCurrency(balance) : fmtCurrency(totalSpent)}
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
-      {/* ══════════════════ NÓMINA TAB ══════════════════ */}
-      {activeTab === 'nomina' && (
+      {/* ══ NÓMINA TAB ══ */}
+      {activeTab === 'nomina' && canNomina && (
         <>
           {/* Stats bar */}
-          <div className="mx-4 mt-4 rounded-2xl px-4 py-3 grid grid-cols-4 gap-2"
+          <div className="mx-4 mt-4 rounded-2xl px-4 py-3 grid grid-cols-3 gap-2"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             {[
-              { label: 'Persone', value: String(entries.length) },
-              { label: 'Ore', value: totalHours > 0 ? fmtHours(totalHours) : '—',
-                color: hoursColor(totalHours) },
-              { label: 'Desm.', value: String(entries.reduce((s, e) => s + (e.desmontajeCount ?? 0), 0)) },
-              { label: 'Approv.', value: `${approved}/${entries.length}`,
-                color: approved === entries.length && entries.length > 0 ? '#15803d' : undefined },
+              { label: 'Persone',    value: String(entries.length) },
+              { label: 'Ore totali', value: fmtOre(totalOre), color: totalOre > 0 ? oreColor(totalOre) : undefined },
+              { label: 'Desmontaje', value: String(totalDesm) },
             ].map(({ label, value, color }) => (
               <div key={label} className="text-center">
-                <p className="text-base font-semibold" style={{ color: color ?? 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                <p className="text-lg font-semibold"
+                  style={{ color: color ?? 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
                   {value}
                 </p>
                 <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{label}</p>
@@ -571,22 +775,15 @@ export default function ProjectPage() {
             ))}
           </div>
 
-          {/* Actions row */}
+          {/* Action bar */}
           <div className="mx-4 mt-3 flex gap-2">
-            {canEdit && (
-              <button
-                onClick={() => setShowAdd(v => !v)}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium"
-                style={{
-                  border: showAdd ? '1.5px solid var(--tqf-bordeaux)' : '2px dashed var(--tqf-beige-border)',
-                  color: 'var(--tqf-bordeaux)', background: showAdd ? 'var(--tqf-cipria-light)' : 'white',
-                  fontFamily: 'var(--font-body)',
-                }}
-              >
-                <Plus className="size-4" />
-                Aggiungi persona
-              </button>
-            )}
+            <button
+              onClick={openAdd}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium"
+              style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}
+            >
+              <Plus className="size-4" /> Aggiungi persona
+            </button>
             <button
               onClick={handleDownloadPdf}
               disabled={downloading || entries.length === 0}
@@ -598,44 +795,7 @@ export default function ProjectPage() {
             </button>
           </div>
 
-          {/* Add-person inline form */}
-          {showAdd && canEdit && (
-            <div className="mx-4 mt-3 rounded-2xl p-4 space-y-3"
-              style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-              <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Nuova persona
-              </p>
-              <div className="flex items-center gap-2">
-                <div className="size-9 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-                  <Users className="size-4" />
-                </div>
-                <input
-                  type="text" value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddPerson()}
-                  placeholder="Nome e cognome" autoFocus
-                  className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)', background: 'var(--tqf-beige)' }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handleAddPerson} disabled={addingPerson}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
-                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-                  {addingPerson ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                  Aggiungi
-                </button>
-                <button onClick={() => { setShowAdd(false); setNewName(''); }}
-                  className="px-4 py-2.5 rounded-xl text-sm"
-                  style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Annulla
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Entry cards */}
+          {/* Cards */}
           {entries.length === 0 ? (
             <div className="mx-4 mt-4 rounded-2xl p-10 text-center"
               style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
@@ -644,17 +804,18 @@ export default function ProjectPage() {
                 <Users className="size-6" />
               </div>
               <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                {canEdit ? 'Usa il pulsante qui sopra per aggiungere il team.' : 'Nessuna persona nella nómina.'}
+                Nessuna persona ancora. Usa il pulsante qui sopra.
               </p>
             </div>
           ) : (
             <div className="mx-4 mt-3 space-y-3">
               {entries.map(e => (
                 <NominaCard
-                  key={e.id} entry={e} eventId={eventId}
-                  canEdit={canEdit} canApprove={canApprove}
-                  approverName={approverName}
-                  onDeleted={() => toast.success('Rimosso dalla nómina.')}
+                  key={e.id}
+                  entry={e}
+                  canEdit={canNomina}
+                  onEdit={() => openEdit(e)}
+                  onDelete={() => handleDelete(e)}
                 />
               ))}
             </div>
@@ -662,18 +823,12 @@ export default function ProjectPage() {
         </>
       )}
 
-      {/* ══════════════════ GASTOS TAB ══════════════════ */}
+      {/* ══ GASTOS TAB ══ */}
       {activeTab === 'gastos' && (
         <div className="mx-4 mt-4 space-y-3">
-          {/* Balance card */}
-          <div
-            className="rounded-3xl px-5 pt-5 pb-4"
-            style={{
-              background: cashBudget > 0
-                ? (balance >= 0 ? '#0f2e1a' : '#2a0e0e')
-                : '#1a0f0a',
-            }}
-          >
+          {/* Balance */}
+          <div className="rounded-3xl px-5 pt-5 pb-4"
+            style={{ background: cashBudget > 0 ? (balance >= 0 ? '#0f2e1a' : '#2a0e0e') : '#1a0f0a' }}>
             <p className="text-xs uppercase tracking-widest opacity-50 mb-1"
               style={{ fontFamily: 'var(--font-body)', color: 'white', letterSpacing: '0.16em' }}>
               {cashBudget > 0 ? 'Saldo attuale' : 'Spesa totale'}
@@ -688,17 +843,9 @@ export default function ProjectPage() {
                 : fmtCurrency(totalSpent)}
             </p>
             <div className="flex gap-4">
-              {cashBudget > 0 && (
-                <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>
-                  Budget {fmtCurrency(cashBudget)}
-                </span>
-              )}
-              <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>
-                Gastato {fmtCurrency(totalSpent)}
-              </span>
-              <span className="text-xs opacity-50" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>
-                {movements.length} movim.
-              </span>
+              {cashBudget > 0 && <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>Budget {fmtCurrency(cashBudget)}</span>}
+              <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>Gastato {fmtCurrency(totalSpent)}</span>
+              <span className="text-xs opacity-50" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>{movements.length} movim.</span>
             </div>
           </div>
 
@@ -727,41 +874,40 @@ export default function ProjectPage() {
                         : <Wallet className="size-3.5" style={{ color: 'var(--tqf-bordeaux)' }} />}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm capitalize truncate"
-                        style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                        {m.category}
-                      </p>
+                      <p className="text-sm capitalize truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>{m.category}</p>
                       <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                         {m.date} {m.time} · {m.registeredByName?.split(' ')[0]}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                    <span className="text-xs px-1.5 py-0.5 rounded-full"
-                      style={m.status === 'approved'
-                        ? { background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }
-                        : { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }}>
-                      {m.status === 'approved' ? '✓' : '·'}
-                    </span>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                      -{fmtCurrency(m.amount)}
-                    </p>
-                  </div>
+                  <p className="text-sm font-semibold flex-shrink-0 ml-3"
+                    style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+                    -{fmtCurrency(m.amount)}
+                  </p>
                 </div>
               ))}
             </div>
           )}
 
-          {/* CTA to full page */}
-          <Link
-            href={`/planner/projects/${eventId}/cash-control`}
+          <Link href={`/planner/projects/${eventId}/cash-control`}
             className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl text-sm font-medium"
-            style={{ border: '1.5px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}
-          >
+            style={{ border: '1.5px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
             <Wallet className="size-4" />
             {movements.length === 0 ? 'Registra il primo gasto' : 'Gestisci tutti i gastos'}
           </Link>
         </div>
+      )}
+
+      {/* Add/Edit modal */}
+      {showModal && (
+        <NominaModal
+          mode={modalMode}
+          eventId={eventId}
+          entry={editEntry}
+          createdBy={createdBy}
+          onClose={() => setShowModal(false)}
+          onSaved={() => setShowModal(false)}
+        />
       )}
     </div>
   );
