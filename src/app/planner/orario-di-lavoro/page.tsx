@@ -8,15 +8,15 @@ import {
   ArrowLeft,
   ArrowRight,
   Calendar,
+  Clock,
   Loader2,
   MapPin,
   Users,
-  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-export default function CashControlPage() {
+export default function OrarioDiLavoroPage() {
   const { isSuperAdmin, canManageCashControl, isLoading: authLoading } = usePlannerAuth();
   const [events,  setEvents]  = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,15 +73,16 @@ export default function CashControlPage() {
         </Link>
         <div className="h-4 w-px flex-shrink-0" style={{ background: 'var(--tqf-beige-border)' }} />
         <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1.5 rounded-lg flex-shrink-0" style={{ background: '#f0fdf4', color: '#15803d' }}>
-            <Wallet className="size-4" />
+          <div className="p-1.5 rounded-lg flex-shrink-0"
+            style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
+            <Clock className="size-4" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Cash Control
+              Orario di Lavoro
             </h1>
             <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Registra movimenti monetari
+              Registra ore lavorate dei dipendenti
             </p>
           </div>
         </div>
@@ -92,8 +93,8 @@ export default function CashControlPage() {
           <div className="rounded-2xl p-12 text-center"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             <div className="mx-auto mb-4 size-12 rounded-2xl flex items-center justify-center"
-              style={{ background: '#f0fdf4', color: '#15803d' }}>
-              <Wallet className="size-6" />
+              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
+              <Users className="size-6" />
             </div>
             <p className="text-base mb-1"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
@@ -106,7 +107,7 @@ export default function CashControlPage() {
         ) : (
           <div className="space-y-3">
             <p className="text-sm mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {events.length} {events.length === 1 ? 'evento' : 'eventi'} · seleziona per gestire il cash control
+              {events.length} {events.length === 1 ? 'evento' : 'eventi'} · seleziona per gestire l&apos;orario del team
             </p>
             {events.map(evt => {
               const firstDay  = evt.days?.[0];
@@ -119,13 +120,14 @@ export default function CashControlPage() {
               return (
                 <Link
                   key={evt.id}
-                  href={`/planner/projects/${evt.id}/cash-control`}
+                  href={`/planner/projects/${evt.id}`}
                   className="flex items-center justify-between rounded-2xl px-5 py-4 transition-all hover:shadow-md active:scale-[0.99]"
                   style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
 
                   <div className="flex items-center gap-4 min-w-0">
-                    <div className="p-2.5 rounded-xl flex-shrink-0" style={{ background: '#f0fdf4', color: '#15803d' }}>
-                      <Wallet className="size-5" />
+                    <div className="p-2.5 rounded-xl flex-shrink-0"
+                      style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
+                      <Clock className="size-5" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-base font-medium truncate"
@@ -162,8 +164,8 @@ export default function CashControlPage() {
 
                   <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                     <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
-                      style={{ background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }}>
-                      Cash Control →
+                      style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+                      Orario →
                     </span>
                     <ArrowRight className="size-4 sm:hidden" style={{ color: 'var(--tqf-muted)' }} />
                   </div>

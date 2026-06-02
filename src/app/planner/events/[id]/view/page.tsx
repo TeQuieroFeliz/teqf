@@ -13,7 +13,6 @@ import {
   MapPin,
   Sofa,
   Users,
-  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -115,29 +114,6 @@ export default function EventViewPage() {
       </header>
 
       <div className="px-4 py-4 space-y-4">
-
-        {/* ── Action buttons ── */}
-        <div className="grid grid-cols-2 gap-3">
-          <Link href={`/planner/projects/${eventId}`}
-            className="flex flex-col items-center gap-2.5 py-5 rounded-2xl text-sm font-medium transition-all hover:shadow-sm active:scale-[0.98]"
-            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)', textDecoration: 'none' }}>
-            <div className="size-11 rounded-xl flex items-center justify-center"
-              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-              <Users className="size-5" />
-            </div>
-            <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem' }}>Orario di Lavoro</span>
-          </Link>
-
-          <Link href={`/planner/projects/${eventId}/cash-control`}
-            className="flex flex-col items-center gap-2.5 py-5 rounded-2xl text-sm font-medium transition-all hover:shadow-sm active:scale-[0.98]"
-            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)', textDecoration: 'none' }}>
-            <div className="size-11 rounded-xl flex items-center justify-center"
-              style={{ background: '#f0fdf4', color: '#15803d' }}>
-              <Wallet className="size-5" />
-            </div>
-            <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem' }}>Cash Control</span>
-          </Link>
-        </div>
 
         {/* ── Event info ── */}
         <div className="rounded-2xl overflow-hidden"

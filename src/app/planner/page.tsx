@@ -421,7 +421,7 @@ function TeQFUserDashboard() {
       label: 'Orario di Lavoro',
       description: 'Ore, turni e desmontaje per ogni evento',
       icon: <Clock className="size-5" />,
-      href: '/planner/orario',
+      href: '/planner/orario-di-lavoro',
     },
   ];
 
