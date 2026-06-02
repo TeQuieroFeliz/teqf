@@ -411,10 +411,17 @@ function TeQFUserDashboard() {
     },
     {
       key: 'events',
-      label: 'Tutti i Progetti',
-      description: 'Visualizza tutti i progetti planner',
-      icon: <ClipboardList className="size-5" />,
-      href: '/planner/planners',
+      label: 'Eventi',
+      description: 'Visualizza tutti gli eventi XB',
+      icon: <Calendar className="size-5" />,
+      href: '/planner/events',
+    },
+    {
+      key: 'orario',
+      label: 'Orario di Lavoro',
+      description: 'Ore, turni e desmontaje per ogni evento',
+      icon: <Clock className="size-5" />,
+      href: '/planner/orario',
     },
   ];
 
@@ -467,7 +474,7 @@ function TeQFUserDashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {sections.map((section) => (
             <a
               key={section.key}
