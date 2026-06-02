@@ -52,8 +52,8 @@ const ADMIN_SECTIONS = [
   },
   {
     key: 'users',
-    label: 'Utenti Admin',
-    description: 'Ruoli, permessi e gestione accessi',
+    label: 'Gestione Utenti',
+    description: 'Assegna team e permessi automatici',
     icon: <Users className="size-5" />,
     href: '/planner/users',
   },
