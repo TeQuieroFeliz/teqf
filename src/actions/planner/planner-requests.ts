@@ -2,6 +2,7 @@
 
 import { auth, firestore } from '@/firebase/server';
 import { PlannerRequest, TeamRole } from '@/lib/planner-types';
+import { permissionsFor, teamRoleFor } from '@/lib/user-permissions';
 import { revalidatePath } from 'next/cache';
 import { Resend } from 'resend';
 
@@ -256,6 +257,63 @@ export async function rejectPlannerRequest(
     } catch (emailErr: any) {
       emailError = emailErr.message;
       console.error('[rejectPlannerRequest] email error:', emailErr.message);
+    }
+
+    return { success: true, emailSent, emailError };
+  } catch (e: any) {
+    return { success: false, emailSent: false, error: e.message };
+  }
+}
+
+// New approval flow — user self-registered with their own password.
+// Updates users/{uid} + creates/updates planners/{uid}. No password handling.
+export async function approveRegistration(
+  requestId: string,
+  email: string,
+  name: string,
+  teamRole: TeamRole,
+  requestUid?: string,
+): Promise<{ success: boolean; emailSent: boolean; error?: string; emailError?: string }> {
+  try {
+    const teams       = teamRole === 'xb_planner' ? ['XB']
+                      : teamRole === 'teqf_user'  ? ['TeQF']
+                      : ['XB', 'TeQF'];
+    const permissions = permissionsFor(teams);
+    const now         = new Date().toISOString();
+
+    // Resolve Firebase Auth UID
+    let uid: string;
+    if (requestUid) {
+      uid = requestUid;
+    } else {
+      const userRecord = await auth.getUserByEmail(email);
+      uid = userRecord.uid;
+    }
+
+    // Update users/{uid}
+    await firestore.collection('users').doc(uid).set(
+      { email, name, team: teams, teamRole, permissions, status: 'approved', active: true, approvedAt: now },
+      { merge: true }
+    );
+
+    // Create / update planners/{uid} so PlannerAuthContext can find the user
+    await firestore.collection('planners').doc(uid).set(
+      { email, name, team: teams, teamRole, permissions, active: true, mustChangePassword: false, approvedAt: now },
+      { merge: true }
+    );
+
+    // Mark request as approved
+    await reqRef.doc(requestId).update({ status: 'approved' });
+    revalidatePath('/planner/requests');
+
+    let emailSent = false;
+    let emailError: string | undefined;
+    try {
+      await sendApprovalEmail(name, email);
+      emailSent = true;
+    } catch (emailErr: any) {
+      emailError = emailErr.message;
+      console.error('[approveRegistration] email error:', emailErr.message);
     }
 
     return { success: true, emailSent, emailError };

@@ -1,6 +1,6 @@
 'use client';
 
-import { approvePlannerRequest, rejectPlannerRequest } from '@/actions/planner/planner-requests';
+import { approveRegistration, approvePlannerRequest, rejectPlannerRequest } from '@/actions/planner/planner-requests';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { db } from '@/firebase/client';
 import { TeamRole, PlannerRequest } from '@/lib/planner-types';
@@ -8,13 +8,10 @@ import {
   ArrowLeft,
   Check,
   ClipboardList,
-  Eye,
-  EyeOff,
   Loader2,
   Phone,
   UserCheck,
   UserX,
-  X,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -49,8 +46,6 @@ export default function PlannerRequestsPage() {
   // Approval modal state
   const [approvalReq, setApprovalReq] = useState<PlannerRequest | null>(null);
   const [teamRole, setTeamRole] = useState<TeamRole>('xb_planner');
-  const [tempPassword, setTempPassword] = useState('');
-  const [showPwd, setShowPwd] = useState(false);
   const [approving, setApproving] = useState(false);
 
   // Real-time listener for pending requests
@@ -76,17 +71,6 @@ export default function PlannerRequestsPage() {
     );
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '0.5rem 0.75rem',
-    borderRadius: '0.5rem',
-    border: '1px solid var(--tqf-beige-border)',
-    fontFamily: 'var(--font-body)',
-    fontSize: '0.875rem',
-    color: 'var(--tqf-dark)',
-    background: 'white',
-    outline: 'none',
-  };
   const labelStyle: React.CSSProperties = {
     display: 'block',
     fontSize: '0.65rem',
@@ -100,27 +84,17 @@ export default function PlannerRequestsPage() {
   function openApproveModal(req: PlannerRequest) {
     setApprovalReq(req);
     setTeamRole('xb_planner');
-    setTempPassword('');
-    setShowPwd(false);
   }
 
   async function handleConfirmApprove() {
     if (!approvalReq) return;
-    if (tempPassword.length < 6) {
-      toast.error('La password temporanea deve avere almeno 6 caratteri.');
-      return;
-    }
     setApproving(true);
     const req = approvalReq;
 
-    const result = await approvePlannerRequest(
-      req.id,
-      req.email,
-      req.name,
-      teamRole,
-      tempPassword,
-      req.phone
-    );
+    // Use new flow (self-registered users have req.uid); fall back to legacy for old requests
+    const result = req.uid
+      ? await approveRegistration(req.id, req.email, req.name, teamRole, req.uid)
+      : await approvePlannerRequest(req.id, req.email, req.name, teamRole, '', req.phone);
 
     if (!result.success) {
       toast.error(result.error ?? 'Errore approvazione.');
@@ -132,9 +106,9 @@ export default function PlannerRequestsPage() {
     setApproving(false);
 
     if (result.emailSent) {
-      toast.success(`${req.name} approvata. Email di conferma inviata.`);
+      toast.success(`${req.name} approvata/o. Email di conferma inviata.`);
     } else {
-      toast.success(`${req.name} approvata.`);
+      toast.success(`${req.name} approvata/o.`);
       if (result.emailError) {
         toast.warning(`Email non inviata: ${result.emailError}.`);
       }
@@ -253,33 +227,6 @@ export default function PlannerRequestsPage() {
                 </div>
               </div>
 
-              {/* Temp password */}
-              <div className="mb-5">
-                <label style={labelStyle}>Password temporanea * (min. 6 caratteri)</label>
-                <div className="relative">
-                  <input
-                    type={showPwd ? 'text' : 'password'}
-                    value={tempPassword}
-                    onChange={(e) => setTempPassword(e.target.value)}
-                    placeholder="••••••••"
-                    style={{ ...inputStyle, paddingRight: '2.5rem' }}
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && handleConfirmApprove()}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPwd(!showPwd)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                    style={{ color: 'var(--tqf-muted)' }}
-                  >
-                    {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
-                <p className="mt-1.5 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Comunicala all&apos;utente. Potrà cambiarla dopo il primo accesso.
-                </p>
-              </div>
-
               <div className="flex gap-2">
                 <button
                   onClick={handleConfirmApprove}
@@ -288,7 +235,7 @@ export default function PlannerRequestsPage() {
                   style={{ background: '#15803d', color: 'white', fontFamily: 'var(--font-body)' }}
                 >
                   {approving ? <Loader2 className="size-4 animate-spin" /> : <UserCheck className="size-4" />}
-                  Approva e crea account
+                  Approva e assegna team
                 </button>
                 <button
                   onClick={() => setApprovalReq(null)}

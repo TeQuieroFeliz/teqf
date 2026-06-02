@@ -3,11 +3,13 @@
 import { saveUserManagement, UserStatus } from '@/actions/planner/user-management';
 import { permissionsFor, deriveTeams } from '@/lib/user-permissions';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
-import { db } from '@/firebase/client';
+import { auth, db } from '@/firebase/client';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { collection, onSnapshot } from 'firebase/firestore';
 import {
   ArrowLeft,
   Check,
+  KeyRound,
   Loader2,
   Search,
   Trash2,
@@ -74,10 +76,11 @@ const PERM_ROWS: { key: string; label: string; tag: string; get: (p: UserPermiss
 // ─── User card ────────────────────────────────────────────────────────────────
 
 function UserCard({ user }: { user: PlannerRaw }) {
-  const [teams,    setTeams]    = useState<string[]>(() => deriveTeams(user));
-  const [status,   setStatus]   = useState<UserStatus>(() => user.active !== false ? 'active' : 'inactive');
-  const [saving,   setSaving]   = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [teams,     setTeams]     = useState<string[]>(() => deriveTeams(user));
+  const [status,    setStatus]    = useState<UserStatus>(() => user.active !== false ? 'active' : 'inactive');
+  const [saving,    setSaving]    = useState(false);
+  const [deleting,  setDeleting]  = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const perms       = useMemo(() => permissionsFor(teams), [teams]);
   const displayName = [user.name, user.lastName].filter(Boolean).join(' ');
@@ -104,6 +107,18 @@ function UserCard({ user }: { user: PlannerRaw }) {
       toast.error(r.error ?? 'Errore salvataggio.');
     }
     setSaving(false);
+  }
+
+  async function handlePasswordReset() {
+    if (!confirm(`Inviare email di reset password a ${user.email}?`)) return;
+    setResetting(true);
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+      toast.success('Email di reset inviata.');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Errore invio email.');
+    }
+    setResetting(false);
   }
 
   async function handleDelete() {
@@ -241,6 +256,14 @@ function UserCard({ user }: { user: PlannerRaw }) {
           style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
           {saving && <Loader2 className="size-4 animate-spin" />}
           Salva
+        </button>
+
+        {/* Reset password */}
+        <button onClick={handlePasswordReset} disabled={resetting || saving || deleting}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-2xl text-sm disabled:opacity-50"
+          style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontFamily: 'var(--font-body)' }}>
+          {resetting ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+          Reset password
         </button>
 
         {/* Delete */}

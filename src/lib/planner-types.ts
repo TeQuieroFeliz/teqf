@@ -237,6 +237,7 @@ export type PlannerRequest = {
   name: string;
   email: string;
   phone?: string;
+  uid?: string;
   status: PlannerRequestStatus;
   createdAt: string;
 };
