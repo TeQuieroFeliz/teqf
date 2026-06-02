@@ -7,7 +7,7 @@ import {
 } from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { db } from '@/firebase/client';
-import { TeqfCashMovement, TeqfMovementType, TeqfMovementStatus } from '@/lib/teqf-types';
+import { TeqfCashMovement, TeqfMovementType } from '@/lib/teqf-types';
 import {
   collection,
   doc,
@@ -17,8 +17,6 @@ import {
 } from 'firebase/firestore';
 import {
   ArrowLeft,
-  Check,
-  Clock,
   Loader2,
   Pencil,
   Plus,
@@ -61,6 +59,10 @@ const lbl = {
   marginBottom: '0.3rem',
 };
 
+// ─── Quick tags ───────────────────────────────────────────────────────────────
+
+const QUICK_TAGS = ['Flores', 'Ferreteria', 'Comida', 'Uber'];
+
 // ─── Movement modal ───────────────────────────────────────────────────────────
 
 interface MovForm {
@@ -68,16 +70,15 @@ interface MovForm {
   description: string;
   amount: string;
   type: TeqfMovementType;
-  assignedTo: string;
-  status: TeqfMovementStatus;
 }
 
 function MovementModal({
-  projectId, existing, createdBy, onClose, onSaved,
+  projectId, existing, createdBy, createdByName, onClose, onSaved,
 }: {
   projectId: string;
   existing?: TeqfCashMovement;
   createdBy: string;
+  createdByName: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -86,8 +87,6 @@ function MovementModal({
     description: existing?.description ?? '',
     amount:      existing?.amount      ? String(existing.amount) : '',
     type:        existing?.type        ?? 'expense',
-    assignedTo:  existing?.assignedTo  ?? '',
-    status:      existing?.status      ?? 'completed',
   });
   const [saving, setSaving] = useState(false);
 
@@ -102,12 +101,12 @@ function MovementModal({
     }
     setSaving(true);
     const data = {
-      date: form.date,
+      date:        form.date,
       description: form.description.trim(),
       amount,
-      type: form.type,
-      assignedTo: form.assignedTo.trim(),
-      status: form.status,
+      type:        form.type,
+      assignedTo:  createdByName,
+      status:      'completed' as const,
     };
     const r = existing
       ? await updateTeqfCashMovement(projectId, existing.id, data)
@@ -137,13 +136,13 @@ function MovementModal({
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
 
-          {/* Tipo: Entrata / Uscita */}
+          {/* Tipo: Uscita / Entrata */}
           <div>
             <label style={lbl}>Tipo</label>
             <div className="grid grid-cols-2 gap-2">
               {(['expense', 'income'] as TeqfMovementType[]).map(t => {
                 const active = form.type === t;
-                const isInc = t === 'income';
+                const isInc  = t === 'income';
                 return (
                   <button key={t} type="button"
                     onClick={() => set('type', t)}
@@ -178,51 +177,36 @@ function MovementModal({
             />
           </div>
 
-          {/* Descrizione */}
+          {/* Descrizione + quick tags */}
           <div>
             <label style={lbl}>Descrizione *</label>
             <input type="text" value={form.description}
               onChange={e => set('description', e.target.value)}
               placeholder="es. Acquisto fiori" autoFocus={!existing} style={inputSt} />
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {QUICK_TAGS.map(tag => {
+                const active = form.description === tag;
+                return (
+                  <button key={tag} type="button"
+                    onClick={() => set('description', active ? '' : tag)}
+                    className="px-3 py-1 rounded-full text-xs font-medium"
+                    style={{
+                      border: `1px solid ${active ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
+                      background: active ? 'var(--tqf-cipria-light)' : 'white',
+                      color: active ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                      fontFamily: 'var(--font-body)',
+                    }}>
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Data */}
           <div>
             <label style={lbl}>Data</label>
             <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputSt} />
-          </div>
-
-          {/* Assegnato a */}
-          <div>
-            <label style={lbl}>Assegnato a</label>
-            <input type="text" value={form.assignedTo}
-              onChange={e => set('assignedTo', e.target.value)}
-              placeholder="es. Nancy" style={inputSt} />
-          </div>
-
-          {/* Stato */}
-          <div>
-            <label style={lbl}>Stato</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(['completed', 'pending'] as TeqfMovementStatus[]).map(s => {
-                const active = form.status === s;
-                const isComp = s === 'completed';
-                return (
-                  <button key={s} type="button"
-                    onClick={() => set('status', s)}
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium"
-                    style={{
-                      border: `1.5px solid ${active ? (isComp ? '#15803d' : '#b45309') : 'var(--tqf-beige-border)'}`,
-                      background: active ? (isComp ? '#f0fdf4' : '#fef9ee') : 'white',
-                      color: active ? (isComp ? '#15803d' : '#b45309') : 'var(--tqf-muted)',
-                      fontFamily: 'var(--font-body)',
-                    }}>
-                    {isComp ? <Check className="size-4" /> : <Clock className="size-4" />}
-                    {isComp ? 'Completato' : 'In attesa'}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* Actions */}
@@ -307,7 +291,8 @@ export default function CashControlDetailPage() {
     );
   }
 
-  const createdBy = adminUser?.id ?? plannerUser?.id ?? '';
+  const createdBy     = adminUser?.id   ?? plannerUser?.id   ?? '';
+  const createdByName = adminUser?.name ?? plannerUser?.name ?? '';
 
   const totalIncome  = movements.filter(m => m.type === 'income').reduce((s, m) => s + m.amount, 0);
   const totalExpense = movements.filter(m => m.type === 'expense').reduce((s, m) => s + m.amount, 0);
@@ -453,6 +438,7 @@ export default function CashControlDetailPage() {
           projectId={projectId}
           existing={editMov}
           createdBy={createdBy}
+          createdByName={createdByName}
           onClose={() => setShowModal(false)}
           onSaved={() => setShowModal(false)}
         />
