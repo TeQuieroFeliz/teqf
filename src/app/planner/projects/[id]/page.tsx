@@ -1,19 +1,18 @@
 'use client';
 
 import {
-  addNominaEntry,
-  deleteNominaEntry,
-  updateNominaEntry,
-} from '@/actions/planner/event-nomina';
+  addOrarioEntry,
+  deleteOrarioEntry,
+  updateOrarioEntry,
+} from '@/actions/planner/event-orario';
 import { getPlannerEvent } from '@/actions/planner/planner-event-crud';
 import { db } from '@/firebase/client';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import {
   CashMovement,
-  NominaEntry,
-  NominaRole,
-  NominaTurno,
-  NOMINA_ROLES,
+  OrarioEntry,
+  OrarioTurno,
+  ORARIO_DEFAULT_ROLES,
   PlannerEvent,
 } from '@/lib/planner-types';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
@@ -24,7 +23,6 @@ import {
   ChevronUp,
   Clock,
   CreditCard,
-  Download,
   Loader2,
   MapPin,
   Minus,
@@ -40,272 +38,320 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// ─── Time / hour helpers ──────────────────────────────────────────────────────
 
-function calcOre(entrata: string, uscita: string): number {
-  if (!entrata || !uscita) return 0;
-  const [eh, em] = entrata.split(':').map(Number);
-  const [uh, um] = uscita.split(':').map(Number);
-  let mins = uh * 60 + um - (eh * 60 + em);
-  if (mins < 0) mins += 1440;
-  return parseFloat((mins / 60).toFixed(2));
+/** Native <input type="time"> gives HH:MM (24h). Convert to "H:MM AM/PM". */
+function to12h(t24: string): string {
+  if (!t24) return '';
+  const [h, m] = t24.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
-function fmtOre(h: number) {
+
+/** Stored "H:MM AM/PM" → HH:MM (24h) for the time input value. */
+function to24h(t12: string): string {
+  if (!t12) return '';
+  const parts = t12.split(' ');
+  if (parts.length !== 2) return t12; // already 24h or empty
+  const [time, period] = parts;
+  let [h, m] = time.split(':').map(Number);
+  if (period === 'PM' && h !== 12) h += 12;
+  if (period === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Hours calculation in 24h internal representation.
+ * Rule: if uscita <= entrata (same or earlier), assume next-day → add 24h.
+ * Examples: 06:00→06:00 = 24h | 22:00→10:00 = 12h | 10:00→14:00 = 4h
+ */
+function calcOre(e24: string, u24: string): number {
+  if (!e24 || !u24) return 0;
+  const [eh, em] = e24.split(':').map(Number);
+  const [uh, um] = u24.split(':').map(Number);
+  let diff = (uh * 60 + um) - (eh * 60 + em);
+  if (diff <= 0) diff += 1440;
+  return parseFloat((diff / 60).toFixed(2));
+}
+
+function fmtOre(h: number): string {
   if (!h) return '—';
   const hrs = Math.floor(h);
   const m   = Math.round((h - hrs) * 60);
   return m > 0 ? `${hrs}h ${m}m` : `${hrs}h`;
 }
-function oreColor(h: number) {
-  if (h >= 12) return '#991b1b';
+
+function oreColor(h: number): string {
+  if (h > 12) return '#991b1b';
   if (h >= 10) return '#b45309';
-  if (h > 0)  return '#15803d';
+  if (h > 0)   return '#15803d';
   return 'var(--tqf-muted)';
 }
-function oreBg(h: number) {
-  if (h >= 12) return '#fef2f2';
+function oreBg(h: number): string {
+  if (h > 12) return '#fef2f2';
   if (h >= 10) return '#fef9ee';
-  if (h > 0)  return '#f0fdf4';
+  if (h > 0)   return '#f0fdf4';
   return '#f3f4f6';
 }
-function fmtCurrency(n: number) {
+
+function fmtCurrency(n: number): string {
   return `$${Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 }
-function fmtDataOra(iso: string) {
+function fmtDataOra(iso: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
     + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 }
 
-const ROLE_COLORS: Record<NominaRole, { bg: string; text: string }> = {
+// ─── Role color map (predefined; custom roles get a neutral style) ────────────
+
+const ROLE_STYLES: Record<string, { bg: string; text: string }> = {
   Fiorista:   { bg: '#fdf2f4', text: 'var(--tqf-bordeaux)' },
   Staff:      { bg: '#eff6ff', text: '#1d4ed8' },
   Supervisore:{ bg: '#f0fdf4', text: '#15803d' },
 };
+function roleStyle(role: string) {
+  return ROLE_STYLES[role] ?? { bg: '#f3f4f6', text: '#374151' };
+}
 
 // ─── Add / Edit Modal ─────────────────────────────────────────────────────────
 
 type ModalMode = 'add' | 'edit';
 
-type FormState = {
+interface FormState {
   name: string;
-  role: NominaRole;
-  entrataAM: string;
+  role: string;
+  customRoleInput: string;
+  showCustomRole: boolean;
+  entrataAM: string; // HH:MM (24h) — for input element
   uscitaAM: string;
   entrataPM: string;
   uscitaPM: string;
   desmontaje: number;
-};
+}
 
-const EMPTY_FORM: FormState = {
-  name: '', role: 'Fiorista',
-  entrataAM: '', uscitaAM: '',
-  entrataPM: '', uscitaPM: '',
-  desmontaje: 0,
-};
-
-function NominaModal({
-  mode,
-  eventId,
-  entry,
-  createdBy,
-  onClose,
-  onSaved,
+function OrarioModal({
+  mode, eventId, entry, createdBy, extraRoles,
+  onClose, onSaved,
 }: {
   mode: ModalMode;
   eventId: string;
-  entry?: NominaEntry;
+  entry?: OrarioEntry;
   createdBy: string;
+  extraRoles: string[];   // custom roles from existing entries
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [form, setForm] = useState<FormState>(() => {
-    if (mode === 'edit' && entry) {
-      return {
-        name: entry.name,
-        role: entry.role,
-        entrataAM: entry.turnoAM.entrata,
-        uscitaAM:  entry.turnoAM.uscita,
-        entrataPM: entry.turnoPM.entrata,
-        uscitaPM:  entry.turnoPM.uscita,
-        desmontaje: entry.desmontaje,
-      };
-    }
-    return EMPTY_FORM;
-  });
+  const [form, setForm] = useState<FormState>(() => ({
+    name:            entry?.name ?? '',
+    role:            entry?.role ?? 'Fiorista',
+    customRoleInput: '',
+    showCustomRole:  false,
+    entrataAM:  entry ? to24h(entry.turnoAM.entrata) : '',
+    uscitaAM:   entry ? to24h(entry.turnoAM.uscita)  : '',
+    entrataPM:  entry ? to24h(entry.turnoPM.entrata) : '',
+    uscitaPM:   entry ? to24h(entry.turnoPM.uscita)  : '',
+    desmontaje: entry?.desmontaje ?? 0,
+  }));
   const [saving, setSaving] = useState(false);
-
-  const oreAM    = calcOre(form.entrataAM, form.uscitaAM);
-  const orePM    = calcOre(form.entrataPM, form.uscitaPM);
-  const totale   = parseFloat((oreAM + orePM).toFixed(2));
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
+  const oreAM  = calcOre(form.entrataAM, form.uscitaAM);
+  const orePM  = calcOre(form.entrataPM, form.uscitaPM);
+  const totale = parseFloat((oreAM + orePM).toFixed(2));
+
+  // All roles available in dropdown
+  const allRoles = [
+    ...Array.from(ORARIO_DEFAULT_ROLES),
+    ...extraRoles.filter(r => !ORARIO_DEFAULT_ROLES.includes(r as any)),
+  ];
+
   async function handleSave() {
     if (!form.name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
 
-    const turnoAM: NominaTurno = { entrata: form.entrataAM, uscita: form.uscitaAM, ore: oreAM };
-    const turnoPM: NominaTurno = { entrata: form.entrataPM, uscita: form.uscitaPM, ore: orePM };
+    const finalRole = form.showCustomRole
+      ? form.customRoleInput.trim() || form.role
+      : form.role;
+
+    const turnoAM: OrarioTurno = {
+      entrata: to12h(form.entrataAM),
+      uscita:  to12h(form.uscitaAM),
+      ore:     oreAM,
+    };
+    const turnoPM: OrarioTurno = {
+      entrata: to12h(form.entrataPM),
+      uscita:  to12h(form.uscitaPM),
+      ore:     orePM,
+    };
 
     setSaving(true);
-    let result: { success: boolean; error?: string };
-    if (mode === 'add') {
-      result = await addNominaEntry(eventId, {
-        name: form.name.trim(), role: form.role,
-        turnoAM, turnoPM, totaleOre: totale,
-        desmontaje: form.desmontaje, createdBy,
-      });
-    } else {
-      result = await updateNominaEntry(eventId, entry!.id, {
-        name: form.name.trim(), role: form.role,
-        turnoAM, turnoPM, totaleOre: totale,
-        desmontaje: form.desmontaje,
-      });
-    }
+    const result = mode === 'add'
+      ? await addOrarioEntry(eventId, {
+          name: form.name.trim(), role: finalRole,
+          turnoAM, turnoPM, totaleOre: totale,
+          desmontaje: form.desmontaje, createdBy,
+        })
+      : await updateOrarioEntry(eventId, entry!.id, {
+          name: form.name.trim(), role: finalRole,
+          turnoAM, turnoPM, totaleOre: totale,
+          desmontaje: form.desmontaje,
+        });
 
     if (result.success) {
       toast.success(mode === 'add' ? 'Persona aggiunta.' : 'Aggiornato.');
       onSaved();
       onClose();
     } else {
-      toast.error(result.error ?? 'Errore.');
+      toast.error(result.error ?? 'Errore salvataggio.');
     }
     setSaving(false);
   }
 
   const inputSt: React.CSSProperties = {
-    width: '100%', padding: '0.55rem 0.75rem',
-    borderRadius: '0.625rem', border: '1px solid var(--tqf-beige-border)',
-    fontFamily: 'var(--font-body)', fontSize: '0.9rem',
-    color: 'var(--tqf-dark)', background: 'white', outline: 'none',
+    width: '100%', padding: '0.55rem 0.75rem', borderRadius: '0.625rem',
+    border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)',
+    fontSize: '0.9rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none',
   };
   const lbl: React.CSSProperties = {
     fontSize: '0.6rem', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)',
-    textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: '0.3rem',
+    textTransform: 'uppercase', letterSpacing: '0.1em',
+    display: 'block', marginBottom: '0.3rem',
+  };
+  const timeInput: React.CSSProperties = {
+    ...inputSt, fontWeight: 600, textAlign: 'center',
+    fontSize: '1rem', letterSpacing: '0.05em',
   };
 
+  function ShiftBlock({
+    label, e24Key, u24Key,
+  }: { label: string; e24Key: 'entrataAM' | 'entrataPM'; u24Key: 'uscitaAM' | 'uscitaPM' }) {
+    const e24 = form[e24Key] as string;
+    const u24 = form[u24Key] as string;
+    const ore = calcOre(e24, u24);
+    return (
+      <div>
+        <label style={lbl}>{label}</label>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
+            <input type="time" value={e24}
+              onChange={ev => set(e24Key, ev.target.value)}
+              style={timeInput} />
+            {e24 && <p className="text-xs mt-0.5 text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{to12h(e24)}</p>}
+          </div>
+          <div>
+            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
+            <input type="time" value={u24}
+              onChange={ev => set(u24Key, ev.target.value)}
+              style={timeInput} />
+            {u24 && <p className="text-xs mt-0.5 text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{to12h(u24)}</p>}
+          </div>
+        </div>
+        {ore > 0 && (
+          <p className="text-xs mt-1.5 text-right font-semibold"
+            style={{ color: oreColor(ore), fontFamily: 'var(--font-body)' }}>
+            → {fmtOre(ore)}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
+    <div className="fixed inset-0 z-50 flex items-end justify-center"
       style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-t-3xl overflow-y-auto"
-        style={{ background: 'white', maxHeight: '92dvh' }}
-        onClick={e => e.stopPropagation()}
-      >
+      onClick={onClose}>
+      <div className="w-full max-w-lg rounded-t-3xl overflow-y-auto"
+        style={{ background: 'white', maxHeight: '93dvh' }}
+        onClick={e => e.stopPropagation()}>
+
         {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+        <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
         </div>
 
         <div className="px-5 pb-8 space-y-4">
-          {/* Title row */}
+          {/* Title */}
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
               {mode === 'add' ? 'Aggiungi persona' : 'Modifica persona'}
             </h2>
-            <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}>
-              <X className="size-5" />
-            </button>
+            <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
 
           {/* Name */}
           <div>
             <label style={lbl}>Nome e cognome *</label>
-            <input
-              type="text"
-              value={form.name}
+            <input type="text" value={form.name}
               onChange={e => set('name', e.target.value)}
-              placeholder="Maria García"
-              autoFocus={mode === 'add'}
-              style={inputSt}
-            />
+              placeholder="Maria García" autoFocus={mode === 'add'}
+              style={inputSt} />
           </div>
 
-          {/* Role */}
+          {/* Role selector */}
           <div>
             <label style={lbl}>Ruolo *</label>
-            <div className="grid grid-cols-3 gap-2">
-              {NOMINA_ROLES.map(r => {
-                const c = ROLE_COLORS[r];
-                const active = form.role === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => set('role', r)}
-                    className="py-2.5 rounded-xl text-sm font-medium transition-all"
-                    style={{
-                      border: `1.5px solid ${active ? c.text : 'var(--tqf-beige-border)'}`,
-                      background: active ? c.bg : 'white',
-                      color: active ? c.text : 'var(--tqf-muted)',
-                      fontFamily: 'var(--font-body)',
-                    }}
-                  >
-                    {r}
-                  </button>
-                );
-              })}
-            </div>
+            {!form.showCustomRole ? (
+              <div className="flex flex-wrap gap-2">
+                {allRoles.map(r => {
+                  const s = roleStyle(r);
+                  const active = form.role === r;
+                  return (
+                    <button key={r} type="button"
+                      onClick={() => set('role', r)}
+                      className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
+                      style={{
+                        border: `1.5px solid ${active ? s.text : 'var(--tqf-beige-border)'}`,
+                        background: active ? s.bg : 'white',
+                        color: active ? s.text : 'var(--tqf-muted)',
+                        fontFamily: 'var(--font-body)',
+                      }}>
+                      {r}
+                    </button>
+                  );
+                })}
+                <button type="button"
+                  onClick={() => set('showCustomRole', true)}
+                  className="px-3 py-2 rounded-xl text-sm transition-all"
+                  style={{ border: '1.5px dashed var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  + Aggiungi categoria
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input type="text" value={form.customRoleInput}
+                  onChange={e => set('customRoleInput', e.target.value)}
+                  placeholder="Nome categoria..."
+                  autoFocus
+                  style={{ ...inputSt, flex: 1 }} />
+                <button type="button"
+                  onClick={() => { set('showCustomRole', false); if (form.customRoleInput.trim()) set('role', form.customRoleInput.trim()); }}
+                  className="px-3 py-2 rounded-xl text-sm"
+                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+                  OK
+                </button>
+                <button type="button"
+                  onClick={() => set('showCustomRole', false)}
+                  style={{ color: 'var(--tqf-muted)' }}>
+                  <X className="size-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* AM shift */}
-          <div>
-            <label style={lbl}>🌅 Turno Mattina</label>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
-                <input type="time" value={form.entrataAM}
-                  onChange={e => set('entrataAM', e.target.value)}
-                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
-              </div>
-              <div>
-                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
-                <input type="time" value={form.uscitaAM}
-                  onChange={e => set('uscitaAM', e.target.value)}
-                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
-              </div>
-            </div>
-            {oreAM > 0 && (
-              <p className="text-xs mt-1 text-right font-semibold"
-                style={{ color: oreColor(oreAM), fontFamily: 'var(--font-body)' }}>
-                {fmtOre(oreAM)}
-              </p>
-            )}
-          </div>
+          <ShiftBlock label="🌅 Turno AM" e24Key="entrataAM" u24Key="uscitaAM" />
 
           {/* PM shift */}
-          <div>
-            <label style={lbl}>🌆 Turno Pomeriggio</label>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
-                <input type="time" value={form.entrataPM}
-                  onChange={e => set('entrataPM', e.target.value)}
-                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
-              </div>
-              <div>
-                <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
-                <input type="time" value={form.uscitaPM}
-                  onChange={e => set('uscitaPM', e.target.value)}
-                  style={{ ...inputSt, fontWeight: 600, textAlign: 'center' }} />
-              </div>
-            </div>
-            {orePM > 0 && (
-              <p className="text-xs mt-1 text-right font-semibold"
-                style={{ color: oreColor(orePM), fontFamily: 'var(--font-body)' }}>
-                {fmtOre(orePM)}
-              </p>
-            )}
-          </div>
+          <ShiftBlock label="🌆 Turno PM" e24Key="entrataPM" u24Key="uscitaPM" />
 
           {/* Total preview */}
           {totale > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
               style={{ background: oreBg(totale) }}>
               <Clock className="size-4" style={{ color: oreColor(totale) }} />
               <span className="text-sm font-semibold" style={{ color: oreColor(totale), fontFamily: 'var(--font-body)' }}>
@@ -318,7 +364,8 @@ function NominaModal({
           <div>
             <label style={lbl}>Desmontaje</label>
             <div className="flex items-center gap-0 w-fit">
-              <button type="button" disabled={form.desmontaje <= 0}
+              <button type="button"
+                disabled={form.desmontaje <= 0}
                 onClick={() => set('desmontaje', Math.max(0, form.desmontaje - 1))}
                 className="size-10 flex items-center justify-center rounded-l-xl disabled:opacity-30"
                 style={{ border: '1px solid var(--tqf-beige-border)', background: 'white' }}>
@@ -339,20 +386,15 @@ function NominaModal({
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleSave}
-              disabled={saving}
+            <button onClick={handleSave} disabled={saving}
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
-              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
-            >
+              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving && <Loader2 className="size-4 animate-spin" />}
               {mode === 'add' ? 'Aggiungi' : 'Salva modifiche'}
             </button>
-            <button
-              onClick={onClose}
+            <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
-              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-            >
+              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
               Annulla
             </button>
           </div>
@@ -364,32 +406,28 @@ function NominaModal({
 
 // ─── Employee card ────────────────────────────────────────────────────────────
 
-function NominaCard({
+function OrarioCard({
   entry, canEdit, onEdit, onDelete,
 }: {
-  entry: NominaEntry;
+  entry: OrarioEntry;
   canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const roleColor = ROLE_COLORS[entry.role] ?? ROLE_COLORS.Staff;
+  const rs = roleStyle(entry.role);
 
   return (
     <div className="rounded-2xl overflow-hidden"
       style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
 
-      {/* Header — always visible */}
-      <div
-        className="flex items-center justify-between px-4 py-3.5 cursor-pointer"
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3.5 cursor-pointer"
         style={{ borderBottom: expanded ? '1px solid var(--tqf-beige-border)' : 'none' }}
-        onClick={() => setExpanded(v => !v)}
-      >
+        onClick={() => setExpanded(v => !v)}>
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="size-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0"
-            style={{ background: roleColor.bg, color: roleColor.text, fontFamily: 'var(--font-body)' }}
-          >
+          <div className="size-9 rounded-full flex items-center justify-center text-sm font-semibold flex-shrink-0"
+            style={{ background: rs.bg, color: rs.text, fontFamily: 'var(--font-body)' }}>
             {entry.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -398,7 +436,7 @@ function NominaCard({
                 {entry.name}
               </p>
               <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
-                style={{ background: roleColor.bg, color: roleColor.text, fontFamily: 'var(--font-body)' }}>
+                style={{ background: rs.bg, color: rs.text, fontFamily: 'var(--font-body)' }}>
                 {entry.role}
               </span>
             </div>
@@ -436,10 +474,10 @@ function NominaCard({
       {/* Expanded detail */}
       {expanded && (
         <div className="px-4 pb-4 pt-3 space-y-3">
-          {/* Shift rows */}
+          {/* Shift cards */}
           {[
-            { label: '🌅 Turno Mattina', turno: entry.turnoAM },
-            { label: '🌆 Turno Pomeriggio', turno: entry.turnoPM },
+            { label: '🌅 Turno AM',  turno: entry.turnoAM },
+            { label: '🌆 Turno PM',  turno: entry.turnoPM },
           ].map(({ label, turno }) => (
             <div key={label} className="rounded-xl p-3"
               style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
@@ -447,20 +485,15 @@ function NominaCard({
                 {label}
               </p>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Entrata</p>
-                    <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                      {turno?.entrata || '—'}
-                    </p>
-                  </div>
-                  <div className="w-px h-8" style={{ background: 'var(--tqf-beige-border)' }} />
-                  <div>
-                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Uscita</p>
-                    <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                      {turno?.uscita || '—'}
-                    </p>
-                  </div>
+                <div className="flex items-center gap-4">
+                  {[{ lbl: 'Entrata', val: turno?.entrata }, { lbl: 'Uscita', val: turno?.uscita }].map(({ lbl, val }) => (
+                    <div key={lbl}>
+                      <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{lbl}</p>
+                      <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                        {val || '—'}
+                      </p>
+                    </div>
+                  ))}
                 </div>
                 {(turno?.ore ?? 0) > 0 && (
                   <span className="text-sm font-semibold px-2.5 py-1 rounded-lg"
@@ -472,15 +505,17 @@ function NominaCard({
             </div>
           ))}
 
-          {/* Totals row */}
+          {/* Total + desmontaje */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
               style={{ background: oreBg(entry.totaleOre) }}>
               <Clock className="size-4" style={{ color: oreColor(entry.totaleOre) }} />
-              <span className="text-sm font-semibold" style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
+              <span className="text-sm font-semibold"
+                style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
                 {fmtOre(entry.totaleOre)}
               </span>
-              <span className="text-xs opacity-70" style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
+              <span className="text-xs opacity-70"
+                style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
                 totali
               </span>
             </div>
@@ -519,7 +554,7 @@ function NominaCard({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-type Tab = 'nomina' | 'gastos';
+type Tab = 'orario' | 'gastos';
 
 export default function ProjectPage() {
   const params  = useParams();
@@ -533,20 +568,20 @@ export default function ProjectPage() {
   } = usePlannerAuth();
 
   const [event,     setEvent]     = useState<PlannerEvent | null>(null);
-  const [entries,   setEntries]   = useState<NominaEntry[]>([]);
+  const [entries,   setEntries]   = useState<OrarioEntry[]>([]);
   const [movements, setMovements] = useState<CashMovement[]>([]);
   const [cashBudget, setCashBudget] = useState(0);
   const [loading,   setLoading]   = useState(true);
 
-  // Tabs — default to nomina only if user can see it, else gastos
-  const canNomina = isSuperAdmin || canManageCashControl;
-  const [activeTab, setActiveTab] = useState<Tab>('nomina');
+  // Access: SuperAdmin + TeQF only for Orario di Lavoro
+  const canOrario = isSuperAdmin || canManageCashControl;
+
+  const [activeTab, setActiveTab] = useState<Tab>('orario');
 
   // Modal state
-  const [modalMode, setModalMode]   = useState<ModalMode>('add');
-  const [editEntry, setEditEntry]   = useState<NominaEntry | undefined>();
-  const [showModal, setShowModal]   = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [showModal,  setShowModal]  = useState(false);
+  const [modalMode,  setModalMode]  = useState<ModalMode>('add');
+  const [editEntry,  setEditEntry]  = useState<OrarioEntry | undefined>();
 
   // Load event once
   useEffect(() => {
@@ -559,20 +594,20 @@ export default function ProjectPage() {
     });
   }, [eventId, router]);
 
-  // Default tab: gastos for XB-only users
+  // Default tab to gastos for XB-only users
   useEffect(() => {
-    if (!authLoading && !canNomina) setActiveTab('gastos');
-  }, [authLoading, canNomina]);
+    if (!authLoading && !canOrario) setActiveTab('gastos');
+  }, [authLoading, canOrario]);
 
-  // Real-time nomina
+  // Real-time orario entries
   useEffect(() => {
-    if (!eventId || !canNomina) return;
+    if (!eventId || !canOrario) return;
     const unsub = onSnapshot(
-      query(collection(db, 'plannerEvents', eventId, 'nomina'), orderBy('createdAt', 'asc')),
-      snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as NominaEntry)))
+      query(collection(db, 'plannerEvents', eventId, 'orarioDiLavoro'), orderBy('createdAt', 'asc')),
+      snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() } as OrarioEntry)))
     );
     return () => unsub();
-  }, [eventId, canNomina]);
+  }, [eventId, canOrario]);
 
   // Real-time cash movements
   useEffect(() => {
@@ -611,38 +646,25 @@ export default function ProjectPage() {
   const totalDesm   = entries.reduce((s, e) => s + (e.desmontaje ?? 0), 0);
   const totalSpent  = movements.reduce((s, m) => s + m.amount, 0);
   const balance     = cashBudget - totalSpent;
-  const firstDay    = event?.days?.[0];
+
+  const firstDay       = event?.days?.[0];
   const eventDateLabel = firstDay
     ? new Date(firstDay.date + 'T12:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
 
+  // Custom roles from existing entries (not in default list)
+  const extraRoles = Array.from(
+    new Set(entries.map(e => e.role).filter(r => !ORARIO_DEFAULT_ROLES.includes(r as any)))
+  );
+
   function openAdd()  { setModalMode('add'); setEditEntry(undefined); setShowModal(true); }
-  function openEdit(e: NominaEntry) { setModalMode('edit'); setEditEntry(e); setShowModal(true); }
+  function openEdit(e: OrarioEntry) { setModalMode('edit'); setEditEntry(e); setShowModal(true); }
 
-  async function handleDelete(entry: NominaEntry) {
+  async function handleDelete(entry: OrarioEntry) {
     if (!confirm(`Eliminare ${entry.name}?`)) return;
-    const r = await deleteNominaEntry(eventId, entry.id);
-    if (r.success) toast.success('Persona rimossa.');
+    const r = await deleteOrarioEntry(eventId, entry.id);
+    if (r.success) toast.success('Rimosso.');
     else toast.error(r.error ?? 'Errore.');
-  }
-
-  async function handleDownloadPdf() {
-    setDownloading(true);
-    try {
-      const res = await fetch('/api/nomina-pdf', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId }),
-      });
-      if (!res.ok) throw new Error('Errore generazione PDF.');
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url;
-      a.download = `TQF_Nomina_${(event?.eventCode || 'evento').replace(/\s+/g, '_')}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e: any) { toast.error(e.message); }
-    setDownloading(false);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -650,11 +672,10 @@ export default function ProjectPage() {
   return (
     <div className="min-h-screen pb-8" style={{ background: 'var(--tqf-beige)' }}>
 
-      {/* Sticky header */}
-      <header
-        className="sticky top-0 z-10 px-4 pt-3 pb-0"
-        style={{ background: 'white', borderBottom: '1px solid var(--tqf-beige-border)' }}
-      >
+      {/* ── Sticky header ── */}
+      <header className="sticky top-0 z-10 px-4 pt-3 pb-0"
+        style={{ background: 'white', borderBottom: '1px solid var(--tqf-beige-border)' }}>
+
         <div className="flex items-center justify-between mb-2">
           <Link href="/planner"
             className="flex items-center gap-1.5 text-sm"
@@ -700,26 +721,24 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tab bar */}
         <div className="flex -mx-4 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-          {/* Nomina tab — only for SuperAdmin and TeQF */}
-          {canNomina && (
-            <button
-              onClick={() => setActiveTab('nomina')}
+          {/* Orario tab — SuperAdmin + TeQF only */}
+          {canOrario && (
+            <button onClick={() => setActiveTab('orario')}
               className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
               style={{
-                color: activeTab === 'nomina' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                color: activeTab === 'orario' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
                 fontFamily: 'var(--font-body)',
-                borderBottom: activeTab === 'nomina' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
+                borderBottom: activeTab === 'orario' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
                 background: 'white',
-              }}
-            >
+              }}>
               <Users className="size-4" />
-              Nómina
+              Orario
               <span className="text-xs px-1.5 py-0.5 rounded-full"
                 style={{
-                  background: activeTab === 'nomina' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
-                  color: activeTab === 'nomina' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                  background: activeTab === 'orario' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
+                  color: activeTab === 'orario' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
                   fontFamily: 'var(--font-body)',
                 }}>
                 {entries.length}
@@ -728,16 +747,14 @@ export default function ProjectPage() {
           )}
 
           {/* Gastos tab */}
-          <button
-            onClick={() => setActiveTab('gastos')}
+          <button onClick={() => setActiveTab('gastos')}
             className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
             style={{
               color: activeTab === 'gastos' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
               fontFamily: 'var(--font-body)',
               borderBottom: activeTab === 'gastos' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
               background: 'white',
-            }}
-          >
+            }}>
             <Wallet className="size-4" />
             Gastos
             {movements.length > 0 && (
@@ -754,8 +771,8 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      {/* ══ NÓMINA TAB ══ */}
-      {activeTab === 'nomina' && canNomina && (
+      {/* ══ ORARIO DI LAVORO TAB ══ */}
+      {activeTab === 'orario' && canOrario && (
         <>
           {/* Stats bar */}
           <div className="mx-4 mt-4 rounded-2xl px-4 py-3 grid grid-cols-3 gap-2"
@@ -775,23 +792,12 @@ export default function ProjectPage() {
             ))}
           </div>
 
-          {/* Action bar */}
-          <div className="mx-4 mt-3 flex gap-2">
-            <button
-              onClick={openAdd}
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-medium"
-              style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}
-            >
+          {/* Add button */}
+          <div className="mx-4 mt-3">
+            <button onClick={openAdd}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-medium"
+              style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
               <Plus className="size-4" /> Aggiungi persona
-            </button>
-            <button
-              onClick={handleDownloadPdf}
-              disabled={downloading || entries.length === 0}
-              className="flex items-center gap-1.5 px-4 py-3 rounded-2xl text-sm disabled:opacity-40"
-              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', fontFamily: 'var(--font-body)' }}
-            >
-              {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-              PDF
             </button>
           </div>
 
@@ -810,10 +816,10 @@ export default function ProjectPage() {
           ) : (
             <div className="mx-4 mt-3 space-y-3">
               {entries.map(e => (
-                <NominaCard
+                <OrarioCard
                   key={e.id}
                   entry={e}
-                  canEdit={canNomina}
+                  canEdit={canOrario}
                   onEdit={() => openEdit(e)}
                   onDelete={() => handleDelete(e)}
                 />
@@ -826,7 +832,7 @@ export default function ProjectPage() {
       {/* ══ GASTOS TAB ══ */}
       {activeTab === 'gastos' && (
         <div className="mx-4 mt-4 space-y-3">
-          {/* Balance */}
+          {/* Balance card */}
           <div className="rounded-3xl px-5 pt-5 pb-4"
             style={{ background: cashBudget > 0 ? (balance >= 0 ? '#0f2e1a' : '#2a0e0e') : '#1a0f0a' }}>
             <p className="text-xs uppercase tracking-widest opacity-50 mb-1"
@@ -838,9 +844,7 @@ export default function ProjectPage() {
                 fontFamily: 'var(--font-display)',
                 color: cashBudget > 0 ? (balance >= 0 ? '#6aff9e' : '#ff6a6a') : 'white',
               }}>
-              {cashBudget > 0
-                ? (balance < 0 ? '-' : '') + fmtCurrency(balance)
-                : fmtCurrency(totalSpent)}
+              {cashBudget > 0 ? (balance < 0 ? '-' : '') + fmtCurrency(balance) : fmtCurrency(totalSpent)}
             </p>
             <div className="flex gap-4">
               {cashBudget > 0 && <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>Budget {fmtCurrency(cashBudget)}</span>}
@@ -855,9 +859,7 @@ export default function ProjectPage() {
               style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
               <div className="px-4 py-3 border-b flex items-center justify-between"
                 style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                <p className="text-sm" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                  Movimenti recenti
-                </p>
+                <p className="text-sm" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>Movimenti recenti</p>
                 <Link href={`/planner/projects/${eventId}/cash-control`}
                   className="text-xs" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
                   Ver todo →
@@ -900,11 +902,12 @@ export default function ProjectPage() {
 
       {/* Add/Edit modal */}
       {showModal && (
-        <NominaModal
+        <OrarioModal
           mode={modalMode}
           eventId={eventId}
           entry={editEntry}
           createdBy={createdBy}
+          extraRoles={extraRoles}
           onClose={() => setShowModal(false)}
           onSaved={() => setShowModal(false)}
         />

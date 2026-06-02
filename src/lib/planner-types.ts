@@ -1,4 +1,27 @@
-// ── Nomina ────────────────────────────────────────────────────────────────────
+// ── Orario di Lavoro ──────────────────────────────────────────────────────────
+
+export const ORARIO_DEFAULT_ROLES = ['Fiorista', 'Staff', 'Supervisore'] as const;
+
+export type OrarioTurno = {
+  entrata: string;  // "H:MM AM" or "H:MM PM" (12-hour)
+  uscita: string;   // "H:MM AM" or "H:MM PM"
+  ore: number;      // auto-calculated (handles midnight-crossing)
+};
+
+export type OrarioEntry = {
+  id: string;
+  name: string;
+  role: string;           // predefined or custom string
+  turnoAM: OrarioTurno;
+  turnoPM: OrarioTurno;
+  totaleOre: number;
+  desmontaje: number;
+  ultimaModifica: string; // ISO timestamp
+  createdBy: string;
+  createdAt: string;
+};
+
+// ── Nomina (legacy) ───────────────────────────────────────────────────────────
 
 export const NOMINA_ROLES = ['Fiorista', 'Staff', 'Supervisore'] as const;
 export type NominaRole = typeof NOMINA_ROLES[number];
