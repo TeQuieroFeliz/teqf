@@ -135,18 +135,23 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
       try {
         const credential = await signInWithEmailAndPassword(auth, email, password);
 
-        // Block users whose registration is still pending or was rejected
-        const userSnap = await getDoc(doc(db, 'users', credential.user.uid));
-        if (userSnap.exists()) {
-          const status = userSnap.data()?.status;
-          if (status === 'pending') {
+        // Block users whose registration is pending, rejected, or account inactive
+        const plannerSnap = await getDoc(doc(db, 'planners', credential.user.uid));
+        if (plannerSnap.exists()) {
+          const data = plannerSnap.data();
+          if (data?.status === 'pending') {
             await signOut(auth);
             setAuthError('La tua registrazione è in attesa di approvazione. Ti contatteremo presto.');
             return;
           }
-          if (status === 'rejected') {
+          if (data?.status === 'rejected') {
             await signOut(auth);
             setAuthError('La tua registrazione è stata rifiutata. Contatta l\'amministratore.');
+            return;
+          }
+          if (data?.active === false) {
+            await signOut(auth);
+            setAuthError('Account disattivato. Contatta l\'amministratore.');
             return;
           }
         }

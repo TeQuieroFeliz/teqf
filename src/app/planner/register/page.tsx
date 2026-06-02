@@ -56,7 +56,17 @@ export default function RegisterPage() {
         createdAt: new Date(),
       });
 
-      // 3. Create plannerRequests/{uid} entry for admin review
+      // 3. Create planners/{uid} doc — login check reads status from here
+      await setDoc(doc(db, 'planners', user.uid), {
+        email:     trimmedEmail,
+        name:      displayName,
+        team:      [],
+        status:    'pending',
+        active:    false,
+        createdAt: new Date(),
+      });
+
+      // 5. Create plannerRequests/{uid} entry for admin review
       await setDoc(doc(db, 'plannerRequests', user.uid), {
         uid:       user.uid,
         email:     trimmedEmail,
@@ -65,17 +75,17 @@ export default function RegisterPage() {
         createdAt: new Date(),
       });
 
-      // 4. Notify via email (fire-and-forget — non-blocking)
+      // 6. Notify via email (fire-and-forget — non-blocking)
       fetch('/api/email/registration-pending', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: trimmedEmail, name: displayName }),
       }).catch(console.error);
 
-      // 5. Sign out immediately so user cannot access dashboard
+      // 7. Sign out immediately so user cannot access dashboard
       await signOut(auth);
 
-      // 6. Show pending-approval success screen
+      // 8. Show pending-approval success screen
       setSuccess(true);
     } catch (err: any) {
       const msg =

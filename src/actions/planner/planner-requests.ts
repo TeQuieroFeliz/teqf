@@ -199,17 +199,18 @@ export async function approvePlannerRequest(
       }
     }
 
-    // Create planner record
-    await planRef.add({
+    // Create / update planner record keyed by UID
+    await planRef.doc(uid).set({
       email,
       name,
       phone: phone ?? '',
       teamRole,
-      active: true,
+      status:  'approved',
+      active:  true,
       mustChangePassword: false,
       createdAt: new Date().toISOString(),
       lastLogin: null,
-    });
+    }, { merge: true });
 
     await reqRef.doc(requestId).update({ status: 'approved' });
     revalidatePath('/planner/requests');
@@ -239,13 +240,17 @@ export async function rejectPlannerRequest(
     await reqRef.doc(requestId).update({ status: 'rejected' });
     revalidatePath('/planner/requests');
 
-    // Clean up any Firebase Auth account created at sign-up time
+    // Mark planners doc as rejected + clean up Auth account
     try {
       const user = await auth!.getUserByEmail(email);
+      await firestore.collection('planners').doc(user.uid).set(
+        { status: 'rejected', active: false },
+        { merge: true }
+      );
       await auth!.deleteUser(user.uid);
     } catch (authErr: any) {
       if (authErr.code !== 'auth/user-not-found') {
-        console.error('[rejectPlannerRequest] auth delete error:', authErr.message);
+        console.error('[rejectPlannerRequest] auth/planners error:', authErr.message);
       }
     }
 
@@ -298,7 +303,7 @@ export async function approveRegistration(
 
     // Create / update planners/{uid} so PlannerAuthContext can find the user
     await firestore.collection('planners').doc(uid).set(
-      { email, name, team: teams, teamRole, permissions, active: true, mustChangePassword: false, approvedAt: now },
+      { email, name, team: teams, teamRole, permissions, status: 'approved', active: true, mustChangePassword: false, approvedAt: now },
       { merge: true }
     );
 
