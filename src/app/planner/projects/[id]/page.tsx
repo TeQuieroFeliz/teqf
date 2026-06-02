@@ -9,7 +9,6 @@ import { getPlannerEvent } from '@/actions/planner/planner-event-crud';
 import { db } from '@/firebase/client';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import {
-  CashMovement,
   OrarioEntry,
   OrarioGiorno,
   ORARIO_DEFAULT_ROLES,
@@ -22,7 +21,6 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  CreditCard,
   Loader2,
   MapPin,
   Minus,
@@ -30,7 +28,6 @@ import {
   Plus,
   Trash2,
   Users,
-  Wallet,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -38,9 +35,194 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+// ─── Translations ─────────────────────────────────────────────────────────────
+
+type Lang = 'it' | 'es' | 'en';
+
+type Tr = {
+  accessDenied: string;
+  dashboardBack: string;
+  tabOrario: string;
+  modifica: string;
+  persone: string;
+  oreTotali: string;
+  desmontaje: string;
+  aggiungiPersona: string;
+  nessuna: string;
+  modalAdd: string;
+  modalEdit: string;
+  nomeCognome: string;
+  ruolo: string;
+  aggiungiCategoria: string;
+  nomeCategoria: string;
+  giorni: string;
+  aggiungiGiorno: string;
+  data: string;
+  turnoAM: string;
+  turnoPM: string;
+  oreGiorno: string;
+  entrata: string;
+  uscita: string;
+  desLabel: string;
+  btnAdd: string;
+  btnSave: string;
+  btnCancel: string;
+  giorno1: string;
+  giornoN: string;
+  desm: string;
+  nessunTurno: string;
+  totali: string;
+  ultimaModifica: string;
+  editar: string;
+  toastAdded: string;
+  toastUpdated: string;
+  toastDeleted: string;
+  toastError: string;
+  confirmDelete: (name: string) => string;
+  valNome: string;
+  valGiorni: string;
+};
+
+const T: Record<Lang, Tr> = {
+  it: {
+    accessDenied: 'Accesso non autorizzato',
+    dashboardBack: 'Dashboard',
+    tabOrario: 'Orario',
+    modifica: 'Modifica',
+    persone: 'Persone',
+    oreTotali: 'Ore totali',
+    desmontaje: 'Desmontaje',
+    aggiungiPersona: 'Aggiungi persona',
+    nessuna: 'Nessuna persona ancora. Usa il pulsante qui sopra.',
+    modalAdd: 'Aggiungi persona',
+    modalEdit: 'Modifica persona',
+    nomeCognome: 'Nome e cognome *',
+    ruolo: 'Ruolo *',
+    aggiungiCategoria: '+ Aggiungi categoria',
+    nomeCategoria: 'Nome categoria...',
+    giorni: 'Giorni di lavoro',
+    aggiungiGiorno: 'Aggiungi giorno',
+    data: '📅 Data',
+    turnoAM: '🌅 Turno AM (opzionale)',
+    turnoPM: '🌆 Turno PM (opzionale)',
+    oreGiorno: 'Ore giorno:',
+    entrata: 'Entrata',
+    uscita: 'Uscita',
+    desLabel: 'Desmontaje',
+    btnAdd: 'Aggiungi',
+    btnSave: 'Salva modifiche',
+    btnCancel: 'Annulla',
+    giorno1: 'giorno',
+    giornoN: 'giorni',
+    desm: 'desm.',
+    nessunTurno: 'Nessun turno registrato',
+    totali: 'totali',
+    ultimaModifica: 'Ultima modifica:',
+    editar: 'Modifica',
+    toastAdded: 'Persona aggiunta.',
+    toastUpdated: 'Aggiornato.',
+    toastDeleted: 'Rimosso.',
+    toastError: 'Errore.',
+    confirmDelete: (name) => `Eliminare ${name}?`,
+    valNome: 'Il nome è obbligatorio.',
+    valGiorni: 'Aggiungi almeno un giorno.',
+  },
+  es: {
+    accessDenied: 'Acceso no autorizado',
+    dashboardBack: 'Dashboard',
+    tabOrario: 'Horario',
+    modifica: 'Modificar',
+    persone: 'Personas',
+    oreTotali: 'Horas totales',
+    desmontaje: 'Desmontaje',
+    aggiungiPersona: 'Agregar persona',
+    nessuna: 'Ninguna persona aún. Usa el botón de arriba.',
+    modalAdd: 'Agregar persona',
+    modalEdit: 'Editar persona',
+    nomeCognome: 'Nombre y apellido *',
+    ruolo: 'Rol *',
+    aggiungiCategoria: '+ Agregar categoría',
+    nomeCategoria: 'Nombre categoría...',
+    giorni: 'Días de trabajo',
+    aggiungiGiorno: 'Agregar día',
+    data: '📅 Fecha',
+    turnoAM: '🌅 Turno AM (opcional)',
+    turnoPM: '🌆 Turno PM (opcional)',
+    oreGiorno: 'Horas día:',
+    entrata: 'Entrada',
+    uscita: 'Salida',
+    desLabel: 'Desmontaje',
+    btnAdd: 'Agregar',
+    btnSave: 'Guardar cambios',
+    btnCancel: 'Cancelar',
+    giorno1: 'día',
+    giornoN: 'días',
+    desm: 'desm.',
+    nessunTurno: 'Sin turno registrado',
+    totali: 'total',
+    ultimaModifica: 'Última modificación:',
+    editar: 'Editar',
+    toastAdded: 'Persona agregada.',
+    toastUpdated: 'Actualizado.',
+    toastDeleted: 'Eliminado.',
+    toastError: 'Error.',
+    confirmDelete: (name) => `¿Eliminar a ${name}?`,
+    valNome: 'El nombre es obligatorio.',
+    valGiorni: 'Agrega al menos un día.',
+  },
+  en: {
+    accessDenied: 'Unauthorized access',
+    dashboardBack: 'Dashboard',
+    tabOrario: 'Schedule',
+    modifica: 'Edit',
+    persone: 'People',
+    oreTotali: 'Total hours',
+    desmontaje: 'Dismount',
+    aggiungiPersona: 'Add person',
+    nessuna: 'No people yet. Use the button above.',
+    modalAdd: 'Add person',
+    modalEdit: 'Edit person',
+    nomeCognome: 'First and last name *',
+    ruolo: 'Role *',
+    aggiungiCategoria: '+ Add category',
+    nomeCategoria: 'Category name...',
+    giorni: 'Work days',
+    aggiungiGiorno: 'Add day',
+    data: '📅 Date',
+    turnoAM: '🌅 AM shift (optional)',
+    turnoPM: '🌆 PM shift (optional)',
+    oreGiorno: 'Day hours:',
+    entrata: 'Start',
+    uscita: 'End',
+    desLabel: 'Dismount',
+    btnAdd: 'Add',
+    btnSave: 'Save changes',
+    btnCancel: 'Cancel',
+    giorno1: 'day',
+    giornoN: 'days',
+    desm: 'dismt.',
+    nessunTurno: 'No shifts registered',
+    totali: 'total',
+    ultimaModifica: 'Last modified:',
+    editar: 'Edit',
+    toastAdded: 'Person added.',
+    toastUpdated: 'Updated.',
+    toastDeleted: 'Removed.',
+    toastError: 'Error.',
+    confirmDelete: (name) => `Delete ${name}?`,
+    valNome: 'Name is required.',
+    valGiorni: 'Add at least one day.',
+  },
+};
+
+function langLocale(lang: Lang): string {
+  if (lang === 'es') return 'es-MX';
+  if (lang === 'en') return 'en-US';
+  return 'it-IT';
+}
+
 // ─── Time / hour helpers ──────────────────────────────────────────────────────
 
-/** Native <input type="time"> gives HH:MM (24h). Convert to "H:MM AM/PM". */
 function to12h(t24: string): string {
   if (!t24) return '';
   const [h, m] = t24.split(':').map(Number);
@@ -49,7 +231,6 @@ function to12h(t24: string): string {
   return `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
 
-/** Stored "H:MM AM/PM" → HH:MM (24h) for the time input value. */
 function to24h(t12: string): string {
   if (!t12) return '';
   const parts = t12.split(' ');
@@ -62,10 +243,6 @@ function to24h(t12: string): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-/**
- * Hours calculation in 24h internal representation.
- * Rule: if uscita <= entrata (same or earlier), assume next-day → add 24h.
- */
 function calcOre(e24: string, u24: string): number {
   if (!e24 || !u24) return 0;
   const [eh, em] = e24.split(':').map(Number);
@@ -82,11 +259,18 @@ function fmtOre(h: number): string {
   return m > 0 ? `${hrs}h ${m}m` : `${hrs}h`;
 }
 
-function fmtDate(d: string): string {
+function fmtDate(d: string, locale: string): string {
   if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
+  return new Date(d + 'T12:00').toLocaleDateString(locale, {
     day: 'numeric', month: 'long', year: 'numeric',
   });
+}
+
+function fmtDataOra(iso: string, locale: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 function oreColor(h: number): string {
@@ -102,22 +286,12 @@ function oreBg(h: number): string {
   return '#f3f4f6';
 }
 
-function fmtCurrency(n: number): string {
-  return `$${Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
-}
-function fmtDataOra(iso: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
-    + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-}
-
 // ─── Role color map ───────────────────────────────────────────────────────────
 
 const ROLE_STYLES: Record<string, { bg: string; text: string }> = {
-  Fiorista:   { bg: '#fdf2f4', text: 'var(--tqf-bordeaux)' },
-  Staff:      { bg: '#eff6ff', text: '#1d4ed8' },
-  Supervisore:{ bg: '#f0fdf4', text: '#15803d' },
+  Fiorista:    { bg: '#fdf2f4', text: 'var(--tqf-bordeaux)' },
+  Staff:       { bg: '#eff6ff', text: '#1d4ed8' },
+  Supervisore: { bg: '#f0fdf4', text: '#15803d' },
 };
 function roleStyle(role: string) {
   return ROLE_STYLES[role] ?? { bg: '#f3f4f6', text: '#374151' };
@@ -154,7 +328,7 @@ function emptyGiornoForm(): GiornoForm {
   return { data: '', entrataAM: '', uscitaAM: '', entrataPM: '', uscitaPM: '' };
 }
 
-// ─── GiornoFormCard (day card inside the modal) ───────────────────────────────
+// ─── GiornoFormCard ───────────────────────────────────────────────────────────
 
 interface GiornoFormCardProps {
   giorno: GiornoForm;
@@ -162,11 +336,12 @@ interface GiornoFormCardProps {
   canRemove: boolean;
   onChange: (index: number, updated: GiornoForm) => void;
   onRemove: (index: number) => void;
+  t: Tr;
 }
 
-function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: GiornoFormCardProps) {
-  const oreAM    = calcOre(giorno.entrataAM, giorno.uscitaAM);
-  const orePM    = calcOre(giorno.entrataPM, giorno.uscitaPM);
+function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove, t }: GiornoFormCardProps) {
+  const oreAM     = calcOre(giorno.entrataAM, giorno.uscitaAM);
+  const orePM     = calcOre(giorno.entrataPM, giorno.uscitaPM);
   const oreGiorno = parseFloat((oreAM + orePM).toFixed(2));
 
   const up = (partial: Partial<GiornoForm>) => onChange(index, { ...giorno, ...partial });
@@ -182,7 +357,7 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
       <>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
+            <label style={{ ...lbl, marginBottom: '0.2rem' }}>{t.entrata}</label>
             <input type="time" value={e24}
               onChange={ev => up({ [eKey]: ev.target.value } as Partial<GiornoForm>)}
               style={timeInput} />
@@ -193,7 +368,7 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
             )}
           </div>
           <div>
-            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
+            <label style={{ ...lbl, marginBottom: '0.2rem' }}>{t.uscita}</label>
             <input type="time" value={u24}
               onChange={ev => up({ [uKey]: ev.target.value } as Partial<GiornoForm>)}
               style={timeInput} />
@@ -218,10 +393,9 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
     <div className="rounded-2xl p-4 space-y-4"
       style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
 
-      {/* Date row */}
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label style={lbl}>📅 Data</label>
+          <label style={lbl}>{t.data}</label>
           <input type="date" value={giorno.data}
             onChange={e => up({ data: e.target.value })}
             style={inputSt} />
@@ -235,24 +409,21 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
         )}
       </div>
 
-      {/* AM */}
       <div>
-        <label style={lbl}>🌅 Turno AM (opzionale)</label>
+        <label style={lbl}>{t.turnoAM}</label>
         <TimeFields eKey="entrataAM" uKey="uscitaAM" />
       </div>
 
-      {/* PM */}
       <div>
-        <label style={lbl}>🌆 Turno PM (opzionale)</label>
+        <label style={lbl}>{t.turnoPM}</label>
         <TimeFields eKey="entrataPM" uKey="uscitaPM" />
       </div>
 
-      {/* Day total */}
       {oreGiorno > 0 && (
         <div className="flex justify-end">
           <span className="text-xs px-2.5 py-1 rounded-lg font-semibold"
             style={{ background: oreBg(oreGiorno), color: oreColor(oreGiorno), fontFamily: 'var(--font-body)' }}>
-            Ore giorno: {fmtOre(oreGiorno)}
+            {t.oreGiorno} {fmtOre(oreGiorno)}
           </span>
         </div>
       )}
@@ -274,7 +445,7 @@ interface FormState {
 }
 
 function OrarioModal({
-  mode, eventId, entry, createdBy, extraRoles,
+  mode, eventId, entry, createdBy, extraRoles, t,
   onClose, onSaved,
 }: {
   mode: ModalMode;
@@ -282,6 +453,7 @@ function OrarioModal({
   entry?: OrarioEntry;
   createdBy: string;
   extraRoles: string[];
+  t: Tr;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -295,7 +467,6 @@ function OrarioModal({
         uscitaPM:  g.turnoPM ? to24h(g.turnoPM.uscita)  : '',
       }));
     }
-    // Legacy: migrate single-day data from old format
     const legacy = entry as any;
     if (legacy?.turnoAM?.entrata || legacy?.turnoPM?.entrata) {
       return [{
@@ -350,8 +521,8 @@ function OrarioModal({
   }
 
   async function handleSave() {
-    if (!form.name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
-    if (form.giorni.length === 0) { toast.error('Aggiungi almeno un giorno.'); return; }
+    if (!form.name.trim()) { toast.error(t.valNome); return; }
+    if (form.giorni.length === 0) { toast.error(t.valGiorni); return; }
 
     const finalRole = form.showCustomRole
       ? form.customRoleInput.trim() || form.role
@@ -387,11 +558,11 @@ function OrarioModal({
         });
 
     if (result.success) {
-      toast.success(mode === 'add' ? 'Persona aggiunta.' : 'Aggiornato.');
+      toast.success(mode === 'add' ? t.toastAdded : t.toastUpdated);
       onSaved();
       onClose();
     } else {
-      toast.error(result.error ?? 'Errore salvataggio.');
+      toast.error(result.error ?? t.toastError);
     }
     setSaving(false);
   }
@@ -404,32 +575,28 @@ function OrarioModal({
         style={{ background: 'white', maxHeight: '93dvh' }}
         onClick={e => e.stopPropagation()}>
 
-        {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
         </div>
 
         <div className="px-5 pb-8 space-y-4">
-          {/* Title */}
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              {mode === 'add' ? 'Aggiungi persona' : 'Modifica persona'}
+              {mode === 'add' ? t.modalAdd : t.modalEdit}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
 
-          {/* Name */}
           <div>
-            <label style={lbl}>Nome e cognome *</label>
+            <label style={lbl}>{t.nomeCognome}</label>
             <input type="text" value={form.name}
               onChange={e => set('name', e.target.value)}
               placeholder="Maria García" autoFocus={mode === 'add'}
               style={inputSt} />
           </div>
 
-          {/* Role selector */}
           <div>
-            <label style={lbl}>Ruolo *</label>
+            <label style={lbl}>{t.ruolo}</label>
             {!form.showCustomRole ? (
               <div className="flex flex-wrap gap-2">
                 {allRoles.map(r => {
@@ -453,14 +620,14 @@ function OrarioModal({
                   onClick={() => set('showCustomRole', true)}
                   className="px-3 py-2 rounded-xl text-sm transition-all"
                   style={{ border: '1.5px dashed var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  + Aggiungi categoria
+                  {t.aggiungiCategoria}
                 </button>
               </div>
             ) : (
               <div className="flex gap-2">
                 <input type="text" value={form.customRoleInput}
                   onChange={e => set('customRoleInput', e.target.value)}
-                  placeholder="Nome categoria..."
+                  placeholder={t.nomeCategoria}
                   autoFocus
                   style={{ ...inputSt, flex: 1 }} />
                 <button type="button"
@@ -481,9 +648,8 @@ function OrarioModal({
             )}
           </div>
 
-          {/* Days */}
           <div className="space-y-3">
-            <label style={lbl}>Giorni di lavoro</label>
+            <label style={lbl}>{t.giorni}</label>
             {form.giorni.map((g, i) => (
               <GiornoFormCard
                 key={i}
@@ -492,16 +658,16 @@ function OrarioModal({
                 canRemove={form.giorni.length > 1}
                 onChange={updateGiorno}
                 onRemove={removeGiorno}
+                t={t}
               />
             ))}
             <button type="button" onClick={addGiorno}
               className="w-full py-3 rounded-2xl text-sm flex items-center justify-center gap-2"
               style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
-              <Plus className="size-4" /> Aggiungi giorno
+              <Plus className="size-4" /> {t.aggiungiGiorno}
             </button>
           </div>
 
-          {/* Total badge */}
           {totale > 0 && (
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
               style={{ background: oreBg(totale) }}>
@@ -512,9 +678,8 @@ function OrarioModal({
             </div>
           )}
 
-          {/* Desmontaje */}
           <div>
-            <label style={lbl}>Desmontaje</label>
+            <label style={lbl}>{t.desLabel}</label>
             <div className="flex items-center gap-0 w-fit">
               <button type="button"
                 disabled={form.desmontaje <= 0}
@@ -536,18 +701,17 @@ function OrarioModal({
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex gap-2 pt-1">
             <button onClick={handleSave} disabled={saving}
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving && <Loader2 className="size-4 animate-spin" />}
-              {mode === 'add' ? 'Aggiungi' : 'Salva modifiche'}
+              {mode === 'add' ? t.btnAdd : t.btnSave}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t.btnCancel}
             </button>
           </div>
         </div>
@@ -559,27 +723,27 @@ function OrarioModal({
 // ─── Employee card ────────────────────────────────────────────────────────────
 
 function OrarioCard({
-  entry, canEdit, onEdit, onDelete,
+  entry, canEdit, lang, t, onEdit, onDelete,
 }: {
   entry: OrarioEntry;
   canEdit: boolean;
+  lang: Lang;
+  t: Tr;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const rs = roleStyle(entry.role);
+  const rs     = roleStyle(entry.role);
+  const locale = langLocale(lang);
 
-  const hasTurni = entry.turni?.length > 0;
-  // Legacy single-day support for old Firestore documents
-  const legacy = entry as any;
-
+  const hasTurni    = entry.turni?.length > 0;
+  const legacy      = entry as any;
   const giornoCount = hasTurni ? entry.turni.length : 0;
 
   return (
     <div className="rounded-2xl overflow-hidden"
       style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
 
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5 cursor-pointer"
         style={{ borderBottom: expanded ? '1px solid var(--tqf-beige-border)' : 'none' }}
         onClick={() => setExpanded(v => !v)}>
@@ -607,7 +771,7 @@ function OrarioCard({
               )}
               {hasTurni ? (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  {giornoCount} {giornoCount === 1 ? 'giorno' : 'giorni'}
+                  {giornoCount} {giornoCount === 1 ? t.giorno1 : t.giornoN}
                 </span>
               ) : (
                 <>
@@ -625,7 +789,7 @@ function OrarioCard({
               )}
               {entry.desmontaje > 0 && (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  {entry.desmontaje} desm.
+                  {entry.desmontaje} {t.desm}
                 </span>
               )}
             </div>
@@ -637,12 +801,10 @@ function OrarioCard({
         }
       </div>
 
-      {/* Expanded detail */}
       {expanded && (
         <div className="px-4 pb-4 pt-3 space-y-3">
 
           {hasTurni ? (
-            // ── New multi-day format ──
             entry.turni.map((giorno, i) => {
               const oreGiorno = (giorno.turnoAM?.ore ?? 0) + (giorno.turnoPM?.ore ?? 0);
               return (
@@ -652,7 +814,7 @@ function OrarioCard({
                     <p className="text-xs font-semibold flex items-center gap-1.5 mb-2"
                       style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
                       <Calendar className="size-3.5 flex-shrink-0" />
-                      {fmtDate(giorno.data)}
+                      {fmtDate(giorno.data, locale)}
                     </p>
                   )}
                   {giorno.turnoAM && (
@@ -690,12 +852,12 @@ function OrarioCard({
                     </div>
                   )}
                   {!giorno.turnoAM && !giorno.turnoPM && (
-                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Nessun turno registrato</p>
+                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t.nessunTurno}</p>
                   )}
-                  {oreGiorno > 0 && (giorno.turnoAM && giorno.turnoPM) && (
+                  {oreGiorno > 0 && giorno.turnoAM && giorno.turnoPM && (
                     <div className="text-right pt-1">
                       <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                        Ore giorno: <strong>{fmtOre(oreGiorno)}</strong>
+                        {t.oreGiorno} <strong>{fmtOre(oreGiorno)}</strong>
                       </span>
                     </div>
                   )}
@@ -703,10 +865,9 @@ function OrarioCard({
               );
             })
           ) : (
-            // ── Legacy single-day format ──
             [
-              { label: '🌅 Turno AM', turno: legacy.turnoAM },
-              { label: '🌆 Turno PM', turno: legacy.turnoPM },
+              { label: '🌅 AM', turno: legacy.turnoAM },
+              { label: '🌆 PM', turno: legacy.turnoPM },
             ].map(({ label, turno }) => (
               <div key={label} className="rounded-xl p-3"
                 style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
@@ -715,7 +876,7 @@ function OrarioCard({
                 </p>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    {[{ l: 'Entrata', val: turno?.entrata }, { l: 'Uscita', val: turno?.uscita }].map(({ l, val }) => (
+                    {[{ l: t.entrata, val: turno?.entrata }, { l: t.uscita, val: turno?.uscita }].map(({ l, val }) => (
                       <div key={l}>
                         <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{l}</p>
                         <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
@@ -735,7 +896,6 @@ function OrarioCard({
             ))
           )}
 
-          {/* Total + desmontaje */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
               style={{ background: oreBg(entry.totaleOre) }}>
@@ -746,28 +906,26 @@ function OrarioCard({
               </span>
               <span className="text-xs opacity-70"
                 style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
-                totali
+                {t.totali}
               </span>
             </div>
             {entry.desmontaje > 0 && (
               <span className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                {entry.desmontaje} desmontaje
+                {entry.desmontaje} {t.desLabel}
               </span>
             )}
           </div>
 
-          {/* Ultima modifica */}
           <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Ultima modifica: {fmtDataOra(entry.ultimaModifica)}
+            {t.ultimaModifica} {fmtDataOra(entry.ultimaModifica, locale)}
           </p>
 
-          {/* Edit / Delete */}
           {canEdit && (
             <div className="flex gap-2 pt-1">
               <button onClick={onEdit}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm"
                 style={{ border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                <Pencil className="size-3.5" /> Editar
+                <Pencil className="size-3.5" /> {t.editar}
               </button>
               <button onClick={onDelete}
                 className="flex items-center justify-center px-4 py-2.5 rounded-xl text-sm"
@@ -784,8 +942,6 @@ function OrarioCard({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-type Tab = 'orario' | 'gastos';
-
 export default function ProjectPage() {
   const params  = useParams();
   const router  = useRouter();
@@ -793,43 +949,40 @@ export default function ProjectPage() {
 
   const {
     plannerUser, adminUser, isSuperAdmin,
-    canManageCashControl, canCreateProjects,
+    canManageCashControl,
     isLoading: authLoading,
   } = usePlannerAuth();
 
   const [event,     setEvent]     = useState<PlannerEvent | null>(null);
   const [entries,   setEntries]   = useState<OrarioEntry[]>([]);
-  const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [cashBudget, setCashBudget] = useState(0);
   const [loading,   setLoading]   = useState(true);
+  const [lang,      setLangState] = useState<Lang>('it');
 
-  // Access: SuperAdmin + TeQF only for Orario di Lavoro
   const canOrario = isSuperAdmin || canManageCashControl;
 
-  const [activeTab, setActiveTab] = useState<Tab>('orario');
+  useEffect(() => {
+    const saved = localStorage.getItem('tqf-lang') as Lang | null;
+    if (saved && (['it', 'es', 'en'] as Lang[]).includes(saved)) setLangState(saved);
+  }, []);
 
-  // Modal state
-  const [showModal,  setShowModal]  = useState(false);
-  const [modalMode,  setModalMode]  = useState<ModalMode>('add');
-  const [editEntry,  setEditEntry]  = useState<OrarioEntry | undefined>();
+  function setLang(l: Lang) {
+    setLangState(l);
+    localStorage.setItem('tqf-lang', l);
+  }
 
-  // Load event once
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState<ModalMode>('add');
+  const [editEntry, setEditEntry] = useState<OrarioEntry | undefined>();
+
   useEffect(() => {
     if (!eventId) return;
     getPlannerEvent(eventId).then(e => {
       if (!e) { router.replace('/planner'); return; }
       setEvent(e);
-      setCashBudget((e as any).cashControlBudget ?? 0);
       setLoading(false);
     });
   }, [eventId, router]);
 
-  // Default tab to gastos for XB-only users
-  useEffect(() => {
-    if (!authLoading && !canOrario) setActiveTab('gastos');
-  }, [authLoading, canOrario]);
-
-  // Real-time orario entries
   useEffect(() => {
     if (!eventId || !canOrario) return;
     const unsub = onSnapshot(
@@ -839,16 +992,6 @@ export default function ProjectPage() {
     return () => unsub();
   }, [eventId, canOrario]);
 
-  // Real-time cash movements
-  useEffect(() => {
-    if (!eventId) return;
-    const unsub = onSnapshot(
-      query(collection(db, 'plannerEvents', eventId, 'cashControl'), orderBy('timestamp', 'desc')),
-      snap => setMovements(snap.docs.map(d => ({ id: d.id, ...d.data() } as CashMovement)))
-    );
-    return () => unsub();
-  }, [eventId]);
-
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
@@ -857,46 +1000,44 @@ export default function ProjectPage() {
     );
   }
 
-  const isOwnEvent = plannerUser?.id === event?.plannerId;
-  const canView    = isSuperAdmin || canManageCashControl || (canCreateProjects && isOwnEvent);
+  const t      = T[lang];
+  const locale = langLocale(lang);
 
-  if (!canView) {
+  if (!canOrario) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
-          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>Accesso non autorizzato</p>
-          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>← Dashboard</Link>
+          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>{t.accessDenied}</p>
+          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+            ← {t.dashboardBack}
+          </Link>
         </div>
       </div>
     );
   }
 
-  const createdBy   = adminUser?.id ?? plannerUser?.id ?? '';
-  const totalOre    = entries.reduce((s, e) => s + (e.totaleOre ?? 0), 0);
-  const totalDesm   = entries.reduce((s, e) => s + (e.desmontaje ?? 0), 0);
-  const totalSpent  = movements.reduce((s, m) => s + m.amount, 0);
-  const balance     = cashBudget - totalSpent;
+  const createdBy = adminUser?.id ?? plannerUser?.id ?? '';
+  const totalOre  = entries.reduce((s, e) => s + (e.totaleOre ?? 0), 0);
+  const totalDesm = entries.reduce((s, e) => s + (e.desmontaje ?? 0), 0);
 
   const firstDay       = event?.days?.[0];
   const eventDateLabel = firstDay
-    ? new Date(firstDay.date + 'T12:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+    ? new Date(firstDay.date + 'T12:00').toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
 
   const extraRoles = Array.from(
     new Set(entries.map(e => e.role).filter(r => !ORARIO_DEFAULT_ROLES.includes(r as any)))
   );
 
-  function openAdd()  { setModalMode('add'); setEditEntry(undefined); setShowModal(true); }
+  function openAdd() { setModalMode('add'); setEditEntry(undefined); setShowModal(true); }
   function openEdit(e: OrarioEntry) { setModalMode('edit'); setEditEntry(e); setShowModal(true); }
 
   async function handleDelete(entry: OrarioEntry) {
-    if (!confirm(`Eliminare ${entry.name}?`)) return;
+    if (!confirm(t.confirmDelete(entry.name))) return;
     const r = await deleteOrarioEntry(eventId, entry.id);
-    if (r.success) toast.success('Rimosso.');
-    else toast.error(r.error ?? 'Errore.');
+    if (r.success) toast.success(t.toastDeleted);
+    else toast.error(r.error ?? t.toastError);
   }
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen pb-8" style={{ background: 'var(--tqf-beige)' }}>
@@ -910,11 +1051,11 @@ export default function ProjectPage() {
             className="flex items-center gap-1.5 text-sm"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             <ArrowLeft className="size-4" />
-            <span className="hidden xs:inline">Dashboard</span>
+            <span className="hidden xs:inline">{t.dashboardBack}</span>
           </Link>
 
           <div className="flex flex-col items-center min-w-0">
-            <p className="text-sm font-medium truncate max-w-[180px]"
+            <p className="text-sm font-medium truncate max-w-[160px]"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}>
               {event?.eventCode || event?.clientName || 'Progetto'}
             </p>
@@ -925,11 +1066,31 @@ export default function ProjectPage() {
             )}
           </div>
 
-          <Link href={`/planner/events/${eventId}`}
-            className="text-xs px-2.5 py-1.5 rounded-lg"
-            style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
-            Modifica
-          </Link>
+          <div className="flex items-center gap-1.5">
+            {/* Language switcher */}
+            <div className="flex items-center rounded-lg overflow-hidden"
+              style={{ border: '1px solid var(--tqf-beige-border)' }}>
+              {(['it', 'es', 'en'] as Lang[]).map(l => (
+                <button key={l} onClick={() => setLang(l)}
+                  className="px-2 py-1 text-xs font-semibold uppercase"
+                  style={{
+                    background: lang === l ? 'var(--tqf-bordeaux)' : 'white',
+                    color: lang === l ? 'white' : 'var(--tqf-muted)',
+                    fontFamily: 'var(--font-body)',
+                    letterSpacing: '0.04em',
+                    transition: 'all 0.12s',
+                  }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            <Link href={`/planner/events/${eventId}`}
+              className="text-xs px-2.5 py-1.5 rounded-lg"
+              style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
+              {t.modifica}
+            </Link>
+          </div>
         </div>
 
         {/* Event meta */}
@@ -950,182 +1111,78 @@ export default function ProjectPage() {
           </div>
         )}
 
-        {/* Tab bar */}
+        {/* Tab indicator */}
         <div className="flex -mx-4 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-          {/* Orario tab — SuperAdmin + TeQF only */}
-          {canOrario && (
-            <button onClick={() => setActiveTab('orario')}
-              className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
-              style={{
-                color: activeTab === 'orario' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
-                fontFamily: 'var(--font-body)',
-                borderBottom: activeTab === 'orario' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
-                background: 'white',
-              }}>
-              <Users className="size-4" />
-              Orario
-              <span className="text-xs px-1.5 py-0.5 rounded-full"
-                style={{
-                  background: activeTab === 'orario' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
-                  color: activeTab === 'orario' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
-                  fontFamily: 'var(--font-body)',
-                }}>
-                {entries.length}
-              </span>
-            </button>
-          )}
-
-          {/* Gastos tab */}
-          <button onClick={() => setActiveTab('gastos')}
-            className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
+          <div className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium"
             style={{
-              color: activeTab === 'gastos' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+              color: 'var(--tqf-bordeaux)',
               fontFamily: 'var(--font-body)',
-              borderBottom: activeTab === 'gastos' ? '2px solid var(--tqf-bordeaux)' : '2px solid transparent',
+              borderBottom: '2px solid var(--tqf-bordeaux)',
               background: 'white',
             }}>
-            <Wallet className="size-4" />
-            Gastos
-            {movements.length > 0 && (
-              <span className="text-xs px-1.5 py-0.5 rounded-full"
-                style={{
-                  background: activeTab === 'gastos' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
-                  color: activeTab === 'gastos' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
-                  fontFamily: 'var(--font-body)',
-                }}>
-                {cashBudget > 0 ? fmtCurrency(balance) : fmtCurrency(totalSpent)}
-              </span>
-            )}
-          </button>
+            <Users className="size-4" />
+            {t.tabOrario}
+            <span className="text-xs px-1.5 py-0.5 rounded-full"
+              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+              {entries.length}
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* ══ ORARIO DI LAVORO TAB ══ */}
-      {activeTab === 'orario' && canOrario && (
-        <>
-          {/* Stats bar */}
-          <div className="mx-4 mt-4 rounded-2xl px-4 py-3 grid grid-cols-3 gap-2"
-            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-            {[
-              { label: 'Persone',    value: String(entries.length) },
-              { label: 'Ore totali', value: fmtOre(totalOre), color: totalOre > 0 ? oreColor(totalOre) : undefined },
-              { label: 'Desmontaje', value: String(totalDesm) },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="text-center">
-                <p className="text-lg font-semibold"
-                  style={{ color: color ?? 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                  {value}
-                </p>
-                <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Add button */}
-          <div className="mx-4 mt-3">
-            <button onClick={openAdd}
-              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-medium"
-              style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
-              <Plus className="size-4" /> Aggiungi persona
-            </button>
-          </div>
-
-          {/* Cards */}
-          {entries.length === 0 ? (
-            <div className="mx-4 mt-4 rounded-2xl p-10 text-center"
-              style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-              <div className="mx-auto mb-4 size-12 rounded-2xl flex items-center justify-center"
-                style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-                <Users className="size-6" />
-              </div>
-              <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Nessuna persona ancora. Usa il pulsante qui sopra.
-              </p>
-            </div>
-          ) : (
-            <div className="mx-4 mt-3 space-y-3">
-              {entries.map(e => (
-                <OrarioCard
-                  key={e.id}
-                  entry={e}
-                  canEdit={canOrario}
-                  onEdit={() => openEdit(e)}
-                  onDelete={() => handleDelete(e)}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ══ GASTOS TAB ══ */}
-      {activeTab === 'gastos' && (
-        <div className="mx-4 mt-4 space-y-3">
-          {/* Balance card */}
-          <div className="rounded-3xl px-5 pt-5 pb-4"
-            style={{ background: cashBudget > 0 ? (balance >= 0 ? '#0f2e1a' : '#2a0e0e') : '#1a0f0a' }}>
-            <p className="text-xs uppercase tracking-widest opacity-50 mb-1"
-              style={{ fontFamily: 'var(--font-body)', color: 'white', letterSpacing: '0.16em' }}>
-              {cashBudget > 0 ? 'Saldo attuale' : 'Spesa totale'}
+      {/* ══ ORARIO DI LAVORO ══ */}
+      {/* Stats bar */}
+      <div className="mx-4 mt-4 rounded-2xl px-4 py-3 grid grid-cols-3 gap-2"
+        style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+        {[
+          { label: t.persone,    value: String(entries.length) },
+          { label: t.oreTotali,  value: fmtOre(totalOre), color: totalOre > 0 ? oreColor(totalOre) : undefined },
+          { label: t.desmontaje, value: String(totalDesm) },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="text-center">
+            <p className="text-lg font-semibold"
+              style={{ color: color ?? 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+              {value}
             </p>
-            <p className="text-5xl font-light leading-none mb-2"
-              style={{
-                fontFamily: 'var(--font-display)',
-                color: cashBudget > 0 ? (balance >= 0 ? '#6aff9e' : '#ff6a6a') : 'white',
-              }}>
-              {cashBudget > 0 ? (balance < 0 ? '-' : '') + fmtCurrency(balance) : fmtCurrency(totalSpent)}
-            </p>
-            <div className="flex gap-4">
-              {cashBudget > 0 && <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>Budget {fmtCurrency(cashBudget)}</span>}
-              <span className="text-xs opacity-60" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>Gastato {fmtCurrency(totalSpent)}</span>
-              <span className="text-xs opacity-50" style={{ color: 'white', fontFamily: 'var(--font-body)' }}>{movements.length} movim.</span>
-            </div>
+            <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{label}</p>
           </div>
+        ))}
+      </div>
 
-          {/* Last 5 movements */}
-          {movements.length > 0 && (
-            <div className="rounded-2xl overflow-hidden"
-              style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-              <div className="px-4 py-3 border-b flex items-center justify-between"
-                style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                <p className="text-sm" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>Movimenti recenti</p>
-                <Link href={`/planner/projects/${eventId}/cash-control`}
-                  className="text-xs" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                  Ver todo →
-                </Link>
-              </div>
-              {movements.slice(0, 5).map(m => (
-                <div key={m.id} className="flex items-center justify-between px-4 py-3 border-b last:border-0"
-                  style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="size-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'var(--tqf-cipria-light)' }}>
-                      {m.paymentMethod === 'tarjeta'
-                        ? <CreditCard className="size-3.5" style={{ color: 'var(--tqf-bordeaux)' }} />
-                        : <Wallet className="size-3.5" style={{ color: 'var(--tqf-bordeaux)' }} />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm capitalize truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>{m.category}</p>
-                      <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                        {m.date} {m.time} · {m.registeredByName?.split(' ')[0]}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-semibold flex-shrink-0 ml-3"
-                    style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                    -{fmtCurrency(m.amount)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Add button */}
+      <div className="mx-4 mt-3">
+        <button onClick={openAdd}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-medium"
+          style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
+          <Plus className="size-4" /> {t.aggiungiPersona}
+        </button>
+      </div>
 
-          <Link href={`/planner/projects/${eventId}/cash-control`}
-            className="flex items-center justify-center gap-2 w-full py-3.5 rounded-2xl text-sm font-medium"
-            style={{ border: '1.5px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
-            <Wallet className="size-4" />
-            {movements.length === 0 ? 'Registra il primo gasto' : 'Gestisci tutti i gastos'}
-          </Link>
+      {/* Cards */}
+      {entries.length === 0 ? (
+        <div className="mx-4 mt-4 rounded-2xl p-10 text-center"
+          style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+          <div className="mx-auto mb-4 size-12 rounded-2xl flex items-center justify-center"
+            style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
+            <Users className="size-6" />
+          </div>
+          <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            {t.nessuna}
+          </p>
+        </div>
+      ) : (
+        <div className="mx-4 mt-3 space-y-3">
+          {entries.map(e => (
+            <OrarioCard
+              key={e.id}
+              entry={e}
+              canEdit={canOrario}
+              lang={lang}
+              t={t}
+              onEdit={() => openEdit(e)}
+              onDelete={() => handleDelete(e)}
+            />
+          ))}
         </div>
       )}
 
@@ -1137,6 +1194,7 @@ export default function ProjectPage() {
           entry={editEntry}
           createdBy={createdBy}
           extraRoles={extraRoles}
+          t={t}
           onClose={() => setShowModal(false)}
           onSaved={() => setShowModal(false)}
         />
