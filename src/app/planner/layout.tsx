@@ -13,17 +13,18 @@ function PlannerGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const isLoginPage          = pathname === '/planner/login';
+    const PUBLIC_ROUTES        = ['/planner/login', '/planner/register'];
+    const isPublicRoute        = PUBLIC_ROUTES.includes(pathname);
     const isChangePasswordPage = pathname === '/planner/change-password';
 
     const hasAccess = !!plannerUser || isSuperAdmin;
 
-    if (!hasAccess && !isLoginPage) {
+    if (!hasAccess && !isPublicRoute) {
       router.replace('/planner/login');
       return;
     }
 
-    if (hasAccess && isLoginPage) {
+    if (hasAccess && isPublicRoute) {
       router.replace(mustChangePassword ? '/planner/change-password' : '/planner');
       return;
     }
