@@ -1,14 +1,17 @@
 'use client';
 
-import { createPlannerRequest } from '@/actions/planner/planner-requests';
-import { auth } from '@/firebase/client';
+import { auth, db } from '@/firebase/client';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function PlannerRegisterPage() {
+  const router = useRouter();
+
   const [name, setName]               = useState('');
   const [email, setEmail]             = useState('');
   const [password, setPassword]       = useState('');
@@ -18,6 +21,14 @@ export default function PlannerRegisterPage() {
   const [submitting, setSubmitting]   = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [done, setDone]               = useState(false);
+  const [countdown, setCountdown]     = useState(3);
+
+  useEffect(() => {
+    if (!done) return;
+    if (countdown <= 0) { router.push('/planner/login'); return; }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [done, countdown, router]);
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
@@ -35,37 +46,42 @@ export default function PlannerRegisterPage() {
     e.preventDefault();
     setError(null);
 
-    if (!name.trim()) { setError('Il nome è obbligatorio.'); return; }
-    if (password.length < 6) { setError('La password deve avere almeno 6 caratteri.'); return; }
-    if (password !== confirm) { setError('Le password non coincidono.'); return; }
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedName  = name.trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Inserisci un indirizzo email valido.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('La password deve avere almeno 8 caratteri.');
+      return;
+    }
+    if (password !== confirm) {
+      setError('Le password non coincidono.');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      // First check if the request can be created (duplicate checks)
-      const check = await createPlannerRequest(name.trim(), email.trim().toLowerCase());
-      if (!check.success) {
-        setError(check.error ?? 'Errore durante la registrazione.');
-        setSubmitting(false);
-        return;
-      }
+      const { user } = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
 
-      // Create Firebase Auth account
-      try {
-        await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      } catch (authErr: any) {
-        if (authErr.code === 'auth/email-already-in-use') {
-          // Account already exists, that's ok — they registered before
-        } else {
-          throw authErr;
-        }
-      }
+      await setDoc(doc(db, 'users', user.uid), {
+        email:     trimmedEmail,
+        name:      trimmedName || '',
+        role:      'user',
+        team:      [],
+        active:    false,
+        createdAt: serverTimestamp(),
+      });
 
       setDone(true);
     } catch (err: any) {
       const msg =
-        err.code === 'auth/invalid-email' ? 'Email non valida.' :
-        err.code === 'auth/weak-password' ? 'Password troppo debole.' :
-        err.message ?? 'Errore durante la registrazione.';
+        err.code === 'auth/email-already-in-use' ? 'Questa email è già registrata.' :
+        err.code === 'auth/invalid-email'         ? 'Email non valida.'              :
+        err.code === 'auth/weak-password'         ? 'Password troppo debole.'        :
+        err.message ?? 'Errore durante la registrazione. Riprova.';
       setError(msg);
     }
     setSubmitting(false);
@@ -74,6 +90,7 @@ export default function PlannerRegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--tqf-beige)' }}>
       <div className="w-full max-w-sm">
+
         {/* Logo */}
         <div className="flex flex-col items-center mb-8 gap-2">
           <Image
@@ -95,50 +112,40 @@ export default function PlannerRegisterPage() {
         </div>
 
         {done ? (
-          /* Success state */
+          /* ── Success state ── */
           <div className="rounded-2xl p-7 text-center" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             <div className="flex justify-center mb-4">
               <CheckCircle2 className="size-12" style={{ color: '#15803d' }} />
             </div>
             <h2 className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-              Richiesta inviata!
+              Account creato!
             </h2>
-            <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              La tua richiesta è stata ricevuta e sarà valutata dall&apos;amministratore di Te Quiero Feliz. Riceverai una comunicazione appena il tuo account verrà approvato.
+            <p className="text-sm mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              Il tuo account è stato creato. Un amministratore lo attiverà a breve.
+            </p>
+            <p className="text-xs mb-5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', opacity: 0.7 }}>
+              Reindirizzamento al login tra {countdown}…
             </p>
             <Link
               href="/planner/login"
-              className="mt-6 inline-block text-sm transition-opacity hover:opacity-70"
+              className="inline-block text-sm transition-opacity hover:opacity-70"
               style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
             >
-              Torna al login
+              Vai al login →
             </Link>
           </div>
         ) : (
-          /* Registration form */
+          /* ── Registration form ── */
           <div className="rounded-2xl p-7" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             <h1 className="text-xl mb-1" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
               Registrati
             </h1>
             <p className="text-xs mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Invia una richiesta di accesso. Sarà l&apos;amministratore ad approvarla.
+              Crea un account per accedere all&apos;area planner
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Nome e cognome *
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  autoFocus
-                  placeholder="Maria García"
-                  style={inputStyle}
-                />
-              </div>
+              {/* Email */}
               <div>
                 <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                   Email *
@@ -149,13 +156,31 @@ export default function PlannerRegisterPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
+                  autoFocus
                   placeholder="planner@example.com"
                   style={inputStyle}
                 />
               </div>
+
+              {/* Name (optional) */}
               <div>
                 <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Password * (min. 6 caratteri)
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="given-name"
+                  placeholder="Maria García"
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  Password * (min. 8 caratteri)
                 </label>
                 <div className="relative">
                   <input
@@ -167,11 +192,23 @@ export default function PlannerRegisterPage() {
                     placeholder="••••••••"
                     style={{ ...inputStyle, paddingRight: '2.5rem' }}
                   />
-                  <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--tqf-muted)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd(!showPwd)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--tqf-muted)' }}
+                  >
                     {showPwd ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
                 </div>
+                {password.length > 0 && password.length < 8 && (
+                  <p className="mt-1 text-xs" style={{ color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                    Ancora {8 - password.length} {8 - password.length === 1 ? 'carattere' : 'caratteri'} necessari
+                  </p>
+                )}
               </div>
+
+              {/* Confirm password */}
               <div>
                 <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                   Conferma password *
@@ -186,7 +223,12 @@ export default function PlannerRegisterPage() {
                     placeholder="••••••••"
                     style={{ ...inputStyle, paddingRight: '2.5rem' }}
                   />
-                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--tqf-muted)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirm(!showConfirm)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--tqf-muted)' }}
+                  >
                     {showConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
                 </div>
@@ -210,7 +252,7 @@ export default function PlannerRegisterPage() {
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
               >
                 {submitting && <Loader2 className="size-4 animate-spin" />}
-                Invia richiesta
+                Registrati
               </button>
             </form>
           </div>
@@ -228,6 +270,7 @@ export default function PlannerRegisterPage() {
             Accedi
           </Link>
         </div>
+
       </div>
     </div>
   );
