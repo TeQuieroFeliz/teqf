@@ -90,8 +90,19 @@ function UserCard({ user }: { user: PlannerRaw }) {
   async function handleSave() {
     setSaving(true);
     const r = await saveUserManagement(user.id, teams, status);
-    if (r.success) toast.success('Permessi salvati.');
-    else toast.error(r.error ?? 'Errore salvataggio.');
+    if (r.success) {
+      toast.success('Permessi salvati.');
+      // Notify user via email if a team was assigned
+      if (teams.length > 0 && user.email) {
+        fetch('/api/email/team-assigned', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ email: user.email, name: displayName, teams }),
+        }).catch(console.error);
+      }
+    } else {
+      toast.error(r.error ?? 'Errore salvataggio.');
+    }
     setSaving(false);
   }
 

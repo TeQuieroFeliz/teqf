@@ -132,9 +132,24 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const loginWithEmail = async (email: string, password: string) => {
     setAuthError(null);
     try {
-      // Attempt sign-in directly; onAuthStateChanged + onSnapshot will resolve the user
       try {
-        await signInWithEmailAndPassword(auth, email, password);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+
+        // Block users whose registration is still pending or was rejected
+        const userSnap = await getDoc(doc(db, 'users', credential.user.uid));
+        if (userSnap.exists()) {
+          const status = userSnap.data()?.status;
+          if (status === 'pending') {
+            await signOut(auth);
+            setAuthError('La tua registrazione è in attesa di approvazione. Ti contatteremo presto.');
+            return;
+          }
+          if (status === 'rejected') {
+            await signOut(auth);
+            setAuthError('La tua registrazione è stata rifiutata. Contatta l\'amministratore.');
+            return;
+          }
+        }
       } catch (signInErr: any) {
         if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
           // Check for pending/rejected requests to show a helpful error
@@ -147,16 +162,7 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
             setAuthError("La tua richiesta è stata rifiutata. Contatta l'amministratore.");
             return;
           }
-          // Try creating a new account (legacy flow support)
-          try {
-            await createUserWithEmailAndPassword(auth, email, password);
-          } catch (createErr: any) {
-            if (createErr.code === 'auth/email-already-in-use') {
-              setAuthError('Email o password errata.');
-            } else {
-              throw createErr;
-            }
-          }
+          setAuthError('Email o password errata.');
         } else {
           throw signInErr;
         }
