@@ -10,6 +10,7 @@ import {
   Check,
   Loader2,
   Search,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -73,9 +74,10 @@ const PERM_ROWS: { key: string; label: string; tag: string; get: (p: UserPermiss
 // ─── User card ────────────────────────────────────────────────────────────────
 
 function UserCard({ user }: { user: PlannerRaw }) {
-  const [teams,  setTeams]  = useState<string[]>(() => deriveTeams(user));
-  const [status, setStatus] = useState<UserStatus>(() => user.active !== false ? 'active' : 'inactive');
-  const [saving, setSaving] = useState(false);
+  const [teams,    setTeams]    = useState<string[]>(() => deriveTeams(user));
+  const [status,   setStatus]   = useState<UserStatus>(() => user.active !== false ? 'active' : 'inactive');
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const perms       = useMemo(() => permissionsFor(teams), [teams]);
   const displayName = [user.name, user.lastName].filter(Boolean).join(' ');
@@ -91,6 +93,24 @@ function UserCard({ user }: { user: PlannerRaw }) {
     if (r.success) toast.success('Permessi salvati.');
     else toast.error(r.error ?? 'Errore salvataggio.');
     setSaving(false);
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Eliminare definitivamente l'account di ${user.email}?\nQuesta azione non è reversibile.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, email: user.email }),
+      });
+      const data = await res.json();
+      if (res.ok) toast.success('Account eliminato.');
+      else toast.error(data.error ?? 'Errore durante l\'eliminazione.');
+    } catch {
+      toast.error('Errore di rete.');
+    }
+    setDeleting(false);
   }
 
   // Avatar color = first team assigned, or neutral
@@ -205,11 +225,19 @@ function UserCard({ user }: { user: PlannerRaw }) {
         </div>
 
         {/* Save */}
-        <button onClick={handleSave} disabled={saving}
+        <button onClick={handleSave} disabled={saving || deleting}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-semibold disabled:opacity-50"
           style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
           {saving && <Loader2 className="size-4 animate-spin" />}
           Salva
+        </button>
+
+        {/* Delete */}
+        <button onClick={handleDelete} disabled={deleting || saving}
+          className="w-full flex items-center justify-center gap-2 py-2 rounded-2xl text-sm disabled:opacity-50"
+          style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontFamily: 'var(--font-body)' }}>
+          {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          Elimina account
         </button>
       </div>
     </div>
