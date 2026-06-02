@@ -27,13 +27,33 @@ export async function saveUserManagement(
   status: UserStatus
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const now         = new Date().toISOString();
+    const permissions = permissionsFor(team);
+    const teamRole    = teamRoleFor(team);
+    const active      = status === 'active';
+
+    // ── 1. Update planners/{userId} (PlannerAuthContext reads this) ───────────
     await firestore.collection('planners').doc(userId).update({
-      team,
-      teamRole:    teamRoleFor(team),
-      permissions: permissionsFor(team),
-      active:      status === 'active',
-      updatedAt:   new Date().toISOString(),
+      team, teamRole, permissions, active, updatedAt: now,
     });
+
+    // ── 2. Upsert users/{userId} (canonical source of truth per spec) ─────────
+    const plannerSnap = await firestore.collection('planners').doc(userId).get();
+    const plannerData = plannerSnap.data() ?? {};
+    await firestore.collection('users').doc(userId).set(
+      {
+        email:       plannerData.email       ?? '',
+        name:        plannerData.name        ?? '',
+        role:        'user',
+        team,
+        permissions,
+        active,
+        updatedAt:   now,
+        // Only set createdAt on first write (set with merge keeps existing value)
+      },
+      { merge: true }
+    );
+
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e.message };

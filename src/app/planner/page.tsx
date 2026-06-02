@@ -55,7 +55,7 @@ const ADMIN_SECTIONS = [
     label: 'Gestione Utenti',
     description: 'Assegna team e permessi automatici',
     icon: <Users className="size-5" />,
-    href: '/planner/users',
+    href: '/admin/users',
   },
   {
     key: 'cashControl',
