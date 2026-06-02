@@ -343,13 +343,13 @@ function SuperAdminDashboard() {
                     </Link>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                       <Link
-                        href={`/planner/projects/${evt.id}/cash-control`}
+                        href={`/planner/projects/${evt.id}`}
                         className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-80"
                         style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
-                        title="Gastos"
+                        title="Nómina & Gastos"
                       >
-                        <Wallet className="size-3" />
-                        <span className="hidden sm:inline">Gastos</span>
+                        <Users className="size-3" />
+                        <span className="hidden sm:inline">Progetto</span>
                       </Link>
                       <span
                         className="text-xs px-2 py-0.5 rounded-full"

@@ -549,7 +549,7 @@ export default function NominaPage() {
         style={{ background: 'white', borderBottom: '1px solid var(--tqf-beige-border)' }}
       >
         <Link
-          href={`/planner/events/${eventId}`}
+          href={`/planner/projects/${eventId}`}
           className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
         >
