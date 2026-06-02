@@ -8,12 +8,17 @@ export type OrarioTurno = {
   ore: number;      // auto-calculated (handles midnight-crossing)
 };
 
+export type OrarioGiorno = {
+  data: string;              // "YYYY-MM-DD"
+  turnoAM: OrarioTurno | null;
+  turnoPM: OrarioTurno | null;
+};
+
 export type OrarioEntry = {
   id: string;
   name: string;
   role: string;           // predefined or custom string
-  turnoAM: OrarioTurno;
-  turnoPM: OrarioTurno;
+  turni: OrarioGiorno[];  // multi-day shifts
   totaleOre: number;
   desmontaje: number;
   ultimaModifica: string; // ISO timestamp

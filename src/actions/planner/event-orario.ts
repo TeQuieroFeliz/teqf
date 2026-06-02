@@ -1,7 +1,7 @@
 'use server';
 
 import { firestore } from '@/firebase/server';
-import { OrarioEntry, OrarioTurno } from '@/lib/planner-types';
+import { OrarioEntry, OrarioGiorno } from '@/lib/planner-types';
 
 function col(eventId: string) {
   return firestore
@@ -10,8 +10,6 @@ function col(eventId: string) {
     .collection('orarioDiLavoro');
 }
 
-const emptyTurno = (): OrarioTurno => ({ entrata: '', uscita: '', ore: 0 });
-
 // ── Add ───────────────────────────────────────────────────────────────────────
 
 export async function addOrarioEntry(
@@ -19,8 +17,7 @@ export async function addOrarioEntry(
   data: {
     name: string;
     role: string;
-    turnoAM: OrarioTurno;
-    turnoPM: OrarioTurno;
+    turni: OrarioGiorno[];
     totaleOre: number;
     desmontaje: number;
     createdBy: string;
@@ -47,8 +44,7 @@ export async function updateOrarioEntry(
   data: {
     name: string;
     role: string;
-    turnoAM: OrarioTurno;
-    turnoPM: OrarioTurno;
+    turni: OrarioGiorno[];
     totaleOre: number;
     desmontaje: number;
   }

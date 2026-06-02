@@ -11,7 +11,7 @@ import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import {
   CashMovement,
   OrarioEntry,
-  OrarioTurno,
+  OrarioGiorno,
   ORARIO_DEFAULT_ROLES,
   PlannerEvent,
 } from '@/lib/planner-types';
@@ -53,7 +53,7 @@ function to12h(t24: string): string {
 function to24h(t12: string): string {
   if (!t12) return '';
   const parts = t12.split(' ');
-  if (parts.length !== 2) return t12; // already 24h or empty
+  if (parts.length !== 2) return t12;
   const [time, period] = parts;
   const [rawH, m] = time.split(':').map(Number);
   const h = period === 'PM' && rawH !== 12 ? rawH + 12
@@ -65,7 +65,6 @@ function to24h(t12: string): string {
 /**
  * Hours calculation in 24h internal representation.
  * Rule: if uscita <= entrata (same or earlier), assume next-day → add 24h.
- * Examples: 06:00→06:00 = 24h | 22:00→10:00 = 12h | 10:00→14:00 = 4h
  */
 function calcOre(e24: string, u24: string): number {
   if (!e24 || !u24) return 0;
@@ -81,6 +80,13 @@ function fmtOre(h: number): string {
   const hrs = Math.floor(h);
   const m   = Math.round((h - hrs) * 60);
   return m > 0 ? `${hrs}h ${m}m` : `${hrs}h`;
+}
+
+function fmtDate(d: string): string {
+  if (!d) return '—';
+  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
 }
 
 function oreColor(h: number): string {
@@ -106,7 +112,7 @@ function fmtDataOra(iso: string): string {
     + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ─── Role color map (predefined; custom roles get a neutral style) ────────────
+// ─── Role color map ───────────────────────────────────────────────────────────
 
 const ROLE_STYLES: Record<string, { bg: string; text: string }> = {
   Fiorista:   { bg: '#fdf2f4', text: 'var(--tqf-bordeaux)' },
@@ -115,6 +121,143 @@ const ROLE_STYLES: Record<string, { bg: string; text: string }> = {
 };
 function roleStyle(role: string) {
   return ROLE_STYLES[role] ?? { bg: '#f3f4f6', text: '#374151' };
+}
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
+const inputSt = {
+  width: '100%', padding: '0.55rem 0.75rem', borderRadius: '0.625rem',
+  border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)',
+  fontSize: '0.9rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none',
+};
+const lbl = {
+  fontSize: '0.6rem', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)',
+  textTransform: 'uppercase' as const, letterSpacing: '0.1em',
+  display: 'block', marginBottom: '0.3rem',
+};
+const timeInput = {
+  ...inputSt, fontWeight: 600, textAlign: 'center' as const,
+  fontSize: '1rem', letterSpacing: '0.05em',
+};
+
+// ─── Giorno form types ────────────────────────────────────────────────────────
+
+interface GiornoForm {
+  data: string;
+  entrataAM: string;
+  uscitaAM: string;
+  entrataPM: string;
+  uscitaPM: string;
+}
+
+function emptyGiornoForm(): GiornoForm {
+  return { data: '', entrataAM: '', uscitaAM: '', entrataPM: '', uscitaPM: '' };
+}
+
+// ─── GiornoFormCard (day card inside the modal) ───────────────────────────────
+
+interface GiornoFormCardProps {
+  giorno: GiornoForm;
+  index: number;
+  canRemove: boolean;
+  onChange: (index: number, updated: GiornoForm) => void;
+  onRemove: (index: number) => void;
+}
+
+function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: GiornoFormCardProps) {
+  const oreAM    = calcOre(giorno.entrataAM, giorno.uscitaAM);
+  const orePM    = calcOre(giorno.entrataPM, giorno.uscitaPM);
+  const oreGiorno = parseFloat((oreAM + orePM).toFixed(2));
+
+  const up = (partial: Partial<GiornoForm>) => onChange(index, { ...giorno, ...partial });
+
+  function TimeFields({ eKey, uKey }: {
+    eKey: 'entrataAM' | 'entrataPM';
+    uKey: 'uscitaAM'  | 'uscitaPM';
+  }) {
+    const e24 = giorno[eKey];
+    const u24 = giorno[uKey];
+    const ore = calcOre(e24, u24);
+    return (
+      <>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
+            <input type="time" value={e24}
+              onChange={ev => up({ [eKey]: ev.target.value } as Partial<GiornoForm>)}
+              style={timeInput} />
+            {e24 && (
+              <p className="text-xs mt-0.5 text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                {to12h(e24)}
+              </p>
+            )}
+          </div>
+          <div>
+            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
+            <input type="time" value={u24}
+              onChange={ev => up({ [uKey]: ev.target.value } as Partial<GiornoForm>)}
+              style={timeInput} />
+            {u24 && (
+              <p className="text-xs mt-0.5 text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                {to12h(u24)}
+              </p>
+            )}
+          </div>
+        </div>
+        {ore > 0 && (
+          <p className="text-xs mt-1.5 text-right font-semibold"
+            style={{ color: oreColor(ore), fontFamily: 'var(--font-body)' }}>
+            → {fmtOre(ore)}
+          </p>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl p-4 space-y-4"
+      style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
+
+      {/* Date row */}
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <label style={lbl}>📅 Data</label>
+          <input type="date" value={giorno.data}
+            onChange={e => up({ data: e.target.value })}
+            style={inputSt} />
+        </div>
+        {canRemove && (
+          <button type="button" onClick={() => onRemove(index)}
+            className="size-10 flex items-center justify-center rounded-xl flex-shrink-0"
+            style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {/* AM */}
+      <div>
+        <label style={lbl}>🌅 Turno AM (opzionale)</label>
+        <TimeFields eKey="entrataAM" uKey="uscitaAM" />
+      </div>
+
+      {/* PM */}
+      <div>
+        <label style={lbl}>🌆 Turno PM (opzionale)</label>
+        <TimeFields eKey="entrataPM" uKey="uscitaPM" />
+      </div>
+
+      {/* Day total */}
+      {oreGiorno > 0 && (
+        <div className="flex justify-end">
+          <span className="text-xs px-2.5 py-1 rounded-lg font-semibold"
+            style={{ background: oreBg(oreGiorno), color: oreColor(oreGiorno), fontFamily: 'var(--font-body)' }}>
+            Ore giorno: {fmtOre(oreGiorno)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Add / Edit Modal ─────────────────────────────────────────────────────────
@@ -126,10 +269,7 @@ interface FormState {
   role: string;
   customRoleInput: string;
   showCustomRole: boolean;
-  entrataAM: string; // HH:MM (24h) — for input element
-  uscitaAM: string;
-  entrataPM: string;
-  uscitaPM: string;
+  giorni: GiornoForm[];
   desmontaje: number;
 }
 
@@ -141,65 +281,109 @@ function OrarioModal({
   eventId: string;
   entry?: OrarioEntry;
   createdBy: string;
-  extraRoles: string[];   // custom roles from existing entries
+  extraRoles: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const initGiorni = (): GiornoForm[] => {
+    if (entry?.turni?.length) {
+      return entry.turni.map(g => ({
+        data:      g.data ?? '',
+        entrataAM: g.turnoAM ? to24h(g.turnoAM.entrata) : '',
+        uscitaAM:  g.turnoAM ? to24h(g.turnoAM.uscita)  : '',
+        entrataPM: g.turnoPM ? to24h(g.turnoPM.entrata) : '',
+        uscitaPM:  g.turnoPM ? to24h(g.turnoPM.uscita)  : '',
+      }));
+    }
+    // Legacy: migrate single-day data from old format
+    const legacy = entry as any;
+    if (legacy?.turnoAM?.entrata || legacy?.turnoPM?.entrata) {
+      return [{
+        data:      '',
+        entrataAM: legacy.turnoAM?.entrata ? to24h(legacy.turnoAM.entrata) : '',
+        uscitaAM:  legacy.turnoAM?.uscita  ? to24h(legacy.turnoAM.uscita)  : '',
+        entrataPM: legacy.turnoPM?.entrata ? to24h(legacy.turnoPM.entrata) : '',
+        uscitaPM:  legacy.turnoPM?.uscita  ? to24h(legacy.turnoPM.uscita)  : '',
+      }];
+    }
+    return [emptyGiornoForm()];
+  };
+
   const [form, setForm] = useState<FormState>(() => ({
     name:            entry?.name ?? '',
     role:            entry?.role ?? 'Fiorista',
     customRoleInput: '',
     showCustomRole:  false,
-    entrataAM:  entry ? to24h(entry.turnoAM.entrata) : '',
-    uscitaAM:   entry ? to24h(entry.turnoAM.uscita)  : '',
-    entrataPM:  entry ? to24h(entry.turnoPM.entrata) : '',
-    uscitaPM:   entry ? to24h(entry.turnoPM.uscita)  : '',
-    desmontaje: entry?.desmontaje ?? 0,
+    giorni:          initGiorni(),
+    desmontaje:      entry?.desmontaje ?? 0,
   }));
   const [saving, setSaving] = useState(false);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const oreAM  = calcOre(form.entrataAM, form.uscitaAM);
-  const orePM  = calcOre(form.entrataPM, form.uscitaPM);
-  const totale = parseFloat((oreAM + orePM).toFixed(2));
+  const totale = parseFloat(
+    form.giorni.reduce((s, g) =>
+      s + calcOre(g.entrataAM, g.uscitaAM) + calcOre(g.entrataPM, g.uscitaPM), 0
+    ).toFixed(2)
+  );
 
-  // All roles available in dropdown
   const allRoles = [
     ...Array.from(ORARIO_DEFAULT_ROLES),
     ...extraRoles.filter(r => !ORARIO_DEFAULT_ROLES.includes(r as any)),
   ];
 
+  function updateGiorno(index: number, updated: GiornoForm) {
+    setForm(f => {
+      const giorni = [...f.giorni];
+      giorni[index] = updated;
+      return { ...f, giorni };
+    });
+  }
+
+  function addGiorno() {
+    setForm(f => ({ ...f, giorni: [...f.giorni, emptyGiornoForm()] }));
+  }
+
+  function removeGiorno(index: number) {
+    setForm(f => ({ ...f, giorni: f.giorni.filter((_, i) => i !== index) }));
+  }
+
   async function handleSave() {
     if (!form.name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
+    if (form.giorni.length === 0) { toast.error('Aggiungi almeno un giorno.'); return; }
 
     const finalRole = form.showCustomRole
       ? form.customRoleInput.trim() || form.role
       : form.role;
 
-    const turnoAM: OrarioTurno = {
-      entrata: to12h(form.entrataAM),
-      uscita:  to12h(form.uscitaAM),
-      ore:     oreAM,
-    };
-    const turnoPM: OrarioTurno = {
-      entrata: to12h(form.entrataPM),
-      uscita:  to12h(form.uscitaPM),
-      ore:     orePM,
-    };
+    const turni: OrarioGiorno[] = form.giorni.map(g => {
+      const oreAM = calcOre(g.entrataAM, g.uscitaAM);
+      const orePM = calcOre(g.entrataPM, g.uscitaPM);
+      return {
+        data: g.data,
+        turnoAM: g.entrataAM && g.uscitaAM
+          ? { entrata: to12h(g.entrataAM), uscita: to12h(g.uscitaAM), ore: oreAM }
+          : null,
+        turnoPM: g.entrataPM && g.uscitaPM
+          ? { entrata: to12h(g.entrataPM), uscita: to12h(g.uscitaPM), ore: orePM }
+          : null,
+      };
+    });
+
+    const totaleOre = parseFloat(
+      turni.reduce((s, g) => s + (g.turnoAM?.ore ?? 0) + (g.turnoPM?.ore ?? 0), 0).toFixed(2)
+    );
 
     setSaving(true);
     const result = mode === 'add'
       ? await addOrarioEntry(eventId, {
           name: form.name.trim(), role: finalRole,
-          turnoAM, turnoPM, totaleOre: totale,
-          desmontaje: form.desmontaje, createdBy,
+          turni, totaleOre, desmontaje: form.desmontaje, createdBy,
         })
       : await updateOrarioEntry(eventId, entry!.id, {
           name: form.name.trim(), role: finalRole,
-          turnoAM, turnoPM, totaleOre: totale,
-          desmontaje: form.desmontaje,
+          turni, totaleOre, desmontaje: form.desmontaje,
         });
 
     if (result.success) {
@@ -210,56 +394,6 @@ function OrarioModal({
       toast.error(result.error ?? 'Errore salvataggio.');
     }
     setSaving(false);
-  }
-
-  const inputSt: React.CSSProperties = {
-    width: '100%', padding: '0.55rem 0.75rem', borderRadius: '0.625rem',
-    border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)',
-    fontSize: '0.9rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none',
-  };
-  const lbl: React.CSSProperties = {
-    fontSize: '0.6rem', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)',
-    textTransform: 'uppercase', letterSpacing: '0.1em',
-    display: 'block', marginBottom: '0.3rem',
-  };
-  const timeInput: React.CSSProperties = {
-    ...inputSt, fontWeight: 600, textAlign: 'center',
-    fontSize: '1rem', letterSpacing: '0.05em',
-  };
-
-  function ShiftBlock({
-    label, e24Key, u24Key,
-  }: { label: string; e24Key: 'entrataAM' | 'entrataPM'; u24Key: 'uscitaAM' | 'uscitaPM' }) {
-    const e24 = form[e24Key] as string;
-    const u24 = form[u24Key] as string;
-    const ore = calcOre(e24, u24);
-    return (
-      <div>
-        <label style={lbl}>{label}</label>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Entrata</label>
-            <input type="time" value={e24}
-              onChange={ev => set(e24Key, ev.target.value)}
-              style={timeInput} />
-            {e24 && <p className="text-xs mt-0.5 text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{to12h(e24)}</p>}
-          </div>
-          <div>
-            <label style={{ ...lbl, marginBottom: '0.2rem' }}>Uscita</label>
-            <input type="time" value={u24}
-              onChange={ev => set(u24Key, ev.target.value)}
-              style={timeInput} />
-            {u24 && <p className="text-xs mt-0.5 text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{to12h(u24)}</p>}
-          </div>
-        </div>
-        {ore > 0 && (
-          <p className="text-xs mt-1.5 text-right font-semibold"
-            style={{ color: oreColor(ore), fontFamily: 'var(--font-body)' }}>
-            → {fmtOre(ore)}
-          </p>
-        )}
-      </div>
-    );
   }
 
   return (
@@ -330,7 +464,10 @@ function OrarioModal({
                   autoFocus
                   style={{ ...inputSt, flex: 1 }} />
                 <button type="button"
-                  onClick={() => { set('showCustomRole', false); if (form.customRoleInput.trim()) set('role', form.customRoleInput.trim()); }}
+                  onClick={() => {
+                    set('showCustomRole', false);
+                    if (form.customRoleInput.trim()) set('role', form.customRoleInput.trim());
+                  }}
                   className="px-3 py-2 rounded-xl text-sm"
                   style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
                   OK
@@ -344,19 +481,33 @@ function OrarioModal({
             )}
           </div>
 
-          {/* AM shift */}
-          <ShiftBlock label="🌅 Turno AM" e24Key="entrataAM" u24Key="uscitaAM" />
+          {/* Days */}
+          <div className="space-y-3">
+            <label style={lbl}>Giorni di lavoro</label>
+            {form.giorni.map((g, i) => (
+              <GiornoFormCard
+                key={i}
+                giorno={g}
+                index={i}
+                canRemove={form.giorni.length > 1}
+                onChange={updateGiorno}
+                onRemove={removeGiorno}
+              />
+            ))}
+            <button type="button" onClick={addGiorno}
+              className="w-full py-3 rounded-2xl text-sm flex items-center justify-center gap-2"
+              style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
+              <Plus className="size-4" /> Aggiungi giorno
+            </button>
+          </div>
 
-          {/* PM shift */}
-          <ShiftBlock label="🌆 Turno PM" e24Key="entrataPM" u24Key="uscitaPM" />
-
-          {/* Total preview */}
+          {/* Total badge */}
           {totale > 0 && (
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
               style={{ background: oreBg(totale) }}>
               <Clock className="size-4" style={{ color: oreColor(totale) }} />
               <span className="text-sm font-semibold" style={{ color: oreColor(totale), fontFamily: 'var(--font-body)' }}>
-                {fmtOre(totale)} totali
+                TOTALE: {totale.toFixed(1)}h
               </span>
             </div>
           )}
@@ -418,6 +569,12 @@ function OrarioCard({
   const [expanded, setExpanded] = useState(false);
   const rs = roleStyle(entry.role);
 
+  const hasTurni = entry.turni?.length > 0;
+  // Legacy single-day support for old Firestore documents
+  const legacy = entry as any;
+
+  const giornoCount = hasTurni ? entry.turni.length : 0;
+
   return (
     <div className="rounded-2xl overflow-hidden"
       style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
@@ -448,15 +605,23 @@ function OrarioCard({
                   {fmtOre(entry.totaleOre)}
                 </span>
               )}
-              {entry.turnoAM?.entrata && (
+              {hasTurni ? (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  AM {entry.turnoAM.entrata}–{entry.turnoAM.uscita || '?'}
+                  {giornoCount} {giornoCount === 1 ? 'giorno' : 'giorni'}
                 </span>
-              )}
-              {entry.turnoPM?.entrata && (
-                <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  PM {entry.turnoPM.entrata}–{entry.turnoPM.uscita || '?'}
-                </span>
+              ) : (
+                <>
+                  {legacy.turnoAM?.entrata && (
+                    <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                      AM {legacy.turnoAM.entrata}–{legacy.turnoAM.uscita || '?'}
+                    </span>
+                  )}
+                  {legacy.turnoPM?.entrata && (
+                    <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                      PM {legacy.turnoPM.entrata}–{legacy.turnoPM.uscita || '?'}
+                    </span>
+                  )}
+                </>
               )}
               {entry.desmontaje > 0 && (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
@@ -475,36 +640,100 @@ function OrarioCard({
       {/* Expanded detail */}
       {expanded && (
         <div className="px-4 pb-4 pt-3 space-y-3">
-          {/* Shift cards */}
-          {[
-            { label: '🌅 Turno AM',  turno: entry.turnoAM },
-            { label: '🌆 Turno PM',  turno: entry.turnoPM },
-          ].map(({ label, turno }) => (
-            <div key={label} className="rounded-xl p-3"
-              style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
-              <p className="text-xs mb-2 font-medium" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                {label}
-              </p>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  {[{ lbl: 'Entrata', val: turno?.entrata }, { lbl: 'Uscita', val: turno?.uscita }].map(({ lbl, val }) => (
-                    <div key={lbl}>
-                      <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{lbl}</p>
-                      <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                        {val || '—'}
-                      </p>
+
+          {hasTurni ? (
+            // ── New multi-day format ──
+            entry.turni.map((giorno, i) => {
+              const oreGiorno = (giorno.turnoAM?.ore ?? 0) + (giorno.turnoPM?.ore ?? 0);
+              return (
+                <div key={i} className="rounded-xl p-3 space-y-2"
+                  style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
+                  {giorno.data && (
+                    <p className="text-xs font-semibold flex items-center gap-1.5 mb-2"
+                      style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                      <Calendar className="size-3.5 flex-shrink-0" />
+                      {fmtDate(giorno.data)}
+                    </p>
+                  )}
+                  {giorno.turnoAM && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs w-6">🌅</span>
+                        <span className="text-xs font-medium" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>AM</span>
+                        <span className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                          {giorno.turnoAM.entrata} → {giorno.turnoAM.uscita}
+                        </span>
+                      </div>
+                      {giorno.turnoAM.ore > 0 && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg"
+                          style={{ background: oreBg(giorno.turnoAM.ore), color: oreColor(giorno.turnoAM.ore), fontFamily: 'var(--font-body)' }}>
+                          {fmtOre(giorno.turnoAM.ore)}
+                        </span>
+                      )}
                     </div>
-                  ))}
+                  )}
+                  {giorno.turnoPM && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs w-6">🌆</span>
+                        <span className="text-xs font-medium" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>PM</span>
+                        <span className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                          {giorno.turnoPM.entrata} → {giorno.turnoPM.uscita}
+                        </span>
+                      </div>
+                      {giorno.turnoPM.ore > 0 && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg"
+                          style={{ background: oreBg(giorno.turnoPM.ore), color: oreColor(giorno.turnoPM.ore), fontFamily: 'var(--font-body)' }}>
+                          {fmtOre(giorno.turnoPM.ore)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {!giorno.turnoAM && !giorno.turnoPM && (
+                    <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Nessun turno registrato</p>
+                  )}
+                  {oreGiorno > 0 && (giorno.turnoAM && giorno.turnoPM) && (
+                    <div className="text-right pt-1">
+                      <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        Ore giorno: <strong>{fmtOre(oreGiorno)}</strong>
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {(turno?.ore ?? 0) > 0 && (
-                  <span className="text-sm font-semibold px-2.5 py-1 rounded-lg"
-                    style={{ background: oreBg(turno!.ore), color: oreColor(turno!.ore), fontFamily: 'var(--font-body)' }}>
-                    {fmtOre(turno!.ore)}
-                  </span>
-                )}
+              );
+            })
+          ) : (
+            // ── Legacy single-day format ──
+            [
+              { label: '🌅 Turno AM', turno: legacy.turnoAM },
+              { label: '🌆 Turno PM', turno: legacy.turnoPM },
+            ].map(({ label, turno }) => (
+              <div key={label} className="rounded-xl p-3"
+                style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
+                <p className="text-xs mb-2 font-medium" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  {label}
+                </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {[{ l: 'Entrata', val: turno?.entrata }, { l: 'Uscita', val: turno?.uscita }].map(({ l, val }) => (
+                      <div key={l}>
+                        <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{l}</p>
+                        <p className="text-base font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                          {val || '—'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  {(turno?.ore ?? 0) > 0 && (
+                    <span className="text-sm font-semibold px-2.5 py-1 rounded-lg"
+                      style={{ background: oreBg(turno!.ore), color: oreColor(turno!.ore), fontFamily: 'var(--font-body)' }}>
+                      {fmtOre(turno!.ore)}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
 
           {/* Total + desmontaje */}
           <div className="flex items-center justify-between">
@@ -653,7 +882,6 @@ export default function ProjectPage() {
     ? new Date(firstDay.date + 'T12:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
 
-  // Custom roles from existing entries (not in default list)
   const extraRoles = Array.from(
     new Set(entries.map(e => e.role).filter(r => !ORARIO_DEFAULT_ROLES.includes(r as any)))
   );
