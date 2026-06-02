@@ -55,7 +55,9 @@ function to24h(t12: string): string {
   const parts = t12.split(' ');
   if (parts.length !== 2) return t12; // already 24h or empty
   const [time, period] = parts;
-  let [h, m] = time.split(':').map(Number);
+  const parts2 = time.split(':').map(Number);
+  let h = parts2[0];
+  const m = parts2[1];
   if (period === 'PM' && h !== 12) h += 12;
   if (period === 'AM' && h === 12) h = 0;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
