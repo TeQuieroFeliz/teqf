@@ -24,6 +24,7 @@ interface PlannerRaw {
   email: string;
   name: string;
   lastName?: string;
+  role?: string;
   teamRole?: string;
   team?: unknown;
   active?: boolean;
@@ -113,6 +114,16 @@ function UserCard({ user }: { user: PlannerRaw }) {
             <p className="text-xs truncate" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
               {user.email}
             </p>
+            {user.role && (
+              <span className="inline-block text-xs px-1.5 py-0.5 rounded mt-0.5"
+                style={{
+                  background: user.role === 'admin' ? 'var(--tqf-cipria-light)' : '#f3f4f6',
+                  color: user.role === 'admin' ? 'var(--tqf-bordeaux)' : '#6b7280',
+                  fontFamily: 'var(--font-body)',
+                }}>
+                {user.role}
+              </span>
+            )}
           </div>
           <div className="flex gap-1 flex-shrink-0">
             {teams.map(t => (
@@ -214,7 +225,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'planners'), snap => {
+    const unsub = onSnapshot(collection(db, 'users'), snap => {
       const list = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as PlannerRaw))
         .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));

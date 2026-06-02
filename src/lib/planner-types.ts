@@ -258,6 +258,7 @@ export type PlannerUser = {
   phone?: string;
   contactEmail?: string;
   role?: string;
+  team?: string[];
   teamRole?: TeamRole;
   avatarUrl?: string;
   active: boolean;

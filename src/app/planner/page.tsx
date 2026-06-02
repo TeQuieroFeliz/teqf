@@ -4,6 +4,7 @@ import { deletePlannerEvent, getPlannerEvents } from '@/actions/planner/planner-
 import { db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { deriveTeams } from '@/lib/user-permissions';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
 import { Lang, LANG_OPTIONS, T } from '@/lib/planner-i18n';
 import {
@@ -32,25 +33,134 @@ import { toast } from 'sonner';
 
 const LANG_KEY = 'tqf-planner-lang';
 
-// ─── SuperAdmin dashboard sections ────────────────────────────────────────────
+// ─── Tile definitions ─────────────────────────────────────────────────────────
 
-const ADMIN_SECTIONS = [
-  {
-    key: 'requests',
+interface DashboardTile {
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  href: string;
+  badge?: boolean;
+}
+
+const DASHBOARD_TILES: Record<string, DashboardTile> = {
+  richieste: {
+    key: 'richieste',
     label: 'Richieste',
     description: 'Approva o rifiuta richieste di accesso',
     icon: <Bell className="size-5" />,
     href: '/planner/requests',
     badge: true,
   },
-  {
-    key: 'users',
+  gestione_utenti: {
+    key: 'gestione_utenti',
     label: 'Gestione Utenti',
     description: 'Assegna team e permessi (XB / TeQF)',
     icon: <Users className="size-5" />,
     href: '/admin/users',
   },
-];
+  cash_control: {
+    key: 'cash_control',
+    label: 'Cash Control',
+    description: 'Gestisci entrate e uscite per ogni evento',
+    icon: <Wallet className="size-5" />,
+    href: '/planner/cash-control',
+  },
+  blog: {
+    key: 'blog',
+    label: 'Blog',
+    description: 'Gestisci articoli e contenuti del blog',
+    icon: <BookOpen className="size-5" />,
+    href: '/planner/blog',
+  },
+  portfolio: {
+    key: 'portfolio',
+    label: 'Portfolio',
+    description: 'Gestisci il portfolio fotografico',
+    icon: <ImageIcon className="size-5" />,
+    href: '/planner/portfolio',
+  },
+  mobili: {
+    key: 'mobili',
+    label: 'Mobili',
+    description: 'Catalogo sedie, tavoli e allestimenti',
+    icon: <Sofa className="size-5" />,
+    href: '/planner/furniture',
+  },
+  fiori: {
+    key: 'fiori',
+    label: 'Fiori',
+    description: 'Catalogo fiori e composizioni floreali',
+    icon: <Flower2 className="size-5" />,
+    href: '/planner/flowers',
+  },
+  eventi: {
+    key: 'eventi',
+    label: 'Eventi',
+    description: 'Gestisci gli eventi e le pianificazioni',
+    icon: <Calendar className="size-5" />,
+    href: '/planner/events',
+  },
+  orario_lavoro: {
+    key: 'orario_lavoro',
+    label: 'Orario di Lavoro',
+    description: 'Ore, turni e desmontaje per ogni evento',
+    icon: <Clock className="size-5" />,
+    href: '/planner/orario-di-lavoro',
+  },
+};
+
+const ADMIN_TILE_KEYS = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'eventi', 'orario_lavoro'];
+const XB_TILE_KEYS    = ['eventi', 'mobili', 'fiori', 'portfolio'];
+const TEQF_TILE_KEYS  = ['cash_control', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'portfolio'];
+
+// ─── TileGrid ─────────────────────────────────────────────────────────────────
+
+function TileGrid({ tileKeys, pendingCount = 0 }: { tileKeys: string[]; pendingCount?: number }) {
+  const tiles = tileKeys.map(k => DASHBOARD_TILES[k]).filter(Boolean);
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {tiles.map(tile => (
+        <a
+          key={tile.key}
+          href={tile.href}
+          className="group relative block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
+          style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
+        >
+          {tile.badge && pendingCount > 0 && (
+            <span
+              className="absolute -top-1.5 -right-1.5 size-5 rounded-full text-xs flex items-center justify-center font-semibold"
+              style={{ background: '#d97706', color: 'white', fontFamily: 'var(--font-body)' }}
+            >
+              {pendingCount > 9 ? '9+' : pendingCount}
+            </span>
+          )}
+          <div
+            className="size-10 rounded-xl flex items-center justify-center mb-3"
+            style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
+          >
+            {tile.icon}
+          </div>
+          <h3
+            className="text-sm mb-0.5"
+            style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
+          >
+            {tile.label}
+          </h3>
+          <p
+            className="text-xs leading-relaxed hidden sm:block"
+            style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+          >
+            {tile.description}
+          </p>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ─── SuperAdmin dashboard ─────────────────────────────────────────────────────
 
 function SuperAdminDashboard() {
   const { adminUser, logout } = usePlannerAuth();
@@ -168,43 +278,7 @@ function SuperAdminDashboard() {
           >
             Gestione
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {ADMIN_SECTIONS.map((section) => (
-              <a
-                key={section.key}
-                href={section.href}
-                className="group relative block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
-                style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
-              >
-                {section.badge && pendingCount > 0 && (
-                  <span
-                    className="absolute -top-1.5 -right-1.5 size-5 rounded-full text-xs flex items-center justify-center font-semibold"
-                    style={{ background: '#d97706', color: 'white', fontFamily: 'var(--font-body)' }}
-                  >
-                    {pendingCount > 9 ? '9+' : pendingCount}
-                  </span>
-                )}
-                <div
-                  className="size-10 rounded-xl flex items-center justify-center mb-3"
-                  style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
-                >
-                  {section.icon}
-                </div>
-                <h3
-                  className="text-sm mb-0.5"
-                  style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
-                >
-                  {section.label}
-                </h3>
-                <p
-                  className="text-xs leading-relaxed hidden sm:block"
-                  style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-                >
-                  {section.description}
-                </p>
-              </a>
-            ))}
-          </div>
+          <TileGrid tileKeys={ADMIN_TILE_KEYS} pendingCount={pendingCount} />
         </div>
 
         {/* All planner events */}
@@ -331,30 +405,6 @@ function TeQFUserDashboard() {
   const { plannerUser, logout } = usePlannerAuth();
   if (!plannerUser) return null;
 
-  const sections = [
-    {
-      key: 'cashControl',
-      label: 'Cash Control',
-      description: 'Gestisci entrate e uscite per ogni evento',
-      icon: <Wallet className="size-5" />,
-      href: '/planner/cash-control',
-    },
-    {
-      key: 'orario',
-      label: 'Orario di Lavoro',
-      description: 'Ore, turni e desmontaje per ogni evento',
-      icon: <Clock className="size-5" />,
-      href: '/planner/orario-di-lavoro',
-    },
-    {
-      key: 'events',
-      label: 'Eventi XB',
-      description: 'Visualizza gli eventi creati dal team XB',
-      icon: <Calendar className="size-5" />,
-      href: '/planner/events',
-    },
-  ];
-
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
       <header
@@ -404,29 +454,7 @@ function TeQFUserDashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {sections.map((section) => (
-            <a
-              key={section.key}
-              href={section.href}
-              className="block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
-              style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}
-            >
-              <div
-                className="size-10 rounded-xl flex items-center justify-center mb-3"
-                style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
-              >
-                {section.icon}
-              </div>
-              <h3 className="text-sm mb-0.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                {section.label}
-              </h3>
-              <p className="text-xs leading-relaxed hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                {section.description}
-              </p>
-            </a>
-          ))}
-        </div>
+        <TileGrid tileKeys={TEQF_TILE_KEYS} />
       </main>
     </div>
   );
@@ -581,36 +609,9 @@ function PlannerDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Cataloghi (XB team manages catalogs) */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          <a href="/planner/furniture"
-            className="block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
-            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
-            <div className="size-10 rounded-xl flex items-center justify-center mb-3"
-              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-              <Sofa className="size-5" />
-            </div>
-            <h3 className="text-sm mb-0.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Catalogo Mobili
-            </h3>
-            <p className="text-xs hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Sedie, tavoli, allestimenti
-            </p>
-          </a>
-          <a href="/planner/flowers"
-            className="block rounded-2xl p-4 transition-all hover:shadow-md active:scale-[0.98]"
-            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
-            <div className="size-10 rounded-xl flex items-center justify-center mb-3"
-              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-              <Flower2 className="size-5" />
-            </div>
-            <h3 className="text-sm mb-0.5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Catalogo Fiori
-            </h3>
-            <p className="text-xs hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Fiori e composizioni floreali
-            </p>
-          </a>
+        {/* XB section tiles */}
+        <div className="mb-8">
+          <TileGrid tileKeys={XB_TILE_KEYS} />
         </div>
 
         <div className="mb-6">
@@ -743,6 +744,107 @@ function PlannerDashboard() {
   );
 }
 
+// ─── All-tiles dashboard (XB + TeQF) ─────────────────────────────────────────
+
+function AllTilesDashboard() {
+  const { plannerUser, logout } = usePlannerAuth();
+  if (!plannerUser) return null;
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
+      <header
+        className="border-b px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between"
+        style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
+      >
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 transition-opacity hover:opacity-75 flex-shrink-0">
+          <Image
+            src="/logo.png"
+            alt="Te Quiero Feliz"
+            width={32}
+            height={32}
+            className="object-contain"
+            style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
+          />
+          <div className="hidden xs:block">
+            <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontSize: '1rem', fontWeight: 300, lineHeight: 1.2 }}>
+              Te Quiero Feliz
+            </p>
+            <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
+              AREA PLANNER
+            </p>
+          </div>
+        </Link>
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:block text-right">
+            <p className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+              {plannerUser.name}
+            </p>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
+            >
+              XB + TeQF
+            </span>
+          </div>
+          <button
+            onClick={logout}
+            className="flex items-center gap-1.5 text-sm px-2.5 py-2 rounded-lg transition-colors hover:opacity-80"
+            style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
+          >
+            <LogOut className="size-4" />
+            <span className="hidden sm:inline">Esci</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
+            Benvenuto/a, {plannerUser.name}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            Dashboard completa — XB + TeQF
+          </p>
+        </div>
+        <TileGrid tileKeys={ADMIN_TILE_KEYS} />
+      </main>
+    </div>
+  );
+}
+
+// ─── Not-assigned dashboard ───────────────────────────────────────────────────
+
+function NotAssignedDashboard() {
+  const { logout } = usePlannerAuth();
+
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
+      <div className="text-center px-6 max-w-sm">
+        <div
+          className="mx-auto mb-5 size-14 rounded-2xl flex items-center justify-center"
+          style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}
+        >
+          <Users className="size-7" />
+        </div>
+        <p className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
+          Nessun team assegnato
+        </p>
+        <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+          Contatta l&apos;amministratore per essere assegnata a un team.
+        </p>
+        <button
+          onClick={logout}
+          className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
+          style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
+        >
+          <LogOut className="size-4" />
+          Esci
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Root page ────────────────────────────────────────────────────────────────
 
 export default function PlannerPage() {
@@ -759,11 +861,14 @@ export default function PlannerPage() {
   if (isSuperAdmin) return <SuperAdminDashboard />;
 
   if (plannerUser) {
-    const teamRole = plannerUser.teamRole;
-    // TeQF users (and both) get the TeQF dashboard as primary
-    if (teamRole === 'teqf_user') return <TeQFUserDashboard />;
-    // Both: show planner dashboard (they have cash control button in header)
-    return <PlannerDashboard />;
+    const teams   = deriveTeams(plannerUser);
+    const hasXB   = teams.includes('XB');
+    const hasTeQF = teams.includes('TeQF');
+
+    if (hasXB && hasTeQF) return <AllTilesDashboard />;
+    if (hasTeQF)          return <TeQFUserDashboard />;
+    if (hasXB)            return <PlannerDashboard />;
+    return <NotAssignedDashboard />;
   }
 
   return null;

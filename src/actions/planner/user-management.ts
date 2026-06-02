@@ -17,18 +17,14 @@ export async function saveUserManagement(
     const teamRole    = teamRoleFor(teams);
     const active      = status === 'active';
 
-    // ── 1. planners/{userId} — PlannerAuthContext reads this ─────────────────
-    await firestore.collection('planners').doc(userId).update({
-      team: teams, teamRole, permissions, active, updatedAt: now,
-    });
+    const updateData = { team: teams, teamRole, permissions, active, updatedAt: now };
 
-    // ── 2. users/{userId} — canonical source of truth ────────────────────────
-    const plannerSnap = await firestore.collection('planners').doc(userId).get();
-    const pd          = plannerSnap.data() ?? {};
-    await firestore.collection('users').doc(userId).set(
-      { email: pd.email ?? '', name: pd.name ?? '', role: 'user', team: teams, permissions, active, updatedAt: now },
-      { merge: true }
-    );
+    await Promise.all([
+      // users/{userId} — canonical source of truth
+      firestore.collection('users').doc(userId).set(updateData, { merge: true }),
+      // planners/{userId} — backward compat for PlannerAuthContext
+      firestore.collection('planners').doc(userId).set(updateData, { merge: true }),
+    ]);
 
     return { success: true };
   } catch (e: any) {
