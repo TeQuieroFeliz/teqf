@@ -14,6 +14,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -84,32 +85,54 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
           return;
         }
 
-        // 3. Real-time listener on the planner record (keyed by email)
-        if (firebaseUser.email) {
-          const email = firebaseUser.email;
-          const q = query(
-            collection(db, 'planners'),
-            where('email', '==', email),
-            where('active', '==', true)
-          );
+        // 3. Real-time listener keyed by uid (direct doc — no compound index needed)
+        //    Falls back to email query for legacy users who predate uid-keyed docs.
+        const uidDocRef = doc(db, 'planners', firebaseUser.uid);
 
-          plannerUnsub = onSnapshot(q, (snap) => {
-            if (snap.empty) {
+        plannerUnsub = onSnapshot(uidDocRef, async (uidSnap) => {
+          const data = uidSnap.data();
+
+          if (uidSnap.exists() && data?.active !== false) {
+            // uid-keyed doc found and active
+            if (data?.status === 'rejected') {
               setPlannerUser(null);
               setMustChangePassword(false);
+              signOut(auth).catch(console.error);
             } else {
-              const plannerDoc = snap.docs[0];
-              const planner = { id: plannerDoc.id, ...plannerDoc.data() } as PlannerUser;
-              setPlannerUser(planner);
-              setMustChangePassword(planner.mustChangePassword ?? false);
+              setPlannerUser({ id: uidSnap.id, ...data } as PlannerUser);
+              setMustChangePassword(data?.mustChangePassword ?? false);
             }
-            setIsLoading(false);
-          });
-
-          // Fire-and-forget last login update
-          updatePlannerLastLogin(email).catch(console.error);
-        } else {
+          } else if (uidSnap.exists() && data?.active === false) {
+            // Account deactivated
+            setPlannerUser(null);
+            setMustChangePassword(false);
+          } else if (firebaseUser.email) {
+            // uid-keyed doc absent — legacy user: query by email once
+            const legacySnap = await getDocs(
+              query(
+                collection(db, 'planners'),
+                where('email', '==', firebaseUser.email),
+                where('active', '==', true)
+              )
+            );
+            if (!legacySnap.empty) {
+              const d = legacySnap.docs[0];
+              setPlannerUser({ id: d.id, ...d.data() } as PlannerUser);
+              setMustChangePassword(d.data().mustChangePassword ?? false);
+            } else {
+              setPlannerUser(null);
+              setMustChangePassword(false);
+            }
+          } else {
+            setPlannerUser(null);
+            setMustChangePassword(false);
+          }
           setIsLoading(false);
+        });
+
+        // Fire-and-forget last login update
+        if (firebaseUser.email) {
+          updatePlannerLastLogin(firebaseUser.email).catch(console.error);
         }
       } catch (err) {
         console.error('[PlannerAuth]', err);
