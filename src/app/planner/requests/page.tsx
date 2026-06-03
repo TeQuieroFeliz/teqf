@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -50,7 +50,12 @@ export default function PlannerRequestsPage() {
 
   // Real-time listener for pending requests
   useEffect(() => {
-    const q = query(collection(db, 'plannerRequests'), where('status', '==', 'pending'));
+    const q = query(
+      collection(db, 'plannerRequests'),
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
     const unsub = onSnapshot(q, (snap) => {
       const reqs = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as PlannerRequest))

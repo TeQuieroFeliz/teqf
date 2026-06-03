@@ -5,7 +5,7 @@ import { permissionsFor, deriveTeams } from '@/lib/user-permissions';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { auth, db } from '@/firebase/client';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
   Check,
@@ -75,7 +75,7 @@ const PERM_ROWS: { key: string; label: string; tag: string; get: (p: UserPermiss
 
 // ─── User card ────────────────────────────────────────────────────────────────
 
-function UserCard({ user }: { user: PlannerRaw }) {
+function UserCard({ user, onDeleted }: { user: PlannerRaw; onDeleted: (id: string) => void }) {
   const [teams,     setTeams]     = useState<string[]>(() => deriveTeams(user));
   const [status,    setStatus]    = useState<UserStatus>(() => user.active !== false ? 'active' : 'inactive');
   const [saving,    setSaving]    = useState(false);
@@ -131,7 +131,7 @@ function UserCard({ user }: { user: PlannerRaw }) {
         body: JSON.stringify({ userId: user.id, email: user.email }),
       });
       const data = await res.json();
-      if (res.ok) toast.success('Account eliminato.');
+      if (res.ok) { toast.success('Account eliminato.'); onDeleted(user.id); }
       else toast.error(data.error ?? 'Errore durante l\'eliminazione.');
     } catch {
       toast.error('Errore di rete.');
@@ -287,14 +287,14 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'users'), snap => {
-      const list = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as PlannerRaw))
-        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
-      setUsers(list);
+    let cancelled = false;
+    const q = query(collection(db, 'users'), orderBy('name'), limit(100));
+    getDocs(q).then(snap => {
+      if (cancelled) return;
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerRaw)));
       setLoading(false);
-    });
-    return () => unsub();
+    }).catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   if (authLoading || loading) {
@@ -320,14 +320,15 @@ export default function AdminUsersPage() {
     );
   }
 
-  const q = search.toLowerCase();
-  const filtered = search
-    ? users.filter(u =>
-        u.name?.toLowerCase().includes(q) ||
-        u.lastName?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q)
-      )
-    : users;
+  const filtered = useMemo(() => {
+    if (!search) return users;
+    const q = search.toLowerCase();
+    return users.filter(u =>
+      u.name?.toLowerCase().includes(q) ||
+      u.lastName?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q)
+    );
+  }, [users, search]);
 
   return (
     <div className="min-h-screen pb-10" style={{ background: 'var(--tqf-beige)' }}>
@@ -399,7 +400,9 @@ export default function AdminUsersPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map(u => <UserCard key={u.id} user={u} />)}
+            {filtered.map(u => (
+              <UserCard key={u.id} user={u} onDeleted={(id) => setUsers(prev => prev.filter(x => x.id !== id))} />
+            ))}
           </div>
         )}
       </div>
