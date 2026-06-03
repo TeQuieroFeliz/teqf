@@ -52,6 +52,24 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
 
+    // Reads the planners/{uid} doc to check team membership.
+    // Works for uid-keyed planner docs (approved after 2026-05).
+    function plannerData() {
+      return get(/databases/$(database)/documents/planners/$(request.auth.uid)).data;
+    }
+
+    function hasTeam(teamName) {
+      return isAuth()
+        && exists(/databases/$(database)/documents/planners/$(request.auth.uid))
+        && teamName in plannerData().team;
+    }
+
+    function hasAnyTeam() {
+      return isAuth()
+        && exists(/databases/$(database)/documents/planners/$(request.auth.uid))
+        && plannerData().team.size() > 0;
+    }
+
     // /users/{uid} — own document or admin
     match /users/{uid} {
       allow read, write: if isOwner(uid) || isAdmin();
@@ -101,9 +119,10 @@ service cloud.firestore {
       allow write: if isOwner(docId) || isAdmin();
     }
 
-    // /plannerRequests/* — write-only for anonymous (contact form); admin can read.
+    // /plannerRequests/* — write-only for anonymous (contact form); admin can read all;
+    // authenticated users can read their own request (id == uid for self-registered users).
     match /plannerRequests/{id} {
-      allow read:   if isAdmin();
+      allow read:   if isAdmin() || isOwner(id);
       allow create: if true;
       allow update, delete: if isAdmin();
     }
@@ -129,6 +148,19 @@ service cloud.firestore {
         allow write: if
           isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
           || canEdit('projects');
+      }
+    }
+
+    // /teqfProjects — TeQF team members or admin.
+    match /teqfProjects/{projectId} {
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+
+      match /cashControl/{docId} {
+        allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      }
+
+      match /orarioDiLavoro/{docId} {
+        allow read, write: if hasTeam('TeQF') || isSuperAdmin();
       }
     }
 

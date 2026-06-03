@@ -42,6 +42,7 @@ export default function PlannerRequestsPage() {
   const [requests, setRequests] = useState<PlannerRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingReq, setProcessingReq] = useState<string | null>(null);
+  const [reqError,      setReqError]      = useState<string | null>(null);
 
   // Approval modal state
   const [approvalReq, setApprovalReq] = useState<PlannerRequest | null>(null);
@@ -56,13 +57,20 @@ export default function PlannerRequestsPage() {
       orderBy('createdAt', 'desc'),
       limit(50)
     );
-    const unsub = onSnapshot(q, (snap) => {
-      const reqs = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as PlannerRequest))
-        .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
-      setRequests(reqs);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        // orderBy('createdAt','desc') in the query handles ordering server-side
+        setRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() } as PlannerRequest)));
+        setLoading(false);
+        setReqError(null);
+      },
+      (err) => {
+        console.error('[requests] snapshot error:', err);
+        setReqError(err.message);
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 
@@ -72,6 +80,28 @@ export default function PlannerRequestsPage() {
         <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
           Accesso non autorizzato.
         </p>
+      </div>
+    );
+  }
+
+  if (reqError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
+        <div className="text-center px-6 max-w-sm">
+          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
+            Errore di connessione
+          </p>
+          <p className="text-xs mb-4" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            {reqError}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-sm px-4 py-2 rounded-lg"
+            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+          >
+            Ricarica
+          </button>
+        </div>
       </div>
     );
   }
