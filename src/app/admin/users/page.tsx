@@ -297,6 +297,17 @@ export default function AdminUsersPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // All hooks must be declared before any conditional return
+  const filtered = useMemo(() => {
+    if (!search) return users;
+    const q = search.toLowerCase();
+    return users.filter(u =>
+      u.name?.toLowerCase().includes(q) ||
+      u.lastName?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q)
+    );
+  }, [users, search]);
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
@@ -319,16 +330,6 @@ export default function AdminUsersPage() {
       </div>
     );
   }
-
-  const filtered = useMemo(() => {
-    if (!search) return users;
-    const q = search.toLowerCase();
-    return users.filter(u =>
-      u.name?.toLowerCase().includes(q) ||
-      u.lastName?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q)
-    );
-  }, [users, search]);
 
   return (
     <div className="min-h-screen pb-10" style={{ background: 'var(--tqf-beige)' }}>
