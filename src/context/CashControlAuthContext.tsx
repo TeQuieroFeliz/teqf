@@ -1,4 +1,7 @@
 'use client';
+// BUG-07 (deferred refactor): consolidare in un unico FirebaseUserProvider a root
+// insieme a AuthContext, AdminAuthContext e PlannerAuthContext per eliminare
+// i 4 onAuthStateChanged paralleli che aumentano il costo di lettura Firestore.
 
 import { auth } from '@/firebase/client';
 import { onAuthStateChanged, User } from 'firebase/auth';

@@ -47,6 +47,27 @@ function PlannerGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // BUG-08 fix: render-time gating prevents flash of protected content while
+  // useEffect redirect is still pending (router.replace is async).
+  const PUBLIC_ROUTES        = ['/planner/login', '/planner/register'];
+  const isPublicRoute        = PUBLIC_ROUTES.includes(pathname);
+  const isChangePasswordPage = pathname === '/planner/change-password';
+  const hasAccess            = !!plannerUser || isSuperAdmin;
+
+  const redirectPending =
+    (!hasAccess && !isPublicRoute) ||
+    (hasAccess && isPublicRoute) ||
+    (plannerUser && mustChangePassword && !isChangePasswordPage) ||
+    (plannerUser && !mustChangePassword && isChangePasswordPage);
+
+  if (redirectPending) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
+        <Loader2 className="size-8 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+      </div>
+    );
+  }
+
   return <>{children}</>;
 }
 

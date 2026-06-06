@@ -32,7 +32,8 @@ export const AuthContextProvider = ({
           setCurrentUser(null);
         }
       } catch (error) {
-        console.log(error);
+        // BUG-QW fix: use console.error so auth failures are visible as errors.
+        console.error('[AuthContext] auth state change failed', error);
       } finally {
         setIsLoading(false);
       }

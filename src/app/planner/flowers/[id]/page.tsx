@@ -6,6 +6,7 @@ import {
   updateFlowerImages,
 } from '@/actions/flowers/flowers-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { storage } from '@/firebase/client';
 import { FLOWER_CATEGORIES, FlowerCategory, FlowerItem } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
@@ -30,7 +31,7 @@ const EMPTY: Omit<FlowerItem, 'id' | 'createdAt' | 'updatedAt'> = {
 type UploadProgress = { name: string; progress: number };
 
 export default function FlowerEditorPage() {
-  const { adminUser, logout } = usePlannerAuth();
+  const { adminUser, logout, canManageCatalogs } = usePlannerAuth();
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id as string;
@@ -138,7 +139,8 @@ export default function FlowerEditorPage() {
     );
   }
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with proper access control.
+  if (!adminUser && !canManageCatalogs) return <AccessDenied />;
 
   const inputStyle = {
     width: '100%',

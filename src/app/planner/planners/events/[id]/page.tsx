@@ -2,6 +2,7 @@
 
 import { getPlannerEvent } from '@/actions/planner/planner-event-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { CITIES, EventDay, PlannerEvent } from '@/lib/planner-types';
 import {
   ArrowLeft,
@@ -59,7 +60,8 @@ export default function AdminPlannerEventPage() {
     });
   }, [id, router]);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   if (loading) {
     return (

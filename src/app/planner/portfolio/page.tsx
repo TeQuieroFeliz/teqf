@@ -5,6 +5,7 @@ import {
   type PortfolioProject,
 } from '@/actions/portfolio/portfolio-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import {
   ArrowLeft,
   Edit2,
@@ -44,7 +45,8 @@ export default function AdminPortfolioPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   async function handleDelete(project: PortfolioProject) {
     if (!confirm(`Eliminare "${project.title}"? Questa azione è irreversibile.`)) return;

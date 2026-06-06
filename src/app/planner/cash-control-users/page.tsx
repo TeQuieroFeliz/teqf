@@ -1,6 +1,7 @@
 'use client';
 
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { auth } from '@/firebase/client';
 import { Loader2, Shield, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -31,7 +32,8 @@ export default function CashControlUsersPage() {
     );
   }
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -3,13 +3,6 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ── Permission helpers ────────────────────────────────────────────────────
-    // Requires /admins/{uid} to be keyed by the user's Firebase UID.
-    // Current code uses .add() (auto-IDs keyed by email). To activate these
-    // helpers, migrate admin docs so doc.id == user.uid, then remove the
-    // catch-all fallback at the bottom.
-    //
-    // Permission levels (lowest → highest): none < view < editor
-    // Roles: superadmin (bypasses all), team, planner
 
     function adminDoc() {
       return get(/databases/$(database)/documents/admins/$(request.auth.uid));
@@ -25,21 +18,19 @@ service cloud.firestore {
       return isActiveAdmin() && adminDoc().data.role == 'superadmin';
     }
 
-    // Returns true when the user is superadmin OR has at least 'view' on section.
     function canView(section) {
       return isSuperAdmin()
         || (isActiveAdmin()
             && adminDoc().data.permissions[section] in ['view', 'editor']);
     }
 
-    // Returns true when the user is superadmin OR has 'editor' on section.
     function canEdit(section) {
       return isSuperAdmin()
         || (isActiveAdmin()
             && adminDoc().data.permissions[section] == 'editor');
     }
 
-    // Legacy alias kept for existing rules below (binary admin check).
+    // Legacy alias
     function isAdmin() {
       return isActiveAdmin();
     }
@@ -52,22 +43,20 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == uid;
     }
 
-    // Reads the planners/{uid} doc to check team membership.
-    // Works for uid-keyed planner docs (approved after 2026-05).
-    function plannerData() {
-      return get(/databases/$(database)/documents/planners/$(request.auth.uid)).data;
+    // BUG-11 fix: null-safe helper — plannerData().get() returns default if field
+    // absent, so users without a /planners/{uid} doc don't cause a reads error.
+    function plannerTeams() {
+      return exists(/databases/$(database)/documents/planners/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/planners/$(request.auth.uid)).data.get('team', [])
+        : [];
     }
 
     function hasTeam(teamName) {
-      return isAuth()
-        && exists(/databases/$(database)/documents/planners/$(request.auth.uid))
-        && teamName in plannerData().team;
+      return isAuth() && teamName in plannerTeams();
     }
 
     function hasAnyTeam() {
-      return isAuth()
-        && exists(/databases/$(database)/documents/planners/$(request.auth.uid))
-        && plannerData().team.size() > 0;
+      return isAuth() && plannerTeams().size() > 0;
     }
 
     // /users/{uid} — own document or admin
@@ -75,11 +64,14 @@ service cloud.firestore {
       allow read, write: if isOwner(uid) || isAdmin();
     }
 
-    // /admins/{uid} — authenticated users can read (needed for client-side admin check);
-    // client writes blocked — all mutations go through the Admin SDK server routes.
+    // /admins/{uid} — BUG-02 fix: only the owner or superadmin can read own doc;
+    // client writes are blocked except lastLogin field by owner.
     match /admins/{uid} {
-      allow read: if isAuth();
-      allow write: if false;
+      allow read:   if isOwner(uid) || isSuperAdmin();
+      allow create, delete: if false;
+      // BUG-02 fix: allow owner to update only lastLogin (for client-side fallback).
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLogin']);
     }
 
     // /articles/* — public read; 'view' to read privately, 'editor' to write.
@@ -111,16 +103,14 @@ service cloud.firestore {
     }
 
     // /planners/{docId} — readable by the planner (email match) or any active admin.
-    // docId is an auto-generated ID, not the Firebase UID, so isOwner(docId) is kept
-    // for legacy compatibility; email match covers the normal planner case.
     match /planners/{docId} {
       allow read:  if isOwner(docId) || isAdmin()
         || (isAuth() && resource.data.email == request.auth.token.email);
       allow write: if isOwner(docId) || isAdmin();
     }
 
-    // /plannerRequests/* — write-only for anonymous (contact form); admin can read all;
-    // authenticated users can read their own request (id == uid for self-registered users).
+    // /plannerRequests/* — write-only for anonymous; admin can read all;
+    // authenticated users can read their own request.
     match /plannerRequests/{id} {
       allow read:   if isAdmin() || isOwner(id);
       allow create: if true;
@@ -134,20 +124,25 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource.data.userId) || canEdit('events');
     }
 
-    // /plannerEvents/{eventId} — owner (plannerId) or projects permission.
+    // /plannerEvents/{eventId} — BUG-06 fix: XB team members can create and read
+    // their own events; TeQF team members can read all events.
     match /plannerEvents/{eventId} {
-      allow read:   if isOwner(resource.data.plannerId) || canView('projects');
-      allow create: if isOwner(request.resource.data.plannerId) || canEdit('projects');
+      allow read:   if isOwner(resource.data.plannerId) || canView('projects')
+        || hasTeam('TeQF');
+      allow create: if isOwner(request.resource.data.plannerId) || canEdit('projects')
+        || (isOwner(request.resource.data.plannerId) && hasTeam('XB'));
       allow update, delete: if isOwner(resource.data.plannerId) || canEdit('projects');
 
-      // /plannerEvents/{eventId}/expenses/{expenseId} — same access as parent.
+      // /plannerEvents/{eventId}/expenses/{expenseId}
       match /expenses/{expenseId} {
         allow read: if
           isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
-          || canView('projects');
+          || canView('projects')
+          || hasTeam('TeQF');
         allow write: if
           isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
-          || canEdit('projects');
+          || canEdit('projects')
+          || (isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId) && hasTeam('XB'));
       }
     }
 
@@ -164,29 +159,31 @@ service cloud.firestore {
       }
     }
 
-    // Cash Control — any authenticated user.
-    // Fine-grained access (event ownership, role checks) is enforced by the
-    // server-side API routes; rules enforce minimum authentication here.
+    // BUG-01 fix: Cash Control collections restricted to TeQF team or SuperAdmin.
+    // cashControlAudit is append-only for TeQF; only SuperAdmin can read audit log.
     match /cashControlProfiles/{doc} {
-      allow read, write: if isAuth();
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
     }
     match /cashControlEvents/{doc} {
-      allow read, write: if isAuth();
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
     }
     match /cashControlAssignments/{doc} {
-      allow read, write: if isAuth();
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
     }
     match /cashControlMoneyReceived/{doc} {
-      allow read, write: if isAuth();
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
     }
     match /cashControlExpenses/{doc} {
-      allow read, write: if isAuth();
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
     }
     match /cashControlClosures/{doc} {
-      allow read, write: if isAuth();
+      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
     }
     match /cashControlAudit/{doc} {
-      allow read, write: if isAuth();
+      // Append-only for TeQF; only SuperAdmin can read the audit log.
+      allow read:   if isSuperAdmin();
+      allow create: if hasTeam('TeQF') || isSuperAdmin();
+      allow update, delete: if false;
     }
 
   }

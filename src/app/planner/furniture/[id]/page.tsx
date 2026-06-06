@@ -8,6 +8,7 @@ import {
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { storage } from '@/firebase/client';
 import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
@@ -92,7 +93,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 export default function FurnitureEditorPage() {
-  const { adminUser, logout } = usePlannerAuth();
+  const { adminUser, logout, canManageCatalogs } = usePlannerAuth();
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id as string;
@@ -337,7 +338,8 @@ export default function FurnitureEditorPage() {
     );
   }
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with proper access control.
+  if (!adminUser && !canManageCatalogs) return <AccessDenied />;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>

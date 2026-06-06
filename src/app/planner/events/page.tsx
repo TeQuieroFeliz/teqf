@@ -1,9 +1,10 @@
 'use client';
 
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
-import { db } from '@/firebase/client';
+import AccessDenied from '@/components/planner/AccessDenied';
+import { auth, db } from '@/firebase/client';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import {
   ArrowLeft,
   Calendar,
@@ -33,23 +34,46 @@ function cityLabel(val: string): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EventsListPage() {
-  const { isSuperAdmin, canManageCashControl, isLoading: authLoading } = usePlannerAuth();
+  // BUG-10 fix: XB users should only see their own events; TeQF/superadmin see all.
+  const { isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
   const [events,  setEvents]  = useState<PlannerEvent[]>([]);
   const [search,  setSearch]  = useState('');
   const [loading, setLoading] = useState(true);
 
-  const canView = isSuperAdmin || canManageCashControl;
+  const canView = isSuperAdmin || canManageCashControl || canCreateProjects;
 
   useEffect(() => {
+    // Wait for auth to resolve before subscribing — avoids spurious empty results.
+    if (authLoading) return;
+
+    // BUG-10 fix: XB-only users see only their own events (plannerId == uid).
+    const uid = auth.currentUser?.uid;
+    const viewAll = isSuperAdmin || canManageCashControl;
+    const eventsQuery = viewAll
+      ? query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc'))
+      : uid
+        ? query(collection(db, 'plannerEvents'), where('plannerId', '==', uid), orderBy('createdAt', 'desc'))
+        : null;
+
+    if (!eventsQuery) {
+      setLoading(false);
+      return;
+    }
+
+    // BUG-10 fix: add onError handler so rules-deny stops the spinner.
     const unsub = onSnapshot(
-      query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc')),
+      eventsQuery,
       snap => {
         setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() } as PlannerEvent)));
+        setLoading(false);
+      },
+      (err) => {
+        console.error('[EventsListPage] onSnapshot error', err);
         setLoading(false);
       }
     );
     return () => unsub();
-  }, []);
+  }, [authLoading, isSuperAdmin, canManageCashControl]);
 
   if (authLoading || loading) {
     return (
@@ -59,20 +83,7 @@ export default function EventsListPage() {
     );
   }
 
-  if (!canView) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
-        <div className="text-center">
-          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            Accesso non autorizzato
-          </p>
-          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-            ← Dashboard
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (!canView) return <AccessDenied />;
 
   const q = search.toLowerCase();
   const filtered = search
@@ -101,7 +112,7 @@ export default function EventsListPage() {
               Eventi
             </h1>
             <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Visualizza eventi e gestisci orario e cash control
+              {(isSuperAdmin || canManageCashControl) ? 'Visualizza eventi e gestisci orario e cash control' : 'I tuoi eventi'}
             </p>
           </div>
           <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0"

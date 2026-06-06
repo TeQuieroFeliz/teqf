@@ -2,6 +2,7 @@
 import type { Article } from '@/actions/blog/get-articles';
 import { deleteArticle } from '@/actions/blog/delete-article';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import {
@@ -62,7 +63,8 @@ export default function BlogListPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   async function handleDelete(article: Article) {
     if (!confirm(`Delete "${article.title}"? This cannot be undone.`)) return;

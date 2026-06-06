@@ -7,6 +7,8 @@ import {
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
+import ReadOnlyBanner from '@/components/planner/ReadOnlyBanner';
 import { db, storage } from '@/firebase/client';
 import { collection, doc, getDocs, getDoc, orderBy, query } from 'firebase/firestore';
 import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
@@ -592,7 +594,7 @@ function ItemCard({ item, allCategories, onDelete, deleting }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminFurniturePage() {
-  const { adminUser, logout } = usePlannerAuth();
+  const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
 
   const [items, setItems]           = useState<FurnitureItem[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -606,6 +608,10 @@ export default function AdminFurniturePage() {
   const [metaLoaded, setMetaLoaded] = useState(false);
 
   const bulkRef = useRef<HTMLInputElement>(null);
+  // BUG-16 fix: track pending timeouts so we can clear them on unmount.
+  const pendingTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => () => { pendingTimeoutsRef.current.forEach(clearTimeout); }, []);
 
   // Load items + meta + standby from localStorage
   useEffect(() => {
@@ -695,8 +701,9 @@ export default function AdminFurniturePage() {
       });
     }));
 
-    // Clear finished uploads after a short delay
-    setTimeout(() => setUploads(prev => prev.filter(u => !u.done)), 2000);
+    // BUG-16 fix: track timeout id so it can be cleared on unmount.
+    const tid = setTimeout(() => setUploads(prev => prev.filter(u => !u.done)), 2000);
+    pendingTimeoutsRef.current.push(tid);
     if (bulkRef.current) bulkRef.current.value = '';
   }, [categories]);
 
@@ -714,13 +721,14 @@ export default function AdminFurniturePage() {
       setCategories(updatedCats);
     }
 
+    // BUG-15 fix: pass images directly to saveFurnitureItem to avoid orphaned doc
+    // on failure between the two sequential writes.
     const result = await saveFurnitureItem({
       name: s.name.trim(), category: s.category, price: s.price as number,
-      currency: s.currency, cities: s.cities, images: [], description: '', published: true,
+      currency: s.currency, cities: s.cities, images: [s.imageUrl], description: '', published: true,
     });
 
     if (result.success && result.id) {
-      await updateFurnitureImages(result.id, [s.imageUrl]);
       const newItem: FurnitureItem = {
         id: result.id, name: s.name.trim(), category: s.category,
         price: s.price as number, currency: s.currency, cities: s.cities,
@@ -758,8 +766,15 @@ export default function AdminFurniturePage() {
     setDeletingId(null);
   };
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with proper access control.
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
+      <div className="size-8 animate-spin rounded-full border-2 border-[var(--tqf-bordeaux)] border-t-transparent" />
+    </div>
+  );
+  if (!adminUser && !canManageCatalogs) return <AccessDenied />;
 
+  const canEdit = permissions.furniture.canEdit;
   const allCategories = Array.from(new Set(items.map(i => i.category))).sort();
   const filtered = catFilter === 'all' ? items : items.filter(i => i.category === catFilter);
 
@@ -774,6 +789,9 @@ export default function AdminFurniturePage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
+
+      {/* PART-2: show banner when user can view but not edit (e.g. XB team) */}
+      {!canEdit && <ReadOnlyBanner />}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <header className="border-b px-6 py-4 flex items-center justify-between sticky top-0 z-20"

@@ -4,6 +4,7 @@ import { createArticle } from '@/actions/blog/create-article';
 import { updateArticle } from '@/actions/blog/update-article';
 import { deleteArticle } from '@/actions/blog/delete-article';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { storage } from '@/firebase/client';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import dynamic from 'next/dynamic';
@@ -193,7 +194,8 @@ export default function BlogEditorPage() {
     });
   }, [articleId, isNew, router]);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

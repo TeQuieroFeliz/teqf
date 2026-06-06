@@ -1,12 +1,13 @@
 'use client';
 
 import { deletePlannerEvent, getPlannerEvents } from '@/actions/planner/planner-event-crud';
-import { db } from '@/firebase/client';
+import { auth, db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { deriveTeams } from '@/lib/user-permissions';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
 import { Lang, LANG_OPTIONS, T } from '@/lib/planner-i18n';
+import AccessDenied from '@/components/planner/AccessDenied';
 import {
   Bell,
   BookOpen,
@@ -58,6 +59,7 @@ const DASHBOARD_TILES: Record<string, DashboardTile> = {
     label: 'Gestione Utenti',
     description: 'Assegna team e permessi (XB / TeQF)',
     icon: <Users className="size-5" />,
+    // BUG-14 note: cross-layout link, da spostare quando esisterà /planner/users
     href: '/admin/users',
   },
   cash_control: {
@@ -178,7 +180,8 @@ function SuperAdminDashboard() {
     }).finally(() => setLoading(false));
   }, []);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   const cityLabel = (val: string) => CITIES.find((c) => c.value === val)?.label ?? val;
 
@@ -485,7 +488,10 @@ function PlannerDashboard() {
 
   useEffect(() => {
     if (!plannerUser) return;
-    getPlannerEvents(plannerUser.id)
+    // BUG-13 fix: use Firebase Auth uid (auth.currentUser?.uid) instead of
+    // plannerUser.id which is the Firestore auto-id and may differ from the uid.
+    const uid = auth.currentUser?.uid ?? plannerUser.id;
+    getPlannerEvents(uid)
       .then(setEvents)
       .finally(() => setLoading(false));
   }, [plannerUser]);

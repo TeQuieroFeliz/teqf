@@ -7,6 +7,8 @@ import {
 } from '@/actions/flowers/inspiration-crud';
 import type { PortfolioProject } from '@/actions/portfolio/portfolio-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
+import ReadOnlyBanner from '@/components/planner/ReadOnlyBanner';
 import { db, storage } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -285,7 +287,7 @@ function CategoryForm({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AdminFlowersPage() {
-  const { adminUser, logout } = usePlannerAuth();
+  const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
 
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -318,8 +320,15 @@ export default function AdminFlowersPage() {
       .finally(() => setLoadingItems(false));
   }, []);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with proper access control.
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
+      <div className="size-8 animate-spin rounded-full border-2 border-[var(--tqf-bordeaux)] border-t-transparent" />
+    </div>
+  );
+  if (!adminUser && !canManageCatalogs) return <AccessDenied />;
 
+  const canEdit = permissions.florals.canEdit;
   const categories = Array.from(new Set(items.map(i => i.category))).sort();
   const filtered = catFilter === 'all' ? items : items.filter(i => i.category === catFilter);
   const grouped = categories.reduce<Record<string, InspirationItem[]>>((acc, cat) => {
@@ -424,6 +433,9 @@ export default function AdminFlowersPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
+
+      {/* PART-2: show banner when user can view but not edit */}
+      {!canEdit && <ReadOnlyBanner />}
 
       {/* ── Header ── */}
       <header className="border-b px-6 py-4 flex items-center justify-between sticky top-0 z-10"

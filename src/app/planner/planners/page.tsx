@@ -3,6 +3,7 @@
 import { addPlanner, deletePlanner, togglePlannerActive } from '@/actions/planner/planner-auth';
 import { grantPlannerAdminAccess } from '@/actions/admin/user-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import AccessDenied from '@/components/planner/AccessDenied';
 import { db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { AdminPermissions, AdminRole, AdminUser, ALL_PERMISSIONS, PERMISSION_LEVELS, PLANNER_DEFAULT_PERMISSIONS } from '@/lib/admin-types';
@@ -105,7 +106,8 @@ export default function AdminPlannersPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  if (!adminUser) return null;
+  // BUG-09 fix: replaced `return null` with AccessDenied.
+  if (!adminUser) return <AccessDenied />;
 
   const plannerEvents = (plannerId: string) => events.filter((e) => e.plannerId === plannerId);
   const cityLabel = (val: string) => CITIES.find((c) => c.value === val)?.label ?? val;
