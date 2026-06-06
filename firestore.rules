@@ -124,14 +124,12 @@ service cloud.firestore {
       allow update, delete: if isOwner(resource.data.userId) || canEdit('events');
     }
 
-    // /plannerEvents/{eventId} — BUG-06 fix: XB team members can create and read
-    // their own events; TeQF team members can read all events.
+    // /plannerEvents/{eventId} — all XB members read/write any XB event;
+    // TeQF members read-only; superadmin full access.
     match /plannerEvents/{eventId} {
-      allow read:   if isOwner(resource.data.plannerId) || canView('projects')
-        || hasTeam('TeQF');
-      allow create: if isOwner(request.resource.data.plannerId) || canEdit('projects')
-        || (isOwner(request.resource.data.plannerId) && hasTeam('XB'));
-      allow update, delete: if isOwner(resource.data.plannerId) || canEdit('projects');
+      allow read:   if hasTeam('XB') || hasTeam('TeQF') || canView('projects');
+      allow create: if hasTeam('XB') || canEdit('projects');
+      allow update, delete: if hasTeam('XB') || canEdit('projects');
 
       // /plannerEvents/{eventId}/expenses/{expenseId}
       match /expenses/{expenseId} {

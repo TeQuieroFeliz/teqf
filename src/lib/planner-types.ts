@@ -210,6 +210,7 @@ export type PlannerEvent = {
   city: string;
   days: EventDay[];
   status: PlannerEventStatus;
+  teamAccess?: string;   // 'XB' | 'TeQF' — which team owns this event
   createdAt: string;
   updatedAt: string;
   // Legacy fields (kept for backward compatibility)

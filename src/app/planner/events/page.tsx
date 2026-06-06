@@ -4,11 +4,12 @@ import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import { auth, db } from '@/firebase/client';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
   Calendar,
   ChevronRight,
+  Edit2,
   Loader2,
   MapPin,
   Search,
@@ -34,26 +35,24 @@ function cityLabel(val: string): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EventsListPage() {
-  // BUG-10 fix: XB users should only see their own events; TeQF/superadmin see all.
   const { isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
   const [events,  setEvents]  = useState<PlannerEvent[]>([]);
   const [search,  setSearch]  = useState('');
   const [loading, setLoading] = useState(true);
 
   const canView = isSuperAdmin || canManageCashControl || canCreateProjects;
+  // XB users (canCreateProjects) can edit any event; TeQF users are read-only
+  const canEdit = isSuperAdmin || canCreateProjects;
 
   useEffect(() => {
-    // Wait for auth to resolve before subscribing — avoids spurious empty results.
     if (authLoading) return;
 
-    // BUG-10 fix: XB-only users see only their own events (plannerId == uid).
-    const uid = auth.currentUser?.uid;
-    const viewAll = isSuperAdmin || canManageCashControl;
+    // All authenticated planners (XB and TeQF) see all events — filtering by
+    // plannerId was the root cause of "0 eventi" for teammates.
+    const viewAll = isSuperAdmin || canManageCashControl || canCreateProjects;
     const eventsQuery = viewAll
       ? query(collection(db, 'plannerEvents'), orderBy('createdAt', 'desc'))
-      : uid
-        ? query(collection(db, 'plannerEvents'), where('plannerId', '==', uid), orderBy('createdAt', 'desc'))
-        : null;
+      : null;
 
     if (!eventsQuery) {
       setLoading(false);
@@ -73,7 +72,7 @@ export default function EventsListPage() {
       }
     );
     return () => unsub();
-  }, [authLoading, isSuperAdmin, canManageCashControl]);
+  }, [authLoading, isSuperAdmin, canManageCashControl, canCreateProjects]);
 
   if (authLoading || loading) {
     return (
@@ -176,13 +175,17 @@ export default function EventsListPage() {
               .reduce((s, i) => s + i.quantity, 0);
 
             return (
-              <Link key={evt.id}
-                href={`/planner/events/${evt.id}/view`}
-                className="block rounded-2xl p-4 transition-all hover:shadow-sm active:scale-[0.99]"
-                style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
+              <div key={evt.id}
+                className="rounded-2xl p-4 transition-all hover:shadow-sm"
+                style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
 
                 <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
+                  {/* Clickable area → view */}
+                  <Link
+                    href={`/planner/events/${evt.id}/view`}
+                    className="flex-1 min-w-0"
+                    style={{ textDecoration: 'none' }}
+                  >
                     {/* Title + status */}
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <p className="text-sm font-semibold truncate"
@@ -246,11 +249,25 @@ export default function EventsListPage() {
                         )}
                       </div>
                     )}
-                  </div>
+                  </Link>
 
-                  <ChevronRight className="size-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--tqf-muted)' }} />
+                  {/* Right-side actions */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                    {canEdit ? (
+                      <Link
+                        href={`/planner/events/${evt.id}`}
+                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-70"
+                        style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)', textDecoration: 'none' }}
+                      >
+                        <Edit2 className="size-3" />
+                        Modifica
+                      </Link>
+                    ) : (
+                      <ChevronRight className="size-4" style={{ color: 'var(--tqf-muted)' }} />
+                    )}
+                  </div>
                 </div>
-              </Link>
+              </div>
             );
           })
         )}

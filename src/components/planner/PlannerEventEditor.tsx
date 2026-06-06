@@ -823,6 +823,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
     const payload = {
       ...form, id: isNew ? undefined : eventId,
       plannerId: plannerUser.id, plannerName: plannerUser.name, plannerEmail: plannerUser.email,
+      teamAccess: 'XB',
       status: submit ? 'submitted' : 'active',
     } as const;
     const result = await savePlannerEvent(payload);

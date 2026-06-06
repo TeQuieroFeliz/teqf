@@ -1,7 +1,7 @@
 'use client';
 
-import { deletePlannerEvent, getPlannerEvents } from '@/actions/planner/planner-event-crud';
-import { auth, db } from '@/firebase/client';
+import { deletePlannerEvent, getAllPlannerEvents } from '@/actions/planner/planner-event-crud';
+import { db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { deriveTeams } from '@/lib/user-permissions';
@@ -488,10 +488,7 @@ function PlannerDashboard() {
 
   useEffect(() => {
     if (!plannerUser) return;
-    // BUG-13 fix: use Firebase Auth uid (auth.currentUser?.uid) instead of
-    // plannerUser.id which is the Firestore auto-id and may differ from the uid.
-    const uid = auth.currentUser?.uid ?? plannerUser.id;
-    getPlannerEvents(uid)
+    getAllPlannerEvents()
       .then(setEvents)
       .finally(() => setLoading(false));
   }, [plannerUser]);
@@ -622,7 +619,7 @@ function PlannerDashboard() {
 
         <div className="mb-6">
           <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-            {t.yourEvents}
+            Eventi
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             {loading ? '' : t.eventCount(events.length)}
