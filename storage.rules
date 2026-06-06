@@ -60,11 +60,23 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
-    // Cash control receipts and proof photos
+    // Cash control receipts and proof photos (area-planner system)
     match /cash-control/{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null;
       allow delete: if request.auth != null;
+    }
+
+    // PART-3: TeQF Cash Control photo uploads — owner or authenticated TeQF user;
+    // max 5 MB per file, images only.
+    match /cashControl/{userId}/{allPaths=**} {
+      allow read:   if request.auth != null;
+      allow write:  if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+        && request.auth.uid == userId;
     }
   }
 }

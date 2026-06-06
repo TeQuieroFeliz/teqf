@@ -1,13 +1,24 @@
 'use client';
 
+// PART-3: MXN currency, IT/ES switch, payment method, tags FIFO, photo upload,
+//         cerrar cuenta + email, calendar restyling
+
 import {
   addTeqfCashMovement,
   deleteTeqfCashMovement,
+  patchTeqfMovementPhotoUrls,
   updateTeqfCashMovement,
 } from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
-import { db } from '@/firebase/client';
-import { TeqfCashMovement, TeqfMovementType } from '@/lib/teqf-types';
+import { auth as clientAuth, db, storage } from '@/firebase/client';
+import { formatCurrency } from '@/lib/format';
+import { compressImage } from '@/lib/cash-control/compressImage';
+import { TeqfCashMovement, TeqfMovementType, TeqfPaymentMethod, TeqfProject } from '@/lib/teqf-types';
+import { useT } from '@/hooks/useT';
+import IT from '@/locales/cash-control/it.json';
+import ES from '@/locales/cash-control/es.json';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   collection,
   doc,
@@ -15,8 +26,15 @@ import {
   orderBy,
   query,
 } from 'firebase/firestore';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { format as fmtDateFns, parseISO } from 'date-fns';
+import { es as dateES, it as dateIT } from 'date-fns/locale';
 import {
   ArrowLeft,
+  CalendarIcon,
+  Camera,
+  ChevronRight,
+  Lock,
   Loader2,
   Pencil,
   Plus,
@@ -28,52 +46,69 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const QUICK_TAGS = ['flores', 'ferreteria', 'comida', 'uber', 'taxi', 'materiales', 'propina', 'urgente'];
+const MAX_TAGS = 8;
+const MAX_TAG_CHARS = 24;
+const MAX_PHOTOS = 5;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtCurrency(n: number): string {
-  return `€${n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-function fmtDate(d: string): string {
-  if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fmtLocalDate(iso: string, lang: 'it' | 'es'): string {
+  if (!iso) return '—';
+  try {
+    return fmtDateFns(parseISO(iso), 'dd MMM yyyy', { locale: lang === 'it' ? dateIT : dateES });
+  } catch {
+    return iso;
+  }
+}
+
+// PART-3: FIFO tag cap — when 9th tag added, remove the oldest
+function fifoAddTag(current: string[], tag: string): string[] {
+  const norm = tag.trim().toLowerCase().slice(0, MAX_TAG_CHARS);
+  if (!norm || current.includes(norm)) return current;
+  const next = [...current, norm];
+  return next.length > MAX_TAGS ? next.slice(next.length - MAX_TAGS) : next;
 }
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
-const inputSt = {
+const inputSt: React.CSSProperties = {
   width: '100%', padding: '0.55rem 0.75rem', borderRadius: '0.625rem',
   border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)',
   fontSize: '0.9rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none',
 };
-const lbl = {
-  display: 'block', fontSize: '0.6rem', textTransform: 'uppercase' as const,
+const lbl: React.CSSProperties = {
+  display: 'block', fontSize: '0.6rem', textTransform: 'uppercase',
   letterSpacing: '0.1em', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)',
   marginBottom: '0.3rem',
 };
 
-// ─── Quick tags ───────────────────────────────────────────────────────────────
-
-const QUICK_TAGS = ['Flores', 'Ferreteria', 'Comida', 'Uber'];
-
-// ─── Movement modal ───────────────────────────────────────────────────────────
+// ─── MovementModal ────────────────────────────────────────────────────────────
 
 interface MovForm {
   date: string;
   description: string;
   amount: string;
   type: TeqfMovementType;
+  paymentMethod: TeqfPaymentMethod;
+  tags: string[];
+  tagInput: string;
+  photos: File[];
+  previewUrls: string[];
 }
 
 function MovementModal({
-  projectId, existing, createdBy, createdByName, onClose, onSaved,
+  projectId, existing, createdBy, createdByName, onClose, onSaved, lang,
 }: {
   projectId: string;
   existing?: TeqfCashMovement;
@@ -81,49 +116,240 @@ function MovementModal({
   createdByName: string;
   onClose: () => void;
   onSaved: () => void;
+  lang: 'it' | 'es';
 }) {
-  const [form, setForm] = useState<MovForm>({
-    date:        existing?.date        ?? todayISO(),
-    description: existing?.description ?? '',
-    amount:      existing?.amount      ? String(existing.amount) : '',
-    type:        existing?.type        ?? 'expense',
-  });
-  const [saving, setSaving] = useState(false);
+  const { t } = useT({ it: IT, es: ES });
 
-  const set = <K extends keyof MovForm>(k: K, v: MovForm[K]) =>
+  // PART-3: step 1 shows payment-method selector for new income movements
+  const [step, setStep] = useState<'methodSelect' | 'form'>(() =>
+    existing ? 'form' : 'methodSelect'
+  );
+
+  const [form, setForm] = useState<MovForm>({
+    date:          existing?.date          ?? todayISO(),
+    description:   existing?.description   ?? '',
+    amount:        existing?.amount        ? String(existing.amount) : '',
+    type:          existing?.type          ?? 'income',
+    paymentMethod: existing?.paymentMethod ?? 'efectivo',
+    tags:          existing?.tags          ?? [],
+    tagInput:      '',
+    photos:        [],
+    previewUrls:   [],
+  });
+  const [calOpen,   setCalOpen]   = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clean up preview object URLs on unmount
+  useEffect(() => {
+    const urls = form.previewUrls;
+    return () => { urls.forEach(URL.revokeObjectURL); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setField = <K extends keyof MovForm>(k: K, v: MovForm[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  async function handleSave() {
-    if (!form.description.trim()) { toast.error('La descrizione è obbligatoria.'); return; }
-    const amount = parseFloat(form.amount);
-    if (!form.amount || isNaN(amount) || amount <= 0) {
-      toast.error('Importo non valido.'); return;
-    }
-    setSaving(true);
-    const data = {
-      date:        form.date,
-      description: form.description.trim(),
-      amount,
-      type:        form.type,
-      assignedTo:  createdByName,
-      status:      'completed' as const,
-    };
-    const r = existing
-      ? await updateTeqfCashMovement(projectId, existing.id, data)
-      : await addTeqfCashMovement(projectId, { ...data, createdBy });
-
-    if (r.success) { toast.success(existing ? 'Aggiornato.' : 'Movimento aggiunto.'); onSaved(); onClose(); }
-    else toast.error(r.error ?? 'Errore salvataggio.');
-    setSaving(false);
+  function submitTag(raw: string) {
+    const norm = raw.trim().toLowerCase().slice(0, MAX_TAG_CHARS);
+    if (!norm) return;
+    setField('tags', fifoAddTag(form.tags, norm));
+    setField('tagInput', '');
   }
 
-  const isIncome = form.type === 'income';
+  function removeTag(tag: string) {
+    setField('tags', form.tags.filter(t => t !== tag));
+  }
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const toAdd = files.slice(0, MAX_PHOTOS - form.photos.length);
+    const newUrls = toAdd.map(f => URL.createObjectURL(f));
+    setForm(f => ({
+      ...f,
+      photos: [...f.photos, ...toAdd],
+      previewUrls: [...f.previewUrls, ...newUrls],
+    }));
+    e.target.value = '';
+  }
+
+  function removePhoto(idx: number) {
+    URL.revokeObjectURL(form.previewUrls[idx]);
+    setForm(f => ({
+      ...f,
+      photos: f.photos.filter((_, i) => i !== idx),
+      previewUrls: f.previewUrls.filter((_, i) => i !== idx),
+    }));
+  }
+
+  // PART-3: upload photos to cashControl/{uid}/{projectId}/{movId}/
+  async function uploadPhotos(movId: string, uid: string): Promise<string[]> {
+    if (!storage) return [];
+    const urls: string[] = [];
+    for (let i = 0; i < form.photos.length; i++) {
+      const file = form.photos[i];
+      const compressed = await compressImage(file);
+      const name = `${Date.now()}_${i}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const path = `cashControl/${uid}/${projectId}/${movId}/${name}`;
+      const ref = storageRef(storage, path);
+      await new Promise<void>((resolve, reject) => {
+        const total = form.photos.length;
+        const task = uploadBytesResumable(ref, compressed.size > 0 ? compressed : file);
+        task.on('state_changed',
+          snap => {
+            const base = (i / total) * 100;
+            const chunk = (snap.bytesTransferred / snap.totalBytes) * (100 / total);
+            setUploadPct(Math.round(base + chunk));
+          },
+          reject,
+          () => resolve()
+        );
+      });
+      urls.push(await getDownloadURL(ref));
+    }
+    return urls;
+  }
+
+  async function handleSave() {
+    if (!form.description.trim()) { toast.error(t('required')); return; }
+    const amount = parseFloat(form.amount);
+    if (!form.amount || isNaN(amount) || amount <= 0) { toast.error(t('invalidAmount')); return; }
+    setSaving(true);
+    try {
+      const base = {
+        date:          form.date,
+        description:   form.description.trim(),
+        amount,
+        type:          form.type,
+        paymentMethod: form.type === 'income' ? form.paymentMethod : undefined,
+        tags:          form.tags,
+        photoUrls:     existing?.photoUrls ?? [],
+        uploadStatus:  (form.photos.length > 0 ? 'pending' : null) as 'pending' | null,
+        assignedTo:    createdByName,
+        status:        'completed' as const,
+      };
+
+      if (existing) {
+        const r = await updateTeqfCashMovement(projectId, existing.id, base);
+        if (!r.success) { toast.error(r.error ?? 'Error'); return; }
+        toast.success(t('updated'));
+        onSaved(); onClose();
+      } else {
+        const r = await addTeqfCashMovement(projectId, { ...base, createdBy });
+        if (!r.success || !r.id) { toast.error(r.error ?? 'Error'); return; }
+        const movId = r.id;
+        const pendingPhotos = form.photos.slice();
+        form.previewUrls.forEach(URL.revokeObjectURL);
+        onSaved(); onClose();
+
+        if (pendingPhotos.length > 0) {
+          toast.success(t('saved') + ' Subiendo fotos…');
+          void uploadPhotos(movId, createdBy).then(urls =>
+            patchTeqfMovementPhotoUrls(projectId, movId, urls, 'uploaded')
+          ).catch(() =>
+            patchTeqfMovementPhotoUrls(projectId, movId, [], 'failed').then(() =>
+              toast.error('Fotos fallidas.')
+            )
+          ).finally(() => setUploadPct(null));
+        } else {
+          toast.success(t('saved'));
+        }
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isIncome    = form.type === 'income';
+  const dateLocale  = lang === 'it' ? dateIT : dateES;
+
+  // ── Step 1: type + payment method ─────────────────────────────────────────
+  if (step === 'methodSelect' && !existing) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center"
+        style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+        <div className="w-full max-w-lg rounded-t-3xl overflow-hidden"
+          style={{ background: 'white' }} onClick={e => e.stopPropagation()}>
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+          </div>
+          <div className="px-5 pb-8 space-y-5">
+            {/* Type toggle */}
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              {(['income', 'expense'] as TeqfMovementType[]).map(tp => {
+                const active = form.type === tp;
+                const isInc  = tp === 'income';
+                return (
+                  <button key={tp} type="button"
+                    onClick={() => setField('type', tp)}
+                    className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium"
+                    style={{
+                      border: `1.5px solid ${active ? (isInc ? '#15803d' : '#991b1b') : 'var(--tqf-beige-border)'}`,
+                      background: active ? (isInc ? '#f0fdf4' : '#fef2f2') : 'white',
+                      color: active ? (isInc ? '#15803d' : '#991b1b') : 'var(--tqf-muted)',
+                      fontFamily: 'var(--font-body)',
+                    }}>
+                    {isInc ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
+                    {t(isInc ? 'income' : 'expense')}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PART-3: Payment method selector (income) */}
+            {form.type === 'income' && (
+              <div className="space-y-2">
+                <p style={{ ...lbl, marginBottom: 0 }}>{t('selectPaymentMethod')}</p>
+                <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  {t('paymentMethodHint')}
+                </p>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  {(['efectivo', 'transferencia'] as TeqfPaymentMethod[]).map(m => (
+                    <button key={m} type="button"
+                      onClick={() => { setField('paymentMethod', m); setStep('form'); }}
+                      className="flex items-center justify-between py-4 px-4 rounded-2xl text-sm font-medium transition-all active:scale-[0.97]"
+                      style={{
+                        border: '1.5px solid var(--tqf-beige-border)',
+                        background: 'white',
+                        color: 'var(--tqf-dark)',
+                        fontFamily: 'var(--font-body)',
+                      }}>
+                      {t(m)}
+                      <ChevronRight className="size-4" style={{ color: 'var(--tqf-muted)' }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Expense goes straight to form */}
+            {form.type === 'expense' && (
+              <button type="button" onClick={() => setStep('form')}
+                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-semibold"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+                {t('next')} <ChevronRight className="size-4" />
+              </button>
+            )}
+
+            <button onClick={onClose} className="w-full py-3 rounded-2xl text-sm"
+              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              {t('cancel')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 2: full form ──────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center"
       style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
       <div className="w-full max-w-lg rounded-t-3xl overflow-y-auto"
-        style={{ background: 'white', maxHeight: '90dvh' }}
+        style={{ background: 'white', maxHeight: '92dvh' }}
         onClick={e => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
@@ -131,21 +357,20 @@ function MovementModal({
         <div className="px-5 pb-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              {existing ? 'Modifica movimento' : 'Aggiungi movimento'}
+              {existing ? t('editMovement') : t('newMovement')}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
 
-          {/* Tipo: Uscita / Entrata */}
-          <div>
-            <label style={lbl}>Tipo</label>
+          {/* Type toggle (edit mode or after method select) */}
+          {!existing && (
             <div className="grid grid-cols-2 gap-2">
-              {(['expense', 'income'] as TeqfMovementType[]).map(t => {
-                const active = form.type === t;
-                const isInc  = t === 'income';
+              {(['income', 'expense'] as TeqfMovementType[]).map(tp => {
+                const active = form.type === tp;
+                const isInc  = tp === 'income';
                 return (
-                  <button key={t} type="button"
-                    onClick={() => set('type', t)}
+                  <button key={tp} type="button"
+                    onClick={() => setField('type', tp)}
                     className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium"
                     style={{
                       border: `1.5px solid ${active ? (isInc ? '#15803d' : '#991b1b') : 'var(--tqf-beige-border)'}`,
@@ -154,59 +379,211 @@ function MovementModal({
                       fontFamily: 'var(--font-body)',
                     }}>
                     {isInc ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
-                    {isInc ? 'Entrata' : 'Uscita'}
+                    {t(isInc ? 'income' : 'expense')}
                   </button>
                 );
               })}
             </div>
-          </div>
+          )}
+
+          {/* Payment method toggle (income) */}
+          {isIncome && (
+            <div className="flex gap-2">
+              {(['efectivo', 'transferencia'] as TeqfPaymentMethod[]).map(m => (
+                <button key={m} type="button"
+                  onClick={() => setField('paymentMethod', m)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium"
+                  style={{
+                    border: `1.5px solid ${form.paymentMethod === m ? '#15803d' : 'var(--tqf-beige-border)'}`,
+                    background: form.paymentMethod === m ? '#f0fdf4' : 'white',
+                    color: form.paymentMethod === m ? '#15803d' : 'var(--tqf-muted)',
+                    fontFamily: 'var(--font-body)',
+                  }}>
+                  {t(m)}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Importo */}
           <div>
-            <label style={lbl}>Importo (€) *</label>
-            <input
-              type="number" inputMode="decimal" min="0" step="0.01"
+            <label style={lbl}>{t('amount')} *</label>
+            <input type="number" inputMode="decimal" min="0" step="0.01"
               value={form.amount}
-              onChange={e => set('amount', e.target.value)}
+              onChange={e => setField('amount', e.target.value)}
               placeholder="0.00"
               style={{
-                ...inputSt,
-                fontSize: '1.4rem', fontWeight: 700, textAlign: 'center' as const,
+                ...inputSt, fontSize: '1.4rem', fontWeight: 700, textAlign: 'center',
                 color: isIncome ? '#15803d' : '#991b1b',
               }}
-            />
+              autoFocus={!existing} />
           </div>
 
-          {/* Descrizione + quick tags */}
+          {/* Descrizione */}
           <div>
-            <label style={lbl}>Descrizione *</label>
+            <label style={lbl}>{t('description')} *</label>
             <input type="text" value={form.description}
-              onChange={e => set('description', e.target.value)}
-              placeholder="es. Acquisto fiori" autoFocus={!existing} style={inputSt} />
-            <div className="flex gap-2 mt-2 flex-wrap">
-              {QUICK_TAGS.map(tag => {
-                const active = form.description === tag;
-                return (
-                  <button key={tag} type="button"
-                    onClick={() => set('description', active ? '' : tag)}
-                    className="px-3 py-1 rounded-full text-xs font-medium"
+              onChange={e => setField('description', e.target.value)}
+              placeholder={t('description')} style={inputSt} />
+          </div>
+
+          {/* PART-3: Tags with FIFO cap */}
+          <div>
+            <label style={lbl}>
+              {t('tags')}
+              {form.tags.length > 0 && (
+                <span className="ml-2 normal-case" style={{ letterSpacing: 0, fontSize: '0.65rem' }}>
+                  {form.tags.length}/{MAX_TAGS}
+                </span>
+              )}
+            </label>
+            {form.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {form.tags.map(tag => (
+                  <span key={tag} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs"
                     style={{
-                      border: `1px solid ${active ? 'var(--tqf-bordeaux)' : 'var(--tqf-beige-border)'}`,
-                      background: active ? 'var(--tqf-cipria-light)' : 'white',
-                      color: active ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)',
+                      background: 'var(--tqf-cipria-light)',
+                      border: '1px solid var(--tqf-bordeaux)',
+                      color: 'var(--tqf-bordeaux)',
                       fontFamily: 'var(--font-body)',
                     }}>
                     {tag}
+                    <button type="button" onClick={() => removeTag(tag)}>
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {form.tags.length < MAX_TAGS && (
+              <div className="flex gap-2 mb-2">
+                <input type="text" value={form.tagInput}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v.length <= MAX_TAG_CHARS) setField('tagInput', v);
+                    else toast.error(t('tagTooLong'));
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); submitTag(form.tagInput); }
+                  }}
+                  placeholder={t('tagsPlaceholder')}
+                  style={{ ...inputSt, flex: 1 }} />
+                <button type="button" onClick={() => submitTag(form.tagInput)}
+                  className="px-3 rounded-xl text-xs font-bold"
+                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+                  +
+                </button>
+              </div>
+            )}
+            {form.tags.length < MAX_TAGS && (
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_TAGS.filter(qt => !form.tags.includes(qt)).map(qt => (
+                  <button key={qt} type="button"
+                    onClick={() => setField('tags', fifoAddTag(form.tags, qt))}
+                    className="px-2.5 py-1 rounded-full text-xs transition-all active:scale-95"
+                    style={{
+                      border: '1px solid var(--tqf-beige-border)',
+                      background: 'white',
+                      color: 'var(--tqf-muted)',
+                      fontFamily: 'var(--font-body)',
+                    }}>
+                    {qt}
                   </button>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Data */}
+          {/* PART-3: Photo upload (camera + gallery) */}
           <div>
-            <label style={lbl}>Data</label>
-            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputSt} />
+            <label style={lbl}>
+              {t('photo')}
+              {form.photos.length > 0 && ` (${form.photos.length}/${MAX_PHOTOS})`}
+            </label>
+            <div className="flex items-start gap-2 flex-wrap">
+              {form.previewUrls.map((url, idx) => (
+                <div key={url} className="relative size-16 rounded-xl overflow-hidden flex-shrink-0"
+                  style={{ border: '1px solid var(--tqf-beige-border)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`foto ${idx + 1}`} className="size-full object-cover" />
+                  <button type="button" onClick={() => removePhoto(idx)}
+                    className="absolute top-0.5 right-0.5 size-4 rounded-full flex items-center justify-center"
+                    style={{ background: '#991b1b', color: 'white' }}>
+                    <X className="size-2.5" />
+                  </button>
+                </div>
+              ))}
+              {form.photos.length < MAX_PHOTOS && (
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="size-16 rounded-xl flex flex-col items-center justify-center gap-1 text-xs transition-all active:scale-95 flex-shrink-0"
+                  style={{
+                    border: '1.5px dashed var(--tqf-beige-border)',
+                    background: 'var(--tqf-beige)',
+                    color: 'var(--tqf-muted)',
+                    fontFamily: 'var(--font-body)',
+                  }}>
+                  <Camera className="size-5" />
+                </button>
+              )}
+              <input ref={fileInputRef} type="file"
+                accept="image/*" capture="environment"
+                multiple className="hidden"
+                onChange={handlePhotoChange} />
+            </div>
+            {uploadPct !== null && (
+              <div className="mt-2 w-full rounded-full overflow-hidden h-1.5"
+                style={{ background: 'var(--tqf-beige-border)' }}>
+                <div className="h-full rounded-full transition-all"
+                  style={{ width: `${uploadPct}%`, background: '#15803d' }} />
+              </div>
+            )}
+          </div>
+
+          {/* PART-3: Calendar date picker */}
+          <div>
+            <label style={lbl}>{t('date')}</label>
+            <Popover open={calOpen} onOpenChange={setCalOpen}>
+              <PopoverTrigger asChild>
+                <button type="button"
+                  className="w-full flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-left"
+                  style={{
+                    border: '1px solid var(--tqf-beige-border)',
+                    background: 'white',
+                    color: 'var(--tqf-dark)',
+                    fontFamily: 'var(--font-body)',
+                  }}>
+                  <CalendarIcon className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+                  {fmtLocalDate(form.date, lang)}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-auto" align="start">
+                <Calendar
+                  mode="single"
+                  selected={form.date ? parseISO(form.date) : undefined}
+                  onSelect={d => {
+                    if (d) {
+                      const y = d.getFullYear();
+                      const mo = String(d.getMonth() + 1).padStart(2, '0');
+                      const day = String(d.getDate()).padStart(2, '0');
+                      setField('date', `${y}-${mo}-${day}`);
+                    }
+                    setCalOpen(false);
+                  }}
+                  weekStartsOn={1}
+                  locale={dateLocale}
+                  initialFocus
+                  className="rounded-xl"
+                  style={{
+                    '--accent': 'var(--tqf-cipria-light)',
+                    '--accent-foreground': 'var(--tqf-bordeaux)',
+                    '--primary': 'var(--tqf-bordeaux)',
+                    '--primary-foreground': '#fff',
+                    '--muted': 'var(--tqf-beige)',
+                    '--radius': '0.75rem',
+                  } as React.CSSProperties}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Actions */}
@@ -215,14 +592,106 @@ function MovementModal({
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving && <Loader2 className="size-4 animate-spin" />}
-              {existing ? 'Salva modifiche' : 'Aggiungi'}
+              {existing ? t('update') : t('save')}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('cancel')}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CloseConfirmSheet ────────────────────────────────────────────────────────
+
+function CloseConfirmSheet({
+  projectId, projectName, createdBy,
+  totalIncome, totalExpense, saldo,
+  onClose, onClosed,
+}: {
+  projectId: string;
+  projectName: string;
+  createdBy: string;
+  totalIncome: number;
+  totalExpense: number;
+  saldo: number;
+  onClose: () => void;
+  onClosed: () => void;
+}) {
+  const { t } = useT({ it: IT, es: ES });
+  const [closing, setClosing] = useState(false);
+
+  async function handleConfirm() {
+    setClosing(true);
+    try {
+      const token = await clientAuth?.currentUser?.getIdToken(true);
+      if (!token) throw new Error('Sin sesión activa.');
+      const res = await fetch('/api/cash-control/teqf-close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId, projectName, closedBy: createdBy, totalIncome, totalExpense, saldo }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error al cerrar.');
+      toast.success(t('closedOk'));
+      onClosed();
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error inesperado.');
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  const saldoColor = saldo >= 0 ? '#166534' : '#991b1b';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-t-3xl"
+        style={{ background: 'var(--tqf-beige)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+            {t('closeAccountTitle')}
+          </h2>
+          <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+            {t('closeAccountDesc')}
+          </p>
+          <div className="rounded-2xl overflow-hidden"
+            style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+            {[
+              { label: t('totalReceived'), value: totalIncome,  color: '#166534' },
+              { label: t('totalSpent'),    value: totalExpense, color: '#991b1b' },
+              { label: t('finalBalance'),  value: saldo,        color: saldoColor, bold: true },
+            ].map(({ label, value, color, bold }, i, arr) => (
+              <div key={label} className="flex items-center justify-between px-4 py-3"
+                style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--tqf-beige-border)' : 'none' }}>
+                <span className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{label}</span>
+                <span className="text-sm" style={{ color, fontFamily: 'var(--font-body)', fontWeight: bold ? 600 : 400 }}>
+                  {formatCurrency(Math.abs(value))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="px-6 pb-8 pt-2 space-y-3" style={{ background: 'var(--tqf-beige)' }}>
+          <button type="button" onClick={handleConfirm} disabled={closing}
+            className="w-full py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
+            style={{ background: '#991b1b', color: 'white', fontFamily: 'var(--font-body)' }}>
+            {closing ? <Loader2 className="size-5 animate-spin" /> : t('closeConfirm')}
+          </button>
+          <button type="button" onClick={onClose} disabled={closing}
+            className="w-full py-4 rounded-2xl text-base disabled:opacity-50"
+            style={{ border: '1.5px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', fontFamily: 'var(--font-body)' }}>
+            {t('cancel')}
+          </button>
         </div>
       </div>
     </div>
@@ -241,20 +710,25 @@ export default function CashControlDetailPage() {
     isLoading: authLoading,
   } = usePlannerAuth();
 
-  const [projectName, setProjectName] = useState('');
-  const [movements,   setMovements]   = useState<TeqfCashMovement[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [showModal,   setShowModal]   = useState(false);
-  const [editMov,     setEditMov]     = useState<TeqfCashMovement | undefined>();
+  // PART-3: IT/ES language switch persisted to localStorage
+  const { t, lang, setLang } = useT({ it: IT, es: ES });
+
+  const [project,   setProject]  = useState<TeqfProject | null>(null);
+  const [movements, setMovements] = useState<TeqfCashMovement[]>([]);
+  const [loading,   setLoading]  = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editMov,   setEditMov]  = useState<TeqfCashMovement | undefined>();
+  const [showClose, setShowClose] = useState(false);
 
   const canAccess = isSuperAdmin || canManageCashControl;
   const canEdit   = canManageCashControl;
+  const isClosed  = project?.isClosed === true;
 
   useEffect(() => {
     if (authLoading || !projectId) return;
     const unsubProject = onSnapshot(
       doc(db, 'teqfProjects', projectId),
-      snap => { if (snap.exists()) setProjectName(snap.data().name ?? ''); }
+      snap => { if (snap.exists()) setProject({ id: snap.id, ...snap.data() } as TeqfProject); }
     );
     const unsubMov = onSnapshot(
       query(collection(db, 'teqfProjects', projectId, 'cashControl'), orderBy('date', 'desc')),
@@ -293,28 +767,30 @@ export default function CashControlDetailPage() {
 
   const createdBy     = adminUser?.id   ?? plannerUser?.id   ?? '';
   const createdByName = adminUser?.name ?? plannerUser?.name ?? '';
+  const projectName   = project?.name ?? 'Cash Control';
 
   const totalIncome  = movements.filter(m => m.type === 'income').reduce((s, m) => s + m.amount, 0);
   const totalExpense = movements.filter(m => m.type === 'expense').reduce((s, m) => s + m.amount, 0);
   const saldo        = totalIncome - totalExpense;
+  const saldoColor   = saldo >= 0 ? '#15803d' : '#991b1b';
 
   function openAdd()  { setEditMov(undefined); setShowModal(true); }
   function openEdit(m: TeqfCashMovement) { setEditMov(m); setShowModal(true); }
 
   async function handleDelete(m: TeqfCashMovement) {
-    if (!confirm(`Eliminare "${m.description}"?`)) return;
+    if (!confirm(t('deleteConfirm').replace('{name}', m.description))) return;
     const r = await deleteTeqfCashMovement(projectId, m.id);
-    if (r.success) toast.success('Rimosso.');
-    else toast.error(r.error ?? 'Errore.');
+    if (r.success) toast.success(t('removed'));
+    else toast.error(r.error ?? 'Error.');
   }
 
   return (
-    <div className="min-h-screen pb-8" style={{ background: 'var(--tqf-beige)' }}>
+    <div className="min-h-screen pb-28" style={{ background: 'var(--tqf-beige)' }}>
 
       {/* Header */}
       <header className="sticky top-0 z-10 px-4 pt-3 pb-3"
         style={{ background: 'white', borderBottom: '1px solid var(--tqf-beige-border)' }}>
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-2 mb-2">
           <Link href="/planner/cash-control" className="flex-shrink-0" style={{ color: 'var(--tqf-muted)' }}>
             <ArrowLeft className="size-4" />
           </Link>
@@ -323,39 +799,76 @@ export default function CashControlDetailPage() {
               <Wallet className="size-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate"
-                style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}>
-                {projectName || 'Cash Control'}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium truncate"
+                  style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}>
+                  {projectName}
+                </p>
+                {isClosed && (
+                  <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+                    style={{ background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                    <Lock className="size-2.5" />{t('closed')}
+                  </span>
+                )}
+              </div>
               <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                {movements.length} {movements.length === 1 ? 'movimento' : 'movimenti'}
+                {movements.length} {movements.length === 1 ? t('movement') : t('movements')}
               </p>
             </div>
           </div>
-          {canEdit && (
+
+          {/* PART-3: IT/ES language toggle */}
+          <button onClick={() => setLang(lang === 'it' ? 'es' : 'it')}
+            className="text-xs px-2 py-1 rounded-lg flex-shrink-0"
+            style={{
+              border: '1px solid var(--tqf-beige-border)',
+              color: 'var(--tqf-muted)',
+              fontFamily: 'var(--font-body)',
+              background: 'white',
+            }}>
+            {t('langSwitch')}
+          </button>
+
+          {canEdit && !isClosed && (
             <button onClick={openAdd}
               className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl flex-shrink-0"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-              <Plus className="size-3.5" /> Aggiungi
+              <Plus className="size-3.5" /> {t('addMovement')}
             </button>
           )}
         </div>
 
-        {/* Stats bar */}
+        {/* Stats bar — PART-3: MXN currency */}
         <div className="grid grid-cols-3 gap-2 rounded-xl px-3 py-2.5"
           style={{ background: 'var(--tqf-beige)' }}>
           {[
-            { label: 'Entrate', value: fmtCurrency(totalIncome),  color: '#15803d' },
-            { label: 'Uscite',  value: fmtCurrency(totalExpense), color: '#991b1b' },
-            { label: 'Saldo',   value: fmtCurrency(saldo),        color: saldo >= 0 ? '#15803d' : '#991b1b' },
+            { label: t('incomes'),  value: formatCurrency(totalIncome),        color: '#15803d' },
+            { label: t('expenses'), value: formatCurrency(totalExpense),       color: '#991b1b' },
+            { label: t('balance'),  value: formatCurrency(Math.abs(saldo)),    color: saldoColor },
           ].map(({ label, value, color }) => (
             <div key={label} className="text-center">
-              <p className="text-sm font-semibold" style={{ color, fontFamily: 'var(--font-body)' }}>{value}</p>
+              <p className="text-sm font-semibold truncate" style={{ color, fontFamily: 'var(--font-body)' }}>{value}</p>
               <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{label}</p>
             </div>
           ))}
         </div>
       </header>
+
+      {/* Closed notice */}
+      {isClosed && (
+        <div className="mx-4 mt-4 rounded-2xl px-5 py-4 flex items-center gap-3"
+          style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+          <Lock className="size-5 flex-shrink-0" style={{ color: '#991b1b' }} />
+          <div>
+            <p className="text-sm font-medium" style={{ color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+              {t('accountClosed')}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: '#991b1b', opacity: 0.8, fontFamily: 'var(--font-body)' }}>
+              {t('accountClosedDesc')}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Movements list */}
       <div className="px-4 pt-4 space-y-2">
@@ -367,12 +880,11 @@ export default function CashControlDetailPage() {
               <Wallet className="size-6" />
             </div>
             <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Nessun movimento ancora. Usa il pulsante &ldquo;Aggiungi&rdquo;.
+              {t('noMovements')}
             </p>
           </div>
         ) : movements.map(m => {
-          const isInc  = m.type === 'income';
-          const isComp = m.status === 'completed';
+          const isInc = m.type === 'income';
           return (
             <div key={m.id} className="rounded-2xl px-4 py-3"
               style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
@@ -380,39 +892,60 @@ export default function CashControlDetailPage() {
                 <div className="size-9 rounded-xl flex items-center justify-center flex-shrink-0"
                   style={{ background: isInc ? '#f0fdf4' : '#fef2f2' }}>
                   {isInc
-                    ? <TrendingUp className="size-4" style={{ color: '#15803d' }} />
+                    ? <TrendingUp  className="size-4" style={{ color: '#15803d' }} />
                     : <TrendingDown className="size-4" style={{ color: '#991b1b' }} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate"
-                      style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                      {m.description}
-                    </p>
-                    <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
-                      style={isComp
-                        ? { background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }
-                        : { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }}>
-                      {isComp ? 'Completato' : 'In attesa'}
-                    </span>
-                  </div>
+                  <p className="text-sm font-medium truncate"
+                    style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                    {m.description}
+                  </p>
+                  {/* Tags */}
+                  {m.tags && m.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {m.tags.map(tag => (
+                        <span key={tag} className="px-2 py-0.5 rounded-full text-xs"
+                          style={{
+                            background: 'var(--tqf-cipria-light)',
+                            color: 'var(--tqf-bordeaux)',
+                            fontFamily: 'var(--font-body)',
+                          }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
                     <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                      {fmtDate(m.date)}
+                      {fmtLocalDate(m.date, lang)}
                     </span>
+                    {m.paymentMethod && isInc && (
+                      <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        · {t(m.paymentMethod)}
+                      </span>
+                    )}
                     {m.assignedTo && (
                       <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                         · {m.assignedTo}
                       </span>
                     )}
+                    {m.photoUrls && m.photoUrls.length > 0 && (
+                      <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        · 📷{m.photoUrls.length}
+                      </span>
+                    )}
+                    {m.uploadStatus === 'pending' && (
+                      <span className="text-xs" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>· ⏳</span>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  {/* PART-3: MXN amount */}
                   <p className="text-sm font-bold"
                     style={{ color: isInc ? '#15803d' : '#991b1b', fontFamily: 'var(--font-body)' }}>
-                    {isInc ? '+' : '-'}{fmtCurrency(m.amount)}
+                    {isInc ? '+' : '-'}{formatCurrency(m.amount)}
                   </p>
-                  {canEdit && (
+                  {canEdit && !isClosed && (
                     <div className="flex items-center gap-1">
                       <button onClick={() => openEdit(m)}
                         className="p-1.5 rounded-lg"
@@ -433,6 +966,30 @@ export default function CashControlDetailPage() {
         })}
       </div>
 
+      {/* PART-3: Sticky "Cerrar cuenta" button */}
+      {canEdit && !isClosed && (
+        <div className="fixed bottom-0 left-0 right-0 px-4 z-20"
+          style={{
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+            paddingTop: '12px',
+            background: 'linear-gradient(to bottom, transparent, var(--tqf-beige) 40%)',
+          }}>
+          <div className="max-w-lg mx-auto">
+            <button onClick={() => setShowClose(true)}
+              className="w-full py-4 rounded-2xl text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-80 active:scale-[0.98]"
+              style={{
+                border: '1.5px solid var(--tqf-beige-border)',
+                color: 'var(--tqf-muted)',
+                background: 'white',
+                fontFamily: 'var(--font-body)',
+              }}>
+              <Lock className="size-4" />
+              {t('closeAccount')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <MovementModal
           projectId={projectId}
@@ -441,6 +998,20 @@ export default function CashControlDetailPage() {
           createdByName={createdByName}
           onClose={() => setShowModal(false)}
           onSaved={() => setShowModal(false)}
+          lang={lang}
+        />
+      )}
+
+      {showClose && (
+        <CloseConfirmSheet
+          projectId={projectId}
+          projectName={projectName}
+          createdBy={createdBy}
+          totalIncome={totalIncome}
+          totalExpense={totalExpense}
+          saldo={saldo}
+          onClose={() => setShowClose(false)}
+          onClosed={() => setShowClose(false)}
         />
       )}
     </div>

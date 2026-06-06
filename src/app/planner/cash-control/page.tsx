@@ -1,9 +1,15 @@
 'use client';
 
+// PART-3: IT/ES language switch + date localization
 import { createTeqfProject } from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { db } from '@/firebase/client';
 import { TeqfProject } from '@/lib/teqf-types';
+import { useT } from '@/hooks/useT';
+import IT from '@/locales/cash-control/it.json';
+import ES from '@/locales/cash-control/es.json';
+import { format as fmtDateFns, parseISO } from 'date-fns';
+import { es as dateES, it as dateIT } from 'date-fns/locale';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
@@ -20,11 +26,13 @@ import { toast } from 'sonner';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtDate(d: string): string {
+function fmtDate(d: string, lang: 'it' | 'es'): string {
   if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
+  try {
+    return fmtDateFns(parseISO(d), 'dd MMM yyyy', { locale: lang === 'it' ? dateIT : dateES });
+  } catch {
+    return d;
+  }
 }
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
@@ -124,6 +132,10 @@ export default function CashControlPage() {
     plannerUser, adminUser,
     isLoading: authLoading,
   } = usePlannerAuth();
+
+  // PART-3: IT/ES language switch
+  const { t, lang, setLang } = useT({ it: IT, es: ES });
+
   const [projects, setProjects] = useState<TeqfProject[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -200,14 +212,27 @@ export default function CashControlPage() {
           </div>
         </div>
 
-        {canManageCashControl && (
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl flex-shrink-0"
-            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">Nuovo progetto</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* PART-3: IT/ES language toggle */}
+          <button onClick={() => setLang(lang === 'it' ? 'es' : 'it')}
+            className="text-xs px-2 py-1 rounded-lg"
+            style={{
+              border: '1px solid var(--tqf-beige-border)',
+              color: 'var(--tqf-muted)',
+              fontFamily: 'var(--font-body)',
+              background: 'white',
+            }}>
+            {t('langSwitch')}
           </button>
-        )}
+          {canManageCashControl && (
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl"
+              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nuovo progetto</span>
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
@@ -257,8 +282,8 @@ export default function CashControlPage() {
                         <span className="flex items-center gap-1 text-xs"
                           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                           <Calendar className="size-3" />
-                          {p.dateStart ? fmtDate(p.dateStart) : '—'}
-                          {p.dateEnd && ` → ${fmtDate(p.dateEnd)}`}
+                          {p.dateStart ? fmtDate(p.dateStart, lang) : '—'}
+                          {p.dateEnd && ` → ${fmtDate(p.dateEnd, lang)}`}
                         </span>
                       )}
                       {p.createdByName && (

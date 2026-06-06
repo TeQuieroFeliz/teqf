@@ -2,7 +2,7 @@
 
 import { firestore } from '@/firebase/server';
 import { OrarioGiorno } from '@/lib/planner-types';
-import { TeqfMovementType, TeqfMovementStatus } from '@/lib/teqf-types';
+import { TeqfMovementType, TeqfMovementStatus, TeqfPaymentMethod } from '@/lib/teqf-types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +56,10 @@ export async function addTeqfCashMovement(
     description: string;
     amount: number;
     type: TeqfMovementType;
+    paymentMethod?: TeqfPaymentMethod;  // PART-3
+    tags?: string[];                     // PART-3
+    photoUrls?: string[];                // PART-3
+    uploadStatus?: 'pending' | 'uploaded' | 'failed' | null; // PART-3
     assignedTo: string;
     status: TeqfMovementStatus;
     createdBy: string;
@@ -82,6 +86,10 @@ export async function updateTeqfCashMovement(
     description: string;
     amount: number;
     type: TeqfMovementType;
+    paymentMethod?: TeqfPaymentMethod;  // PART-3
+    tags?: string[];                     // PART-3
+    photoUrls?: string[];                // PART-3
+    uploadStatus?: 'pending' | 'uploaded' | 'failed' | null; // PART-3
     assignedTo: string;
     status: TeqfMovementStatus;
   }
@@ -89,6 +97,25 @@ export async function updateTeqfCashMovement(
   try {
     await col(projectId, 'cashControl').doc(movId).update({
       ...data,
+      updatedAt: new Date().toISOString(),
+    });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+// PART-3: patch photo URLs after background upload completes
+export async function patchTeqfMovementPhotoUrls(
+  projectId: string,
+  movId: string,
+  photoUrls: string[],
+  uploadStatus: 'uploaded' | 'failed'
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await col(projectId, 'cashControl').doc(movId).update({
+      photoUrls,
+      uploadStatus,
       updatedAt: new Date().toISOString(),
     });
     return { success: true };
