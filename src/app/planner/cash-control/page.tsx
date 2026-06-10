@@ -1,7 +1,6 @@
 'use client';
 
 // PART-3: IT/ES language switch + date localization
-import { createTeqfProject } from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { db } from '@/firebase/client';
 import { TeqfProject } from '@/lib/teqf-types';
@@ -10,12 +9,13 @@ import IT from '@/locales/cash-control/it.json';
 import ES from '@/locales/cash-control/es.json';
 import { format as fmtDateFns, parseISO } from 'date-fns';
 import { es as dateES, it as dateIT } from 'date-fns/locale';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import {
   ArrowLeft,
   ArrowRight,
   Calendar,
   Loader2,
+  Pencil,
   Plus,
   Wallet,
   X,
@@ -51,10 +51,9 @@ const lbl = {
 // ─── Create modal ─────────────────────────────────────────────────────────────
 
 function CreateProjectModal({
-  onClose, onCreated, createdBy, createdByName,
+  onClose, createdBy, createdByName,
 }: {
   onClose: () => void;
-  onCreated: () => void;
   createdBy: string;
   createdByName: string;
 }) {
@@ -66,12 +65,19 @@ function CreateProjectModal({
   async function handleSave() {
     if (!name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
     setSaving(true);
-    const r = await createTeqfProject({
-      name: name.trim(), dateStart, dateEnd, createdBy, createdByName,
-    });
-    if (r.success) { toast.success('Progetto creato.'); onCreated(); onClose(); }
-    else toast.error(r.error ?? 'Errore creazione.');
-    setSaving(false);
+    try {
+      const now = new Date().toISOString();
+      await addDoc(collection(db, 'teqfProjects'), {
+        name: name.trim(), dateStart, dateEnd, createdBy, createdByName,
+        status: 'active', createdAt: now, updatedAt: now,
+      });
+      toast.success('Progetto creato.');
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message ?? 'Errore creazione.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -124,6 +130,70 @@ function CreateProjectModal({
   );
 }
 
+// ─── Rename modal ─────────────────────────────────────────────────────────────
+
+function RenameModal({ project, onClose }: { project: TeqfProject; onClose: () => void }) {
+  const [name,   setName]   = useState(project.name);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) { toast.error('Il nome è obbligatorio.'); return; }
+    if (trimmed === project.name) { onClose(); return; }
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'teqfProjects', project.id), {
+        name: trimmed, updatedAt: new Date().toISOString(),
+      });
+      toast.success('Nome aggiornato.');
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message ?? 'Errore durante il salvataggio.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-t-3xl"
+        style={{ background: 'white' }} onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+        <div className="px-5 pb-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              Rinomina progetto
+            </h2>
+            <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
+          </div>
+          <div>
+            <label style={lbl}>Nome progetto *</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)}
+              autoFocus style={inputSt}
+              onKeyDown={e => e.key === 'Enter' && handleSave()} />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              Salva
+            </button>
+            <button onClick={onClose}
+              className="px-5 py-3.5 rounded-2xl text-sm"
+              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CashControlPage() {
@@ -136,9 +206,10 @@ export default function CashControlPage() {
   // PART-3: IT/ES language switch
   const { t, lang, setLang } = useT({ it: IT, es: ES });
 
-  const [projects, setProjects] = useState<TeqfProject[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
+  const [projects,        setProjects]        = useState<TeqfProject[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [showCreate,      setShowCreate]      = useState(false);
+  const [renamingProject, setRenamingProject] = useState<TeqfProject | null>(null);
 
   const canAccess = isSuperAdmin || canManageCashControl;
 
@@ -264,11 +335,12 @@ export default function CashControlPage() {
               {projects.length} {projects.length === 1 ? 'progetto' : 'progetti'} · seleziona per gestire il cash control
             </p>
             {projects.map(p => (
-              <Link key={p.id}
-                href={`/planner/cash-control/${p.id}`}
-                className="flex items-center justify-between rounded-2xl px-5 py-4 transition-all hover:shadow-md active:scale-[0.99]"
-                style={{ background: 'white', border: '1px solid var(--tqf-beige-border)', textDecoration: 'none' }}>
-                <div className="flex items-center gap-4 min-w-0">
+              <div key={p.id}
+                className="flex items-center justify-between rounded-2xl px-5 py-4 transition-all hover:shadow-md"
+                style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+                <Link href={`/planner/cash-control/${p.id}`}
+                  className="flex items-center gap-4 min-w-0 flex-1"
+                  style={{ textDecoration: 'none' }}>
                   <div className="p-2.5 rounded-xl flex-shrink-0" style={{ background: '#f0fdf4', color: '#15803d' }}>
                     <Wallet className="size-5" />
                   </div>
@@ -293,15 +365,23 @@ export default function CashControlPage() {
                       )}
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                </Link>
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
+                  {canManageCashControl && (
+                    <button
+                      onClick={() => setRenamingProject(p)}
+                      className="p-2 rounded-lg hover:opacity-70"
+                      style={{ color: 'var(--tqf-muted)' }}>
+                      <Pencil className="size-4" />
+                    </button>
+                  )}
                   <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
                     style={{ background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }}>
                     Cash Control →
                   </span>
                   <ArrowRight className="size-4 sm:hidden" style={{ color: 'var(--tqf-muted)' }} />
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
@@ -310,9 +390,15 @@ export default function CashControlPage() {
       {showCreate && (
         <CreateProjectModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => {}}
           createdBy={createdBy}
           createdByName={createdByName}
+        />
+      )}
+
+      {renamingProject && (
+        <RenameModal
+          project={renamingProject}
+          onClose={() => setRenamingProject(null)}
         />
       )}
     </div>

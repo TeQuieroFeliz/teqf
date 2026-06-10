@@ -25,6 +25,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  updateDoc,
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { format as fmtDateFns, parseISO } from 'date-fns';
@@ -716,9 +717,12 @@ export default function CashControlDetailPage() {
   const [project,   setProject]  = useState<TeqfProject | null>(null);
   const [movements, setMovements] = useState<TeqfCashMovement[]>([]);
   const [loading,   setLoading]  = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editMov,   setEditMov]  = useState<TeqfCashMovement | undefined>();
-  const [showClose, setShowClose] = useState(false);
+  const [showModal,    setShowModal]    = useState(false);
+  const [editMov,      setEditMov]      = useState<TeqfCashMovement | undefined>();
+  const [showClose,    setShowClose]    = useState(false);
+  const [showRename,   setShowRename]   = useState(false);
+  const [renameDraft,  setRenameDraft]  = useState('');
+  const [renaming,     setRenaming]     = useState(false);
 
   const canAccess = isSuperAdmin || canManageCashControl;
   const canEdit   = canManageCashControl;
@@ -777,6 +781,26 @@ export default function CashControlDetailPage() {
   function openAdd()  { setEditMov(undefined); setShowModal(true); }
   function openEdit(m: TeqfCashMovement) { setEditMov(m); setShowModal(true); }
 
+  function openRename() { setRenameDraft(projectName); setShowRename(true); }
+
+  async function handleRename() {
+    const trimmed = renameDraft.trim();
+    if (!trimmed) { toast.error('Il nome è obbligatorio.'); return; }
+    if (trimmed === project?.name) { setShowRename(false); return; }
+    setRenaming(true);
+    try {
+      await updateDoc(doc(db, 'teqfProjects', projectId), {
+        name: trimmed, updatedAt: new Date().toISOString(),
+      });
+      toast.success('Nome aggiornato.');
+      setShowRename(false);
+    } catch (e: any) {
+      toast.error(e.message ?? 'Errore durante il salvataggio.');
+    } finally {
+      setRenaming(false);
+    }
+  }
+
   async function handleDelete(m: TeqfCashMovement) {
     if (!confirm(t('deleteConfirm').replace('{name}', m.description))) return;
     const r = await deleteTeqfCashMovement(projectId, m.id);
@@ -804,6 +828,12 @@ export default function CashControlDetailPage() {
                   style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}>
                   {projectName}
                 </p>
+                {canEdit && !isClosed && (
+                  <button onClick={openRename} className="flex-shrink-0 hover:opacity-70"
+                    style={{ color: 'var(--tqf-muted)' }}>
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
                 {isClosed && (
                   <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
                     style={{ background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }}>
@@ -1013,6 +1043,47 @@ export default function CashControlDetailPage() {
           onClose={() => setShowClose(false)}
           onClosed={() => setShowClose(false)}
         />
+      )}
+
+      {showRename && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setShowRename(false)}>
+          <div className="w-full max-w-lg rounded-t-3xl"
+            style={{ background: 'white' }} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+            </div>
+            <div className="px-5 pb-8 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+                  Rinomina progetto
+                </h2>
+                <button onClick={() => setShowRename(false)} style={{ color: 'var(--tqf-muted)' }}>
+                  <X className="size-5" />
+                </button>
+              </div>
+              <div>
+                <label style={lbl}>Nome progetto *</label>
+                <input type="text" value={renameDraft} onChange={e => setRenameDraft(e.target.value)}
+                  autoFocus style={inputSt}
+                  onKeyDown={e => e.key === 'Enter' && handleRename()} />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={handleRename} disabled={renaming}
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
+                  style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+                  {renaming && <Loader2 className="size-4 animate-spin" />}
+                  Salva
+                </button>
+                <button onClick={() => setShowRename(false)}
+                  className="px-5 py-3.5 rounded-2xl text-sm"
+                  style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  Annulla
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
