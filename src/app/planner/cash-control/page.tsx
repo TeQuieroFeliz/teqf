@@ -17,6 +17,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Trash2,
   Wallet,
   X,
 } from 'lucide-react';
@@ -255,6 +256,18 @@ export default function CashControlPage() {
   const createdBy     = adminUser?.id    ?? plannerUser?.id    ?? '';
   const createdByName = adminUser?.name  ?? plannerUser?.name  ?? 'TeQF';
 
+  async function handleDeleteProject(p: TeqfProject) {
+    if (!confirm(`Eliminare il progetto "${p.name}"? Questa azione non è reversibile.`)) return;
+    try {
+      await updateDoc(doc(db, 'teqfProjects', p.id), {
+        status: 'archived', updatedAt: new Date().toISOString(),
+      });
+      toast.success('Progetto eliminato.');
+    } catch (e: any) {
+      toast.error(e.message ?? 'Errore durante l\'eliminazione.');
+    }
+  }
+
   return (
     <div className="min-h-screen pb-8" style={{ background: 'var(--tqf-beige)' }}>
 
@@ -368,12 +381,20 @@ export default function CashControlPage() {
                 </Link>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
                   {canManageCashControl && (
-                    <button
-                      onClick={() => setRenamingProject(p)}
-                      className="p-2 rounded-lg hover:opacity-70"
-                      style={{ color: 'var(--tqf-muted)' }}>
-                      <Pencil className="size-4" />
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setRenamingProject(p)}
+                        className="p-2 rounded-lg hover:opacity-70"
+                        style={{ color: 'var(--tqf-muted)' }}>
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProject(p)}
+                        className="p-2 rounded-lg hover:opacity-70"
+                        style={{ color: '#991b1b' }}>
+                        <Trash2 className="size-4" />
+                      </button>
+                    </>
                   )}
                   <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
                     style={{ background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }}>

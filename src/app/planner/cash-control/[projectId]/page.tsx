@@ -3,12 +3,6 @@
 // PART-3: MXN currency, IT/ES switch, payment method, tags FIFO, photo upload,
 //         cerrar cuenta + email, calendar restyling
 
-import {
-  addTeqfCashMovement,
-  deleteTeqfCashMovement,
-  patchTeqfMovementPhotoUrls,
-  updateTeqfCashMovement,
-} from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { auth as clientAuth, db, storage } from '@/firebase/client';
 import { formatCurrency } from '@/lib/format';
@@ -20,7 +14,9 @@ import ES from '@/locales/cash-control/es.json';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
+  addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -220,6 +216,7 @@ function MovementModal({
     if (!form.amount || isNaN(amount) || amount <= 0) { toast.error(t('invalidAmount')); return; }
     setSaving(true);
     try {
+      const now = new Date().toISOString();
       const base = {
         date:          form.date,
         description:   form.description.trim(),
@@ -234,14 +231,18 @@ function MovementModal({
       };
 
       if (existing) {
-        const r = await updateTeqfCashMovement(projectId, existing.id, base);
-        if (!r.success) { toast.error(r.error ?? 'Error'); return; }
+        await updateDoc(
+          doc(db, 'teqfProjects', projectId, 'cashControl', existing.id),
+          { ...base, updatedAt: now }
+        );
         toast.success(t('updated'));
         onSaved(); onClose();
       } else {
-        const r = await addTeqfCashMovement(projectId, { ...base, createdBy });
-        if (!r.success || !r.id) { toast.error(r.error ?? 'Error'); return; }
-        const movId = r.id;
+        const ref = await addDoc(
+          collection(db, 'teqfProjects', projectId, 'cashControl'),
+          { ...base, createdBy, createdAt: now, updatedAt: now }
+        );
+        const movId = ref.id;
         const pendingPhotos = form.photos.slice();
         form.previewUrls.forEach(URL.revokeObjectURL);
         onSaved(); onClose();
@@ -249,16 +250,20 @@ function MovementModal({
         if (pendingPhotos.length > 0) {
           toast.success(t('saved') + ' Subiendo fotos…');
           void uploadPhotos(movId, createdBy).then(urls =>
-            patchTeqfMovementPhotoUrls(projectId, movId, urls, 'uploaded')
+            updateDoc(doc(db, 'teqfProjects', projectId, 'cashControl', movId), {
+              photoUrls: urls, uploadStatus: 'uploaded', updatedAt: new Date().toISOString(),
+            })
           ).catch(() =>
-            patchTeqfMovementPhotoUrls(projectId, movId, [], 'failed').then(() =>
-              toast.error('Fotos fallidas.')
-            )
+            updateDoc(doc(db, 'teqfProjects', projectId, 'cashControl', movId), {
+              photoUrls: [], uploadStatus: 'failed', updatedAt: new Date().toISOString(),
+            }).then(() => toast.error('Fotos fallidas.')).catch(() => {})
           ).finally(() => setUploadPct(null));
         } else {
           toast.success(t('saved'));
         }
       }
+    } catch (e: any) {
+      toast.error(e.message ?? 'Error.');
     } finally {
       setSaving(false);
     }
@@ -803,9 +808,12 @@ export default function CashControlDetailPage() {
 
   async function handleDelete(m: TeqfCashMovement) {
     if (!confirm(t('deleteConfirm').replace('{name}', m.description))) return;
-    const r = await deleteTeqfCashMovement(projectId, m.id);
-    if (r.success) toast.success(t('removed'));
-    else toast.error(r.error ?? 'Error.');
+    try {
+      await deleteDoc(doc(db, 'teqfProjects', projectId, 'cashControl', m.id));
+      toast.success(t('removed'));
+    } catch (e: any) {
+      toast.error(e.message ?? 'Error.');
+    }
   }
 
   return (
