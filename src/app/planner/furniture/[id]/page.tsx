@@ -244,6 +244,7 @@ export default function FurnitureEditorPage() {
   const commitPendingUpload = async (id: string, useProcessed: boolean) => {
     const p = pendingUploads.find((x) => x.id === id);
     if (!p || p.state === 'uploading') return;
+    if (!storage) { toast.error('Firebase Storage non configurato (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET mancante).'); return; }
 
     const fileToUpload =
       useProcessed && p.processedBlob
@@ -268,7 +269,13 @@ export default function FurnitureEditorPage() {
               prev.map((u) => (u.name === displayName && u.progress !== 100 ? { ...u, progress: pct } : u))
             );
           },
-          reject,
+          (err) => {
+            const msg = err.code === 'storage/unauthorized'
+              ? 'Permesso negato — regole Firebase Storage da deployare.'
+              : `Errore upload: ${err.code ?? 'sconosciuto'}`;
+            toast.error(msg);
+            reject(err);
+          },
           async () => resolve(await getDownloadURL(task.snapshot.ref))
         );
       });

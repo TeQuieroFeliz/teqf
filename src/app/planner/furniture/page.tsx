@@ -200,6 +200,7 @@ function StandbyCard({
   // User picked the processed version → upload to Firebase and update imageUrl
   const handleChooseProcessed = async () => {
     if (!processedBlob) return;
+    if (!storage) { toast.error('Firebase Storage non configurato (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET mancante).'); return; }
     setBgState('uploading');
     try {
       const newUrl = await new Promise<string>((resolve, reject) => {
@@ -662,6 +663,7 @@ export default function AdminFurniturePage() {
   // ── Bulk upload ─────────────────────────────────────────────────────────────
   const handleBulkUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (!storage) { toast.error('Firebase Storage non configurato (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET mancante).'); return; }
     const fileArr = Array.from(files);
 
     const newUploads: UploadState[] = fileArr.map(f => ({
@@ -682,8 +684,12 @@ export default function AdminFurniturePage() {
             const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
             setUploads(prev => prev.map(u => u.id === uid ? { ...u, progress: pct } : u));
           },
-          () => {
-            setUploads(prev => prev.map(u => u.id === uid ? { ...u, error: 'Errore upload', done: true } : u));
+          (err) => {
+            const msg = err.code === 'storage/unauthorized'
+              ? 'Permesso negato — regole Firebase Storage da deployare.'
+              : `Errore upload: ${err.code ?? 'sconosciuto'}`;
+            toast.error(msg);
+            setUploads(prev => prev.map(u => u.id === uid ? { ...u, error: msg, done: true } : u));
             resolve();
           },
           async () => {

@@ -41,3 +41,18 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy Firebase Storage & Firestore Rules
+        run: |
+          if [ -n "$FIREBASE_PROJECT_ID" ] && [ -n "$FIREBASE_TOKEN" ]; then
+            npx firebase-tools deploy --only storage,firestore:rules \
+              --project "$FIREBASE_PROJECT_ID" \
+              --token "$FIREBASE_TOKEN" \
+              --non-interactive
+            echo "Firebase rules deployed."
+          else
+            echo "Skipping Firebase rules deploy — add FIREBASE_PROJECT_ID and FIREBASE_TOKEN to GitHub Secrets."
+          fi
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
