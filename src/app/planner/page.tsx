@@ -113,9 +113,12 @@ const DASHBOARD_TILES: Record<string, DashboardTile> = {
   },
 };
 
-const ADMIN_TILE_KEYS = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'eventi', 'orario_lavoro'];
-const XB_TILE_KEYS    = ['eventi', 'mobili', 'fiori', 'portfolio'];
-const TEQF_TILE_KEYS  = ['cash_control', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'portfolio'];
+// Admin-only tiles — shown exclusively to superadmin
+const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'eventi', 'orario_lavoro'];
+const XB_TILE_KEYS          = ['eventi', 'mobili', 'fiori', 'portfolio'];
+const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'portfolio'];
+// Union of XB + TeQF sections — never includes admin-only tiles (richieste, gestione_utenti, blog)
+const BOTH_TEAMS_TILE_KEYS  = ['eventi', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio'];
 
 // ─── TileGrid ─────────────────────────────────────────────────────────────────
 
@@ -806,10 +809,10 @@ function AllTilesDashboard() {
             Benvenuto/a, {plannerUser.name}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Dashboard completa — XB + TeQF
+            Team XB + TeQF
           </p>
         </div>
-        <TileGrid tileKeys={ADMIN_TILE_KEYS} />
+        <TileGrid tileKeys={BOTH_TEAMS_TILE_KEYS} />
       </main>
     </div>
   );
