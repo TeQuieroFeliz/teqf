@@ -492,11 +492,12 @@ function StandbyCard({
 
 // ── ItemCard ──────────────────────────────────────────────────────────────────
 
-function ItemCard({ item, allCategories, onDelete, deleting }: {
+function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
   item: FurnitureItem;
   allCategories: string[];
   onDelete: () => void;
   deleting: boolean;
+  canEdit: boolean;
 }) {
   const colors = categoryColor(item.category, allCategories);
   const MAX_CITIES = 2;
@@ -535,25 +536,27 @@ function ItemCard({ item, allCategories, onDelete, deleting }: {
           {item.published ? 'Pubblicato' : 'Bozza'}
         </span>
 
-        {/* Admin action overlay */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-start gap-2 p-3" style={{ background: 'linear-gradient(to top, rgba(30,15,10,0.45) 0%, transparent 55%)' }}>
-          <Link
-            href={`/admin/furniture/${item.id}`}
-            onClick={e => e.stopPropagation()}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
-            style={{ background: 'white', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', textDecoration: 'none', fontWeight: 500 }}
-          >
-            <Edit2 className="size-3" /> Modifica
-          </Link>
-          <button
-            type="button" onClick={e => { e.stopPropagation(); onDelete(); }}
-            disabled={deleting}
-            className="flex items-center justify-center size-7 rounded-full transition-opacity hover:opacity-80 disabled:opacity-40"
-            style={{ background: 'white', color: '#991b1b', border: 'none' }}
-          >
-            {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-          </button>
-        </div>
+        {/* Admin action overlay — hidden for read-only users */}
+        {canEdit && (
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-start gap-2 p-3" style={{ background: 'linear-gradient(to top, rgba(30,15,10,0.45) 0%, transparent 55%)' }}>
+            <Link
+              href={`/planner/furniture/${item.id}`}
+              onClick={e => e.stopPropagation()}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
+              style={{ background: 'white', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', textDecoration: 'none', fontWeight: 500 }}
+            >
+              <Edit2 className="size-3" /> Modifica
+            </Link>
+            <button
+              type="button" onClick={e => { e.stopPropagation(); onDelete(); }}
+              disabled={deleting}
+              className="flex items-center justify-center size-7 rounded-full transition-opacity hover:opacity-80 disabled:opacity-40"
+              style={{ background: 'white', color: '#991b1b', border: 'none' }}
+            >
+              {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lightbox */}
@@ -821,24 +824,28 @@ export default function AdminFurniturePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Bulk upload button */}
-          <button
-            onClick={() => bulkRef.current?.click()}
-            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
-            style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', fontFamily: 'var(--font-body)' }}
-          >
-            <Upload className="size-4" />
-            Carica Immagini
-          </button>
-          <input ref={bulkRef} type="file" accept="image/*" multiple className="hidden"
-            onChange={e => handleBulkUpload(e.target.files)} />
+          {canEdit && (
+            <>
+              {/* Bulk upload button */}
+              <button
+                onClick={() => bulkRef.current?.click()}
+                className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+                style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', fontFamily: 'var(--font-body)' }}
+              >
+                <Upload className="size-4" />
+                Carica Immagini
+              </button>
+              <input ref={bulkRef} type="file" accept="image/*" multiple className="hidden"
+                onChange={e => handleBulkUpload(e.target.files)} />
 
-          {/* Manual new item */}
-          <Link href="/planner/furniture/new"
-            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
-            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-            <Plus className="size-4" /> Nuovo
-          </Link>
+              {/* Manual new item */}
+              <Link href="/planner/furniture/new"
+                className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+                <Plus className="size-4" /> Nuovo
+              </Link>
+            </>
+          )}
 
           <button onClick={logout}
             className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
@@ -930,14 +937,22 @@ export default function AdminFurniturePage() {
               <h2 className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
                 Nessun elemento
               </h2>
-              <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Carica immagini per iniziare a costruire il catalogo.
-              </p>
-              <button onClick={() => bulkRef.current?.click()}
-                className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
-                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
-                <Upload className="size-4" /> Carica Immagini
-              </button>
+              {canEdit ? (
+                <>
+                  <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                    Carica immagini per iniziare a costruire il catalogo.
+                  </p>
+                  <button onClick={() => bulkRef.current?.click()}
+                    className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
+                    style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
+                    <Upload className="size-4" /> Carica Immagini
+                  </button>
+                </>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                  Nessun elemento nel catalogo.
+                </p>
+              )}
             </div>
           )}
 
@@ -950,6 +965,7 @@ export default function AdminFurniturePage() {
                   allCategories={allCategories}
                   onDelete={() => handleDelete(item)}
                   deleting={deletingId === item.id}
+                  canEdit={canEdit}
                 />
               ))}
             </div>

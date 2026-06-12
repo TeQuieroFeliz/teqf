@@ -94,7 +94,7 @@ const labelStyle: React.CSSProperties = {
 };
 
 export default function FurnitureEditorPage() {
-  const { adminUser, logout, canManageCatalogs } = usePlannerAuth();
+  const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id as string;
@@ -148,6 +148,13 @@ export default function FurnitureEditorPage() {
     }
     load();
   }, [isNew, rawId, router]);
+
+  useEffect(() => {
+    if (!isLoading && !permissions.furniture.canEdit) {
+      toast.error('Non hai i permessi per modificare questa sezione');
+      router.replace('/planner/furniture');
+    }
+  }, [isLoading, permissions.furniture.canEdit, router]);
 
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));
