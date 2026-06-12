@@ -43,6 +43,7 @@ if (isBrowser && hasFirebaseConfig) {
     }
     try {
       db = initializeFirestore(app, {
+        ignoreUndefinedProperties: true,
         localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
       });
     } catch (error) {
@@ -50,7 +51,7 @@ if (isBrowser && hasFirebaseConfig) {
         '[Firebase Client] IndexedDB cache è indisponibile, uso memoria locale.',
         error
       );
-      db = initializeFirestore(app, { localCache: memoryLocalCache() });
+      db = initializeFirestore(app, { ignoreUndefinedProperties: true, localCache: memoryLocalCache() });
     }
   } else {
     const app = currentApps[0];

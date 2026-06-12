@@ -218,16 +218,16 @@ function MovementModal({
     try {
       const now = new Date().toISOString();
       const base = {
-        date:          form.date,
-        description:   form.description.trim(),
+        date:         form.date,
+        description:  form.description.trim(),
         amount,
-        type:          form.type,
-        paymentMethod: form.type === 'income' ? form.paymentMethod : undefined,
-        tags:          form.tags,
-        photoUrls:     existing?.photoUrls ?? [],
-        uploadStatus:  (form.photos.length > 0 ? 'pending' : null) as 'pending' | null,
-        assignedTo:    createdByName,
-        status:        'completed' as const,
+        type:         form.type,
+        ...(form.type === 'income' ? { paymentMethod: form.paymentMethod } : {}),
+        tags:         form.tags,
+        photoUrls:    existing?.photoUrls ?? [],
+        uploadStatus: (form.photos.length > 0 ? 'pending' : null) as 'pending' | null,
+        assignedTo:   createdByName,
+        status:       'completed' as const,
       };
 
       if (existing) {

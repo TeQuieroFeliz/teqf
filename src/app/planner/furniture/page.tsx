@@ -11,6 +11,7 @@ import AccessDenied from '@/components/planner/AccessDenied';
 import ReadOnlyBanner from '@/components/planner/ReadOnlyBanner';
 import { db, storage } from '@/firebase/client';
 import { collection, doc, getDocs, getDoc, orderBy, query } from 'firebase/firestore';
+import { compressFurnitureImage } from '@/lib/furniture/compressImage';
 import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import {
@@ -671,13 +672,14 @@ export default function AdminFurniturePage() {
     }));
     setUploads(prev => [...prev, ...newUploads]);
 
-    await Promise.all(fileArr.map((file, i) => {
+    await Promise.all(fileArr.map(async (file, i) => {
       const uid = newUploads[i].id;
+      const compressed = await compressFurnitureImage(file);
       return new Promise<void>((resolve) => {
-        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const safe = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = `furniture/bulk/${Date.now()}_${safe}`;
         const sRef = storageRef(storage, path);
-        const task = uploadBytesResumable(sRef, file, { contentType: file.type });
+        const task = uploadBytesResumable(sRef, compressed, { contentType: compressed.type });
 
         task.on('state_changed',
           snap => {

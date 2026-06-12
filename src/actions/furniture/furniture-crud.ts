@@ -84,7 +84,7 @@ export async function saveFurnitureItem(
       revalidatePath('/planner/furniture');
       return { success: true, id };
     }
-    const docRef = await col().add({ ...data, images: [], createdAt: now, updatedAt: now });
+    const docRef = await col().add({ ...data, createdAt: now, updatedAt: now });
     revalidatePath('/planner/furniture');
     return { success: true, id: docRef.id };
   } catch (e: any) {

@@ -10,6 +10,7 @@ import {
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import { storage } from '@/firebase/client';
+import { compressFurnitureImage } from '@/lib/furniture/compressImage';
 import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 import {
@@ -240,16 +241,19 @@ export default function FurnitureEditorPage() {
     }
   };
 
-  // Stage 3: upload chosen version to Firebase Storage
-  const commitPendingUpload = async (id: string, useProcessed: boolean) => {
+  // Stage 3: upload chosen version to Firebase Storage; returns true on success
+  const commitPendingUpload = async (id: string, useProcessed: boolean): Promise<boolean> => {
     const p = pendingUploads.find((x) => x.id === id);
-    if (!p || p.state === 'uploading') return;
-    if (!storage) { toast.error('Firebase Storage non configurato (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET mancante).'); return; }
+    if (!p || p.state === 'uploading') return false;
+    if (!storage) { toast.error('Firebase Storage non configurato (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET mancante).'); return false; }
 
-    const fileToUpload =
+    const rawFile =
       useProcessed && p.processedBlob
         ? new File([p.processedBlob], p.file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' })
         : p.file;
+
+    // Compress originals; preserve processed PNG (background removal keeps transparency)
+    const fileToUpload = !useProcessed ? await compressFurnitureImage(rawFile) : rawFile;
 
     setPendingUploads((prev) => prev.map((x) => (x.id === id ? { ...x, state: 'uploading' } : x)));
     const displayName = fileToUpload.name;
@@ -294,12 +298,14 @@ export default function FurnitureEditorPage() {
       if (!isNew) await updateFurnitureImages(projectId, updatedImages);
 
       toast.success('Immagine caricata.');
+      return true;
     } catch {
       setUploads((prev) => prev.filter((u) => u.name !== displayName));
       setPendingUploads((prev) =>
         prev.map((x) => (x.id === id ? { ...x, state: 'upload-error', errorMsg: 'Errore caricamento' } : x))
       );
       toast.error('Errore caricamento immagine.');
+      return false;
     }
   };
 
@@ -325,11 +331,31 @@ export default function FurnitureEditorPage() {
     if (!form.name.trim()) { toast.error('Inserisci il nome dell\'elemento.'); return; }
     if (!form.category) { toast.error('Seleziona una categoria.'); return; }
     if (form.cities.length === 0) { toast.error('Seleziona almeno una città.'); return; }
+
+    // Auto-commit any pending (uncommitted) images before saving
+    const toCommit = pendingUploads.filter(
+      (p) => p.state === 'idle' || p.state === 'bg-done' || p.state === 'bg-error' || p.state === 'upload-error'
+    );
+    if (toCommit.length > 0) {
+      setSaving(true);
+      const results = await Promise.all(
+        toCommit.map((p) => commitPendingUpload(p.id, p.state === 'bg-done'))
+      );
+      if (results.some((ok) => !ok)) {
+        toast.error('Alcune immagini non si sono caricate. Rimuovile o riprova prima di salvare.');
+        setSaving(false);
+        return;
+      }
+    }
+
     setSaving(true);
-    const result = await saveFurnitureItem({ ...form, id: isNew ? undefined : projectId });
+    const imagesToSave = imagesRef.current;
+    const result = await saveFurnitureItem({
+      ...form, images: imagesToSave, id: isNew ? undefined : projectId,
+    });
     setSaving(false);
     if (result.success) {
-      if (isNew && result.id) await updateFurnitureImages(result.id, form.images);
+      if (isNew && result.id) await updateFurnitureImages(result.id, imagesToSave);
       toast.success('Elemento salvato.');
       router.push('/planner/furniture');
     } else {
@@ -375,15 +401,20 @@ export default function FurnitureEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 text-sm px-5 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
-            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
-          >
-            {saving && <Loader2 className="size-4 animate-spin" />}
-            Salva
-          </button>
+          {(() => {
+            const isUploadingImages = uploads.length > 0 || pendingUploads.some((p) => p.state === 'uploading');
+            return (
+              <button
+                onClick={handleSave}
+                disabled={saving || isUploadingImages}
+                className="flex items-center gap-2 text-sm px-5 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+              >
+                {(saving || isUploadingImages) && <Loader2 className="size-4 animate-spin" />}
+                {isUploadingImages ? 'Caricamento immagini…' : 'Salva'}
+              </button>
+            );
+          })()}
           <button
             onClick={logout}
             className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors hover:opacity-80"
