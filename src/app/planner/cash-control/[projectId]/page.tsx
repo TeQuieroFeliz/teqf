@@ -182,30 +182,37 @@ function MovementModal({
     }));
   }
 
-  // PART-3: upload photos to cashControl/{uid}/{projectId}/{movId}/
-  async function uploadPhotos(movId: string, uid: string): Promise<string[]> {
-    if (!storage) return [];
+  // Upload photos while modal is still open (File objects are still live)
+  // Path: cashcontrol/{projectId}/{timestamp}_{i}_{filename} — no uid segment
+  async function uploadPhotos(photos: File[]): Promise<string[]> {
+    if (!storage) throw new Error('Firebase Storage non disponibile. Riprova.');
     const urls: string[] = [];
-    for (let i = 0; i < form.photos.length; i++) {
-      const file = form.photos[i];
+    const total = photos.length;
+    for (let i = 0; i < total; i++) {
+      const file = photos[i];
       const compressed = await compressImage(file);
-      const name = `${Date.now()}_${i}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-      const path = `cashControl/${uid}/${projectId}/${movId}/${name}`;
-      const ref = storageRef(storage, path);
+      const fileToUpload = compressed.size > 0 ? compressed : file;
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `cashcontrol/${projectId}/${Date.now()}_${i}_${safeName}`;
+      const sRef = storageRef(storage, path);
       await new Promise<void>((resolve, reject) => {
-        const total = form.photos.length;
-        const task = uploadBytesResumable(ref, compressed.size > 0 ? compressed : file);
+        const task = uploadBytesResumable(sRef, fileToUpload, {
+          contentType: fileToUpload.type || 'image/jpeg',
+        });
         task.on('state_changed',
           snap => {
             const base = (i / total) * 100;
             const chunk = (snap.bytesTransferred / snap.totalBytes) * (100 / total);
             setUploadPct(Math.round(base + chunk));
           },
-          reject,
+          err => {
+            console.error('[cash-control] photo upload error:', err);
+            reject(err);
+          },
           () => resolve()
         );
       });
-      urls.push(await getDownloadURL(ref));
+      urls.push(await getDownloadURL(sRef));
     }
     return urls;
   }
@@ -216,6 +223,14 @@ function MovementModal({
     if (!form.amount || isNaN(amount) || amount <= 0) { toast.error(t('invalidAmount')); return; }
     setSaving(true);
     try {
+      // Upload photos first, while modal is still mounted (File objects are live)
+      let photoUrls: string[] = existing?.photoUrls ?? [];
+      if (form.photos.length > 0) {
+        const newUrls = await uploadPhotos(form.photos);
+        photoUrls = [...photoUrls, ...newUrls];
+        setUploadPct(null);
+      }
+
       const now = new Date().toISOString();
       const base = {
         date:         form.date,
@@ -224,8 +239,7 @@ function MovementModal({
         type:         form.type,
         ...(form.type === 'income' ? { paymentMethod: form.paymentMethod } : {}),
         tags:         form.tags,
-        photoUrls:    existing?.photoUrls ?? [],
-        uploadStatus: (form.photos.length > 0 ? 'pending' : null) as 'pending' | null,
+        photoUrls,
         assignedTo:   createdByName,
         status:       'completed' as const,
       };
@@ -236,34 +250,19 @@ function MovementModal({
           { ...base, updatedAt: now }
         );
         toast.success(t('updated'));
-        onSaved(); onClose();
       } else {
-        const ref = await addDoc(
+        await addDoc(
           collection(db, 'teqfProjects', projectId, 'cashControl'),
           { ...base, createdBy, createdAt: now, updatedAt: now }
         );
-        const movId = ref.id;
-        const pendingPhotos = form.photos.slice();
-        form.previewUrls.forEach(URL.revokeObjectURL);
-        onSaved(); onClose();
-
-        if (pendingPhotos.length > 0) {
-          toast.success(t('saved') + ' Subiendo fotos…');
-          void uploadPhotos(movId, createdBy).then(urls =>
-            updateDoc(doc(db, 'teqfProjects', projectId, 'cashControl', movId), {
-              photoUrls: urls, uploadStatus: 'uploaded', updatedAt: new Date().toISOString(),
-            })
-          ).catch(() =>
-            updateDoc(doc(db, 'teqfProjects', projectId, 'cashControl', movId), {
-              photoUrls: [], uploadStatus: 'failed', updatedAt: new Date().toISOString(),
-            }).then(() => toast.error('Fotos fallidas.')).catch(() => {})
-          ).finally(() => setUploadPct(null));
-        } else {
-          toast.success(t('saved'));
-        }
+        toast.success(t('saved'));
       }
+      form.previewUrls.forEach(URL.revokeObjectURL);
+      onSaved(); onClose();
     } catch (e: any) {
+      console.error('[cash-control] save failed:', e);
       toast.error(e.message ?? 'Error.');
+      setUploadPct(null);
     } finally {
       setSaving(false);
     }
@@ -507,6 +506,16 @@ function MovementModal({
               {form.photos.length > 0 && ` (${form.photos.length}/${MAX_PHOTOS})`}
             </label>
             <div className="flex items-start gap-2 flex-wrap">
+              {/* Saved photos from existing movement */}
+              {existing?.photoUrls?.map((url, idx) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+                  className="size-16 rounded-xl overflow-hidden flex-shrink-0 block"
+                  style={{ border: '1px solid var(--tqf-beige-border)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`foto ${idx + 1}`} className="size-full object-cover" />
+                </a>
+              ))}
+              {/* New photos to upload */}
               {form.previewUrls.map((url, idx) => (
                 <div key={url} className="relative size-16 rounded-xl overflow-hidden flex-shrink-0"
                   style={{ border: '1px solid var(--tqf-beige-border)' }}>
@@ -598,7 +607,9 @@ function MovementModal({
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving && <Loader2 className="size-4 animate-spin" />}
-              {existing ? t('update') : t('save')}
+              {uploadPct !== null
+                ? `${uploadPct}%`
+                : (existing ? t('update') : t('save'))}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
@@ -967,15 +978,29 @@ export default function CashControlDetailPage() {
                         · {m.assignedTo}
                       </span>
                     )}
-                    {m.photoUrls && m.photoUrls.length > 0 && (
-                      <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                        · 📷{m.photoUrls.length}
-                      </span>
-                    )}
                     {m.uploadStatus === 'pending' && (
                       <span className="text-xs" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>· ⏳</span>
                     )}
                   </div>
+                  {/* Photo thumbnails from Firestore */}
+                  {m.photoUrls && m.photoUrls.length > 0 && (
+                    <div className="flex gap-1 mt-1.5 flex-wrap">
+                      {m.photoUrls.slice(0, 3).map((url, i) => (
+                        <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+                          className="size-10 rounded-lg overflow-hidden flex-shrink-0 block"
+                          style={{ border: '1px solid var(--tqf-beige-border)' }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt={`foto ${i + 1}`} className="size-full object-cover" />
+                        </a>
+                      ))}
+                      {m.photoUrls.length > 3 && (
+                        <div className="size-10 rounded-lg flex items-center justify-center flex-shrink-0 text-xs"
+                          style={{ background: 'var(--tqf-beige)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', border: '1px solid var(--tqf-beige-border)' }}>
+                          +{m.photoUrls.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   {/* PART-3: MXN amount */}
