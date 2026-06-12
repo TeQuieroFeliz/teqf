@@ -33,11 +33,14 @@ import {
   ChevronRight,
   Lock,
   Loader2,
+  MailX,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   TrendingDown,
   TrendingUp,
+  Unlock,
   Wallet,
   X,
 } from 'lucide-react';
@@ -485,7 +488,7 @@ function MovementModal({
                 {QUICK_TAGS.filter(qt => !form.tags.includes(qt)).map(qt => (
                   <button key={qt} type="button"
                     onClick={() => setField('tags', fifoAddTag(form.tags, qt))}
-                    className="px-2.5 py-1 rounded-full text-xs transition-all active:scale-95"
+                    className="px-3 py-2 rounded-full text-xs transition-all active:scale-95"
                     style={{
                       border: '1px solid var(--tqf-beige-border)',
                       background: 'white',
@@ -637,7 +640,7 @@ function CloseConfirmSheet({
   totalExpense: number;
   saldo: number;
   onClose: () => void;
-  onClosed: () => void;
+  onClosed: (emailFailed: boolean) => void;
 }) {
   const { t } = useT({ it: IT, es: ES });
   const [closing, setClosing] = useState(false);
@@ -655,7 +658,8 @@ function CloseConfirmSheet({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Error al cerrar.');
       toast.success(t('closedOk'));
-      onClosed();
+      if (data.emailFailed) toast.error(t('reportEmailFailed'));
+      onClosed(data.emailFailed ?? false);
       onClose();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error inesperado.');
@@ -692,7 +696,7 @@ function CloseConfirmSheet({
                 style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--tqf-beige-border)' : 'none' }}>
                 <span className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{label}</span>
                 <span className="text-sm" style={{ color, fontFamily: 'var(--font-body)', fontWeight: bold ? 600 : 400 }}>
-                  {formatCurrency(Math.abs(value))}
+                  {formatCurrency(value)}
                 </span>
               </div>
             ))}
@@ -740,9 +744,12 @@ export default function CashControlDetailPage() {
   const [renameDraft,  setRenameDraft]  = useState('');
   const [renaming,     setRenaming]     = useState(false);
 
-  const canAccess = isSuperAdmin || canManageCashControl;
-  const canEdit   = canManageCashControl;
-  const isClosed  = project?.isClosed === true;
+  const canAccess      = isSuperAdmin || canManageCashControl;
+  const isAdmin        = isSuperAdmin;
+  const isClosed       = project?.isClosed === true;
+  // Open project: any participant can modify. Closed project: admin only.
+  const canModify      = canAccess && (!isClosed || isAdmin);
+  const canAddMovement = canAccess && !isClosed;
 
   useEffect(() => {
     if (authLoading || !projectId) return;
@@ -827,6 +834,58 @@ export default function CashControlDetailPage() {
     }
   }
 
+  async function handleDeleteProject() {
+    const msg = t('deleteProjectConfirm').replace('{name}', projectName);
+    if (!confirm(msg)) return;
+    try {
+      await updateDoc(doc(db, 'teqfProjects', projectId), {
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: createdBy,
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success(t('projectDeleted'));
+      window.location.href = '/planner/cash-control';
+    } catch (e: any) {
+      toast.error(e.message ?? 'Error.');
+    }
+  }
+
+  async function handleReopenProject() {
+    if (!confirm(t('reopenAccount') + '?')) return;
+    try {
+      const token = await clientAuth?.currentUser?.getIdToken(true);
+      if (!token) throw new Error('Sin sesión activa.');
+      const res = await fetch('/api/cash-control/teqf-reopen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error.');
+      toast.success(t('reopenOk'));
+    } catch (e: any) {
+      toast.error(e instanceof Error ? e.message : 'Error.');
+    }
+  }
+
+  async function handleResendReport() {
+    try {
+      const token = await clientAuth?.currentUser?.getIdToken(true);
+      if (!token) throw new Error('Sin sesión activa.');
+      const res = await fetch('/api/cash-control/teqf-resend-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Error.');
+      toast.success(t('resendReportOk'));
+    } catch (e: any) {
+      toast.error(e instanceof Error ? e.message : 'Error.');
+    }
+  }
+
   return (
     <div className="min-h-screen pb-28" style={{ background: 'var(--tqf-beige)' }}>
 
@@ -847,10 +906,16 @@ export default function CashControlDetailPage() {
                   style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}>
                   {projectName}
                 </p>
-                {canEdit && !isClosed && (
+                {canModify && (
                   <button onClick={openRename} className="flex-shrink-0 hover:opacity-70"
                     style={{ color: 'var(--tqf-muted)' }}>
                     <Pencil className="size-3.5" />
+                  </button>
+                )}
+                {canModify && (
+                  <button onClick={handleDeleteProject} className="flex-shrink-0 hover:opacity-70"
+                    style={{ color: '#991b1b' }}>
+                    <Trash2 className="size-3.5" />
                   </button>
                 )}
                 {isClosed && (
@@ -858,6 +923,13 @@ export default function CashControlDetailPage() {
                     style={{ background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }}>
                     <Lock className="size-2.5" />{t('closed')}
                   </span>
+                )}
+                {isClosed && isAdmin && (
+                  <button onClick={handleReopenProject}
+                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg flex-shrink-0 hover:opacity-70"
+                    style={{ background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontFamily: 'var(--font-body)' }}>
+                    <Unlock className="size-3" />{t('reopenAccount')}
+                  </button>
                 )}
               </div>
               <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
@@ -878,7 +950,7 @@ export default function CashControlDetailPage() {
             {t('langSwitch')}
           </button>
 
-          {canEdit && !isClosed && (
+          {canAddMovement && (
             <button onClick={openAdd}
               className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl flex-shrink-0"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
@@ -891,9 +963,9 @@ export default function CashControlDetailPage() {
         <div className="grid grid-cols-3 gap-2 rounded-xl px-3 py-2.5"
           style={{ background: 'var(--tqf-beige)' }}>
           {[
-            { label: t('incomes'),  value: formatCurrency(totalIncome),        color: '#15803d' },
-            { label: t('expenses'), value: formatCurrency(totalExpense),       color: '#991b1b' },
-            { label: t('balance'),  value: formatCurrency(Math.abs(saldo)),    color: saldoColor },
+            { label: t('incomes'),  value: formatCurrency(totalIncome),  color: '#15803d' },
+            { label: t('expenses'), value: formatCurrency(totalExpense), color: '#991b1b' },
+            { label: t('balance'),  value: formatCurrency(saldo),        color: saldoColor },
           ].map(({ label, value, color }) => (
             <div key={label} className="text-center">
               <p className="text-sm font-semibold truncate" style={{ color, fontFamily: 'var(--font-body)' }}>{value}</p>
@@ -1008,7 +1080,7 @@ export default function CashControlDetailPage() {
                     style={{ color: isInc ? '#15803d' : '#991b1b', fontFamily: 'var(--font-body)' }}>
                     {isInc ? '+' : '-'}{formatCurrency(m.amount)}
                   </p>
-                  {canEdit && !isClosed && (
+                  {canModify && (
                     <div className="flex items-center gap-1">
                       <button onClick={() => openEdit(m)}
                         className="p-1.5 rounded-lg"
@@ -1029,8 +1101,24 @@ export default function CashControlDetailPage() {
         })}
       </div>
 
-      {/* PART-3: Sticky "Cerrar cuenta" button */}
-      {canEdit && !isClosed && (
+      {/* Email report failed banner */}
+      {isClosed && project?.reportEmailFailed && (
+        <div className="mx-4 mt-3 rounded-2xl px-5 py-3.5 flex items-center gap-3"
+          style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+          <MailX className="size-5 flex-shrink-0" style={{ color: '#b45309' }} />
+          <p className="text-sm flex-1" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>
+            {t('reportEmailFailed')}
+          </p>
+          <button onClick={handleResendReport}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg flex-shrink-0"
+            style={{ background: '#b45309', color: 'white', fontFamily: 'var(--font-body)' }}>
+            <RefreshCw className="size-3" />{t('resendReport')}
+          </button>
+        </div>
+      )}
+
+      {/* Sticky "Cerrar cuenta" button */}
+      {canAddMovement && (
         <div className="fixed bottom-0 left-0 right-0 px-4 z-20"
           style={{
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
@@ -1074,7 +1162,7 @@ export default function CashControlDetailPage() {
           totalExpense={totalExpense}
           saldo={saldo}
           onClose={() => setShowClose(false)}
-          onClosed={() => setShowClose(false)}
+          onClosed={() => { /* reportEmailFailed persisted in Firestore via onSnapshot */ }}
         />
       )}
 

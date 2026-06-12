@@ -1,4 +1,4 @@
-// PART-3: Close a TeQF project cash-control account + send email report
+// Close a TeQF project cash-control account + send detailed email report
 import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, firestore } from '@/firebase/server';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -10,8 +10,9 @@ function getResend() {
   return new Resend(key);
 }
 
-const FROM = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tequierofeliz.com';
+const FROM  = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
+const TO    = 'admin@tequierofeliz.mx';
+const SITE  = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tequierofeliz.com';
 
 function fmtMXN(n: number) {
   return new Intl.NumberFormat('es-MX', {
@@ -21,10 +22,12 @@ function fmtMXN(n: number) {
 }
 
 function fmtDate(d?: string) {
-  if (!d) return '';
-  return new Date(d + 'T12:00:00').toLocaleDateString('es-MX', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
+  if (!d) return '—';
+  try {
+    return new Date(d.includes('T') ? d : d + 'T12:00:00').toLocaleDateString('es-MX', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+  } catch { return d; }
 }
 
 export async function POST(req: NextRequest) {
@@ -35,12 +38,9 @@ export async function POST(req: NextRequest) {
 
     const authHeader = req.headers.get('Authorization') ?? '';
     const token = authHeader.replace('Bearer ', '').trim();
-    if (!token) {
-      return NextResponse.json({ error: 'Token requerido.' }, { status: 401 });
-    }
+    if (!token) return NextResponse.json({ error: 'Token requerido.' }, { status: 401 });
 
-    // Verify caller is authenticated
-    const decoded = await adminAuth.verifyIdToken(token);
+    const decoded   = await adminAuth.verifyIdToken(token);
     const callerUid = decoded.uid;
 
     const body = await req.json() as {
@@ -58,121 +58,187 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan campos obligatorios.' }, { status: 400 });
     }
 
-    // Caller must match closedBy
     if (callerUid !== closedBy) {
       return NextResponse.json({ error: 'Sin permisos.' }, { status: 403 });
     }
 
-    // Mark project as closed in Firestore
-    const projectRef = firestore.collection('teqfProjects').doc(projectId);
+    const projectRef  = firestore.collection('teqfProjects').doc(projectId);
     const projectSnap = await projectRef.get();
 
     if (!projectSnap.exists) {
       return NextResponse.json({ error: 'Proyecto no encontrado.' }, { status: 404 });
     }
-
     if (projectSnap.data()?.isClosed) {
       return NextResponse.json({ error: 'El proyecto ya está cerrado.' }, { status: 409 });
     }
 
+    const projectData = projectSnap.data()!;
+    const closedAt    = new Date().toISOString();
+
+    // Mark project as closed
     await projectRef.update({
-      isClosed: true,
-      closedAt: FieldValue.serverTimestamp(),
+      isClosed:  true,
+      closedAt:  FieldValue.serverTimestamp(),
       closedBy,
-      updatedAt: new Date().toISOString(),
+      updatedAt: closedAt,
     });
 
-    // Fetch movements for email
-    const balanceColor = saldo >= 0 ? '#166534' : '#991b1b';
-    let movementRows = '';
-
+    // Build and send email report
+    let emailFailed = false;
     try {
       const movSnap = await firestore
-        .collection('teqfProjects')
-        .doc(projectId)
-        .collection('cashControl')
-        .orderBy('date', 'asc')
-        .get();
+        .collection('teqfProjects').doc(projectId).collection('cashControl')
+        .orderBy('date', 'asc').get();
 
       const callerRecord = await adminAuth.getUser(callerUid);
-      const userName = callerRecord.displayName || callerRecord.email || callerUid;
+      const closerName   = callerRecord.displayName || callerRecord.email || callerUid;
 
-      const methodLabel = (m?: string) =>
-        m === 'transferencia' ? 'Transferencia' : m === 'efectivo' ? 'Efectivo' : '—';
+      // ── Per-user breakdown ──────────────────────────────────────────────────
+      type UserEntry = { movements: FirebaseFirestore.DocumentData[]; income: number; expense: number };
+      const userMap = new Map<string, UserEntry>();
 
-      movementRows = movSnap.docs.map(d => {
+      for (const d of movSnap.docs) {
+        const mv   = d.data();
+        const name = (mv.assignedTo as string) || 'Sin asignar';
+        if (!userMap.has(name)) userMap.set(name, { movements: [], income: 0, expense: 0 });
+        const entry = userMap.get(name)!;
+        entry.movements.push(mv);
+        if (mv.type === 'income') entry.income  += (mv.amount as number) ?? 0;
+        else                       entry.expense += (mv.amount as number) ?? 0;
+      }
+
+      // ── Per-category breakdown (first tag of each expense) ──────────────────
+      const catMap = new Map<string, number>();
+      for (const d of movSnap.docs) {
         const mv = d.data();
-        const isInc = mv.type === 'income';
-        const amount = mv.amount as number ?? 0;
-        const tags = (mv.tags as string[] ?? []).join(', ');
-        return `<tr style="border-bottom:1px solid #f0e8e2;">
-          <td style="padding:8px 0;color:#555;font-size:13px;">${fmtDate(mv.date as string)}</td>
-          <td style="padding:8px 0;color:#555;font-size:13px;">${isInc ? 'Entrada' : 'Gasto'}</td>
-          <td style="padding:8px 0;color:#555;font-size:13px;">${mv.description ?? ''}${tags ? ` · ${tags}` : ''}</td>
-          <td style="padding:8px 0;color:#555;font-size:13px;">${methodLabel(mv.paymentMethod as string)}</td>
-          <td style="padding:8px 0;text-align:right;color:${isInc ? '#166534' : '#991b1b'};font-weight:500;font-size:13px;">
-            ${isInc ? '+' : '-'}${fmtMXN(amount)}
-          </td>
+        if (mv.type !== 'expense') continue;
+        const tags = mv.tags as string[] ?? [];
+        const cat  = tags.length > 0 ? tags[0] : 'sin categoría';
+        catMap.set(cat, (catMap.get(cat) ?? 0) + ((mv.amount as number) ?? 0));
+      }
+      const sortedCats = [...catMap.entries()].sort((a, b) => b[1] - a[1]);
+
+      // ── HTML builder ────────────────────────────────────────────────────────
+      const balanceColor = saldo >= 0 ? '#166534' : '#991b1b';
+
+      const summaryRows = `
+        <tr style="border-bottom:1px solid #e5d9d0;">
+          <td style="padding:10px 0;color:#555;font-size:14px;">Total entradas</td>
+          <td style="padding:10px 0;text-align:right;color:#166534;font-weight:500;font-size:14px;">${fmtMXN(totalIncome)}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e5d9d0;">
+          <td style="padding:10px 0;color:#555;font-size:14px;">Total gastos</td>
+          <td style="padding:10px 0;text-align:right;color:#991b1b;font-weight:500;font-size:14px;">${fmtMXN(totalExpense)}</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 0 0;font-weight:600;color:#1a0f0a;font-size:14px;">Saldo final</td>
+          <td style="padding:12px 0 0;text-align:right;font-weight:700;color:${balanceColor};font-size:16px;">${fmtMXN(saldo)}</td>
         </tr>`;
-      }).join('');
+
+      let userSections = '';
+      for (const [name, entry] of userMap) {
+        const userBalance = entry.income - entry.expense;
+        const userBalColor = userBalance >= 0 ? '#166534' : '#991b1b';
+
+        const movRows = entry.movements.map(mv => {
+          const isInc  = mv.type === 'income';
+          const amt    = (mv.amount as number) ?? 0;
+          const tags   = (mv.tags as string[] ?? []).join(', ');
+          return `<tr style="border-bottom:1px solid #f5ede8;">
+            <td style="padding:5px 0;color:#777;font-size:12px;white-space:nowrap;">${fmtDate(mv.date as string)}</td>
+            <td style="padding:5px 0;color:#555;font-size:12px;">${mv.description ?? ''}${tags ? ` <span style="color:#aaa;">(${tags})</span>` : ''}</td>
+            <td style="padding:5px 0;text-align:right;color:${isInc ? '#166534' : '#991b1b'};font-weight:500;font-size:12px;">${isInc ? '+' : '-'}${fmtMXN(amt)}</td>
+          </tr>`;
+        }).join('');
+
+        const reimburseRow = userBalance < 0 ? `
+          <div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border-radius:6px;border-left:3px solid #991b1b;">
+            <p style="margin:0;font-size:13px;color:#991b1b;font-weight:600;">
+              Da rimborsare a ${name}: ${fmtMXN(Math.abs(userBalance))}
+            </p>
+          </div>` : '';
+
+        userSections += `
+          <div style="margin-bottom:24px;">
+            <p style="font-size:13px;font-weight:600;color:#1a0f0a;margin:0 0 8px;border-bottom:1px solid #e5d9d0;padding-bottom:6px;">${name}</p>
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:1px solid #e5d9d0;">
+                  <th style="text-align:left;color:#aaa;font-size:11px;padding:4px 0;font-weight:500;">Fecha</th>
+                  <th style="text-align:left;color:#aaa;font-size:11px;padding:4px 0;font-weight:500;">Descripción</th>
+                  <th style="text-align:right;color:#aaa;font-size:11px;padding:4px 0;font-weight:500;">Monto</th>
+                </tr>
+              </thead>
+              <tbody>${movRows}</tbody>
+            </table>
+            <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid #e5d9d0;">
+              <span style="font-size:12px;color:#555;">Saldo personal</span>
+              <span style="font-size:13px;font-weight:600;color:${userBalColor};">${fmtMXN(userBalance)}</span>
+            </div>
+            ${reimburseRow}
+          </div>`;
+      }
+
+      const catRows = sortedCats.map(([cat, total]) =>
+        `<tr style="border-bottom:1px solid #f5ede8;">
+          <td style="padding:6px 0;color:#555;font-size:13px;text-transform:capitalize;">${cat}</td>
+          <td style="padding:6px 0;text-align:right;color:#991b1b;font-weight:500;font-size:13px;">${fmtMXN(total)}</td>
+        </tr>`
+      ).join('');
+
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a0f0a;">
+          <div style="background:#6b1a2a;padding:24px 32px;border-radius:12px 12px 0 0;">
+            <h1 style="margin:0;color:#fff;font-size:20px;font-weight:400;letter-spacing:0.05em;">Te Quiero Feliz</h1>
+            <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;">Cash Control · Cierre de proyecto</p>
+          </div>
+          <div style="background:#fff;padding:28px 32px;border:1px solid #e5d9d0;border-top:none;border-radius:0 0 12px 12px;">
+            <p style="margin:0 0 4px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Proyecto:</strong> ${projectName}</p>
+            ${projectData.dateStart ? `<p style="margin:0 0 4px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Abierto:</strong> ${fmtDate(projectData.dateStart as string)}</p>` : ''}
+            <p style="margin:0 0 4px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Cerrado:</strong> ${fmtDate(closedAt)}</p>
+            <p style="margin:0 0 20px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Cerrado por:</strong> ${closerName}</p>
+
+            <table style="width:100%;border-collapse:collapse;margin-bottom:28px;">${summaryRows}</table>
+
+            ${userSections ? `
+            <p style="margin:0 0 12px;font-size:11px;font-weight:600;color:#1a0f0a;letter-spacing:0.08em;text-transform:uppercase;border-bottom:2px solid #e5d9d0;padding-bottom:8px;">Riepilogo per utente</p>
+            ${userSections}` : ''}
+
+            ${catRows ? `
+            <p style="margin:20px 0 10px;font-size:11px;font-weight:600;color:#1a0f0a;letter-spacing:0.08em;text-transform:uppercase;border-bottom:2px solid #e5d9d0;padding-bottom:8px;">Gastos por categoría</p>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+              <tbody>${catRows}</tbody>
+            </table>` : ''}
+
+            <a href="${SITE}/planner/cash-control/${projectId}" style="display:inline-block;background:#6b1a2a;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;">
+              Ver proyecto →
+            </a>
+          </div>
+        </div>`;
 
       await getResend().emails.send({
-        from: FROM,
-        to: ['admin@tequierofeliz.mx'],
-        subject: `Cierre Cash Control: ${projectName} — ${userName}`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a0f0a;">
-            <div style="background:#6b1a2a;padding:24px 32px;border-radius:12px 12px 0 0;">
-              <h1 style="margin:0;color:#fff;font-size:20px;font-weight:400;letter-spacing:0.05em;">Te Quiero Feliz</h1>
-              <p style="margin:4px 0 0;color:rgba(255,255,255,0.7);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;">Cash Control · Cierre de proyecto</p>
-            </div>
-            <div style="background:#fff;padding:28px 32px;border:1px solid #e5d9d0;border-top:none;border-radius:0 0 12px 12px;">
-              <p style="margin:0 0 6px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Proyecto:</strong> ${projectName}</p>
-              <p style="margin:0 0 20px;font-size:14px;color:#555;"><strong style="color:#1a0f0a;">Cerrado por:</strong> ${userName}</p>
-
-              <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:24px;">
-                <tr style="border-bottom:1px solid #e5d9d0;">
-                  <td style="padding:10px 0;color:#555;">Total entradas</td>
-                  <td style="padding:10px 0;text-align:right;color:#166534;font-weight:500;">${fmtMXN(totalIncome)}</td>
-                </tr>
-                <tr style="border-bottom:1px solid #e5d9d0;">
-                  <td style="padding:10px 0;color:#555;">Total gastos</td>
-                  <td style="padding:10px 0;text-align:right;color:#991b1b;font-weight:500;">${fmtMXN(totalExpense)}</td>
-                </tr>
-                <tr>
-                  <td style="padding:12px 0 0;font-weight:600;color:#1a0f0a;">Saldo final</td>
-                  <td style="padding:12px 0 0;text-align:right;font-weight:700;color:${balanceColor};font-size:16px;">${fmtMXN(saldo)}</td>
-                </tr>
-              </table>
-
-              ${movementRows ? `
-              <p style="margin:0 0 8px;font-size:12px;font-weight:600;color:#1a0f0a;letter-spacing:0.08em;text-transform:uppercase;">Detalle de movimientos</p>
-              <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-                <thead>
-                  <tr style="border-bottom:2px solid #e5d9d0;">
-                    <th style="padding:6px 0;text-align:left;font-size:11px;color:#999;font-weight:500;">Fecha</th>
-                    <th style="padding:6px 0;text-align:left;font-size:11px;color:#999;font-weight:500;">Tipo</th>
-                    <th style="padding:6px 0;text-align:left;font-size:11px;color:#999;font-weight:500;">Descripción</th>
-                    <th style="padding:6px 0;text-align:left;font-size:11px;color:#999;font-weight:500;">Método</th>
-                    <th style="padding:6px 0;text-align:right;font-size:11px;color:#999;font-weight:500;">Monto</th>
-                  </tr>
-                </thead>
-                <tbody>${movementRows}</tbody>
-              </table>` : ''}
-
-              <a href="${SITE}/planner/cash-control" style="display:inline-block;background:#6b1a2a;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;margin-top:8px;">
-                Ver Cash Control
-              </a>
-            </div>
-          </div>
-        `,
+        from:    FROM,
+        to:      [TO],
+        subject: `Cierre Cash Control: ${projectName} — ${closerName}`,
+        html,
       });
+
+      // Record successful send
+      await projectRef.update({
+        reportSentAt:      new Date().toISOString(),
+        reportSentTo:      TO,
+        reportEmailFailed: false,
+      });
+
     } catch (emailErr) {
-      // Email failure is non-fatal — project is already closed
       console.error('[teqf-close] email error:', emailErr);
+      emailFailed = true;
+      // Persist failure flag — client will show "Reinvia report" button
+      await projectRef.update({ reportEmailFailed: true }).catch(console.error);
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, emailFailed });
+
   } catch (err: unknown) {
     console.error('[teqf-close]', err);
     const message = err instanceof Error ? err.message : 'Error interno.';

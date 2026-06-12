@@ -48,5 +48,13 @@
   "langSwitch": "IT",
   "selectPaymentMethod": "Seleccionar método",
   "paymentMethodHint": "¿Cómo se recibió el dinero?",
-  "next": "Siguiente"
+  "next": "Siguiente",
+  "deleteProject": "Eliminar proyecto",
+  "deleteProjectConfirm": "¿Eliminar \"{name}\"? Los movimientos se conservarán por razones contables.",
+  "projectDeleted": "Proyecto eliminado.",
+  "reopenAccount": "Reabrir cuenta",
+  "reopenOk": "Cuenta reabierta.",
+  "reportEmailFailed": "Reporte no enviado.",
+  "resendReport": "Reenviar reporte",
+  "resendReportOk": "Reporte enviado."
 }

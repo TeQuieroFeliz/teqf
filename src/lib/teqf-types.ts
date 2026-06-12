@@ -16,6 +16,14 @@ export type TeqfProject = {
   isClosed?: boolean;
   closedAt?: string;
   closedBy?: string;
+  // Soft delete — documents are never physically removed (accounting data)
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  // Email report tracking
+  reportSentAt?: string;
+  reportSentTo?: string;
+  reportEmailFailed?: boolean;
 };
 
 // ── Cash Control ──────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Calendar,
+  Lock,
   Loader2,
   Pencil,
   Plus,
@@ -222,7 +223,7 @@ export default function CashControlPage() {
       snap => {
         setProjects(snap.docs
           .map(d => ({ id: d.id, ...d.data() } as TeqfProject))
-          .filter(p => p.status === 'active'));
+          .filter(p => !p.deleted));
         setLoading(false);
       },
       () => setLoading(false)
@@ -257,10 +258,14 @@ export default function CashControlPage() {
   const createdByName = adminUser?.name  ?? plannerUser?.name  ?? 'TeQF';
 
   async function handleDeleteProject(p: TeqfProject) {
-    if (!confirm(`Eliminare il progetto "${p.name}"? Questa azione non è reversibile.`)) return;
+    const msg = `Eliminare "${p.name}"?\nI movimenti verranno conservati per ragioni contabili.`;
+    if (!confirm(msg)) return;
     try {
       await updateDoc(doc(db, 'teqfProjects', p.id), {
-        status: 'archived', updatedAt: new Date().toISOString(),
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: createdBy,
+        updatedAt: new Date().toISOString(),
       });
       toast.success('Progetto eliminato.');
     } catch (e: any) {
@@ -358,10 +363,18 @@ export default function CashControlPage() {
                     <Wallet className="size-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-base font-medium truncate"
-                      style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-display)', fontWeight: 400 }}>
-                      {p.name}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-base font-medium truncate"
+                        style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-display)', fontWeight: 400 }}>
+                        {p.name}
+                      </p>
+                      {p.isClosed && (
+                        <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+                          style={{ background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                          <Lock className="size-2.5" /> Chiuso
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                       {(p.dateStart || p.dateEnd) && (
                         <span className="flex items-center gap-1 text-xs"
@@ -380,7 +393,8 @@ export default function CashControlPage() {
                   </div>
                 </Link>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                  {canManageCashControl && (
+                  {/* Rename/delete only when project is open, or when superAdmin */}
+                  {((canManageCashControl && !p.isClosed) || isSuperAdmin) && (
                     <>
                       <button
                         onClick={() => setRenamingProject(p)}
@@ -397,8 +411,8 @@ export default function CashControlPage() {
                     </>
                   )}
                   <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
-                    style={{ background: '#f0fdf4', color: '#15803d', fontFamily: 'var(--font-body)' }}>
-                    Cash Control →
+                    style={{ background: p.isClosed ? '#fef2f2' : '#f0fdf4', color: p.isClosed ? '#991b1b' : '#15803d', fontFamily: 'var(--font-body)' }}>
+                    {p.isClosed ? 'Sola lettura →' : 'Cash Control →'}
                   </span>
                   <ArrowRight className="size-4 sm:hidden" style={{ color: 'var(--tqf-muted)' }} />
                 </div>
