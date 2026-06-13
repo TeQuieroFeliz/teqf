@@ -9,6 +9,8 @@ import {
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import ReadOnlyBanner from '@/components/planner/ReadOnlyBanner';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import { db, storage } from '@/firebase/client';
 import { collection, doc, getDocs, getDoc, orderBy, query } from 'firebase/firestore';
 import { compressFurnitureImage } from '@/lib/furniture/compressImage';
@@ -141,6 +143,7 @@ function StandbyCard({
   onRemove: () => void;
   onAddCity: (city: string) => void;
 }) {
+  const { t } = useI18n();
   const [showNewCat,  setShowNewCat]  = useState(false);
   const [newCat,      setNewCat]      = useState('');
   const [showNewCity, setShowNewCity] = useState(false);
@@ -186,14 +189,14 @@ function StandbyCard({
       const res = await fetch('/api/remove-background', { method: 'POST', body: fd });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? `Errore ${res.status}`);
+        throw new Error((body as { error?: string }).error ?? `Error ${res.status}`);
       }
       const blob = await res.blob();
       setProcessedBlob(blob);
       setProcessedLocalUrl(URL.createObjectURL(blob));
       setBgState('comparing');
     } catch (err) {
-      setBgError(err instanceof Error ? err.message : 'Errore sconosciuto');
+      setBgError(err instanceof Error ? err.message : 'Unknown error');
       setBgState('error');
     }
   };
@@ -218,7 +221,7 @@ function StandbyCard({
       setBgState('idle');
     } catch {
       setBgState('error');
-      setBgError('Errore durante il caricamento su Firebase');
+      setBgError('Firebase upload error');
     }
   };
 
@@ -247,7 +250,7 @@ function StandbyCard({
             {/* Original */}
             <div className="relative flex flex-col" style={{ borderRight: '1px solid var(--tqf-cipria)', background: '#f8f6f2' }}>
               <p className="text-center py-1" style={{ fontSize: '0.6rem', letterSpacing: '0.08em', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', textTransform: 'uppercase' }}>
-                Originale
+                {t('furniture_original')}
               </p>
               <div className="flex-1 flex items-center justify-center overflow-hidden px-1 pb-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -258,7 +261,7 @@ function StandbyCard({
             {/* Processed */}
             <div className="relative flex flex-col" style={CHECKERBOARD}>
               <p className="text-center py-1" style={{ fontSize: '0.6rem', letterSpacing: '0.08em', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', fontWeight: 500, background: 'var(--tqf-cipria-light)' }}>
-                ✦ Sfondo Rimosso
+                {t('furniture_bgRemoved')}
               </p>
               <div className="flex-1 flex items-center justify-center overflow-hidden px-1 pb-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -272,12 +275,12 @@ function StandbyCard({
             <button type="button" onClick={handleChooseOriginal}
               className="py-2 text-xs transition-opacity hover:opacity-80"
               style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)', background: 'white', border: 'none', borderRight: '1px solid var(--tqf-cipria)' }}>
-              Usa Originale
+              {t('furniture_useOriginal')}
             </button>
             <button type="button" onClick={handleChooseProcessed}
               className="py-2 text-xs transition-opacity hover:opacity-80"
               style={{ fontFamily: 'var(--font-body)', color: 'white', background: 'var(--tqf-bordeaux)', border: 'none' }}>
-              Usa Sfondo Rimosso
+              {t('furniture_useBgRemoved')}
             </button>
           </div>
         </div>
@@ -302,7 +305,7 @@ function StandbyCard({
             </button>
             <span className="absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full"
               style={{ background: 'var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.08em' }}>
-              {isProcessed ? 'BG RIMOSSO' : 'STANDBY'}
+              {isProcessed ? t('furniture_bgRemovedBadge') : 'STANDBY'}
             </span>
           </div>
 
@@ -314,14 +317,14 @@ function StandbyCard({
                   className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80"
                   style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}>
                   <Scissors className="size-3" />
-                  Rimuovi Sfondo
+                  {t('furniture_removeBg')}
                 </button>
                 {isProcessed && (
                   <button type="button" onClick={handleRestore}
                     className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-70"
                     style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}>
                     <RotateCcw className="size-3" />
-                    Ripristina
+                    {t('furniture_restore')}
                   </button>
                 )}
               </div>
@@ -330,7 +333,7 @@ function StandbyCard({
               <div className="flex items-center gap-1.5">
                 <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
                 <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
-                  Rimozione sfondo in corso…
+                  {t('furniture_removingBg')}
                 </span>
               </div>
             )}
@@ -338,7 +341,7 @@ function StandbyCard({
               <div className="flex items-center gap-1.5">
                 <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
                 <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
-                  Caricamento immagine…
+                  {t('furniture_uploadingImage')}
                 </span>
               </div>
             )}
@@ -351,7 +354,7 @@ function StandbyCard({
                   className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-80 flex-shrink-0"
                   style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', background: 'white' }}>
                   <RotateCcw className="size-3" />
-                  Riprova
+                  {t('furniture_retry')}
                 </button>
               </div>
             )}
@@ -369,7 +372,7 @@ function StandbyCard({
         {/* Name */}
         <div>
           <label className="block mb-1" style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Nome *
+            {t('furniture_nameItemLabel')}
           </label>
           <input
             type="text" value={item.name} placeholder={item.fileName}
@@ -381,17 +384,17 @@ function StandbyCard({
         {/* Category */}
         <div>
           <label className="block mb-1" style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Categoria *
+            {t('furniture_categoryRequired')}
           </label>
           {!showNewCat ? (
             <select value={item.category} onChange={e => e.target.value === '__new__' ? setShowNewCat(true) : onUpdate({ category: e.target.value })} style={inp}>
-              <option value="">— Seleziona —</option>
+              <option value="">{t('furniture_selectPlaceholder')}</option>
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="__new__">＋ Nuova categoria...</option>
+              <option value="__new__">{t('furniture_addCategoryOption')}</option>
             </select>
           ) : (
             <div className="flex gap-1.5">
-              <input type="text" value={newCat} autoFocus placeholder="Nome categoria..."
+              <input type="text" value={newCat} autoFocus placeholder={t('furniture_categoryNewPlaceholder')}
                 onChange={e => setNewCat(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && newCat.trim()) { onUpdate({ category: newCat.trim() }); setShowNewCat(false); setNewCat(''); } }}
                 style={{ ...inp, flex: 1 }} />
@@ -412,7 +415,7 @@ function StandbyCard({
         {/* Price + currency */}
         <div>
           <label className="block mb-1" style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Prezzo *
+            {t('furniture_priceRequired')}
           </label>
           <div className="flex gap-1.5">
             <input type="number" min={0} step={0.01} placeholder="0.00"
@@ -429,7 +432,7 @@ function StandbyCard({
         {/* Cities */}
         <div>
           <label className="block mb-1.5" style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Città *
+            {t('furniture_cityLabel')} *
           </label>
           <div className="flex flex-wrap gap-1.5">
             {cities.map(city => {
@@ -446,12 +449,12 @@ function StandbyCard({
               <button type="button" onClick={() => setShowNewCity(true)}
                 className="flex items-center gap-1 text-xs px-2 py-1 rounded-full transition-all"
                 style={{ fontFamily: 'var(--font-body)', fontSize: '0.65rem', border: '1px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'transparent' }}>
-                <Plus className="size-3" /> Nuova
+                <Plus className="size-3" /> {t('furniture_new')}
               </button>
             ) : (
               <div className="flex items-center gap-1 mt-1 w-full">
                 <input
-                  type="text" value={newCity} autoFocus placeholder="Nome città..."
+                  type="text" value={newCity} autoFocus placeholder={t('furniture_cityNewPlaceholder')}
                   onChange={e => setNewCity(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleAddCity(); if (e.key === 'Escape') { setShowNewCity(false); setNewCity(''); } }}
                   style={{ ...inp, flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.75rem' }}
@@ -476,13 +479,13 @@ function StandbyCard({
           <button type="button" onClick={onRemove}
             className="flex-1 text-xs py-2 rounded-lg transition-opacity hover:opacity-70"
             style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}>
-            Scarta
+            {t('furniture_discard')}
           </button>
           <button type="button" onClick={onSave} disabled={!canSave}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}>
             {item.saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-            Salva
+            {t('furniture_saveButton')}
           </button>
         </div>
       </div>
@@ -499,6 +502,7 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
   deleting: boolean;
   canEdit: boolean;
 }) {
+  const { t } = useI18n();
   const colors = categoryColor(item.category, allCategories);
   const MAX_CITIES = 2;
   const visibleCities = item.cities.slice(0, MAX_CITIES);
@@ -533,7 +537,7 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
             ? { background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' }
             : { background: '#f3f4f6', color: '#6b7280', border: '1px solid #e5e7eb' }),
         }}>
-          {item.published ? 'Pubblicato' : 'Bozza'}
+          {item.published ? t('furniture_published') : t('draft')}
         </span>
 
         {/* Admin action overlay — hidden for read-only users */}
@@ -545,7 +549,7 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-80"
               style={{ background: 'white', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', textDecoration: 'none', fontWeight: 500 }}
             >
-              <Edit2 className="size-3" /> Modifica
+              <Edit2 className="size-3" /> {t('furniture_editButton')}
             </Link>
             <button
               type="button" onClick={e => { e.stopPropagation(); onDelete(); }}
@@ -570,7 +574,7 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
           {item.category}{item.description ? ` · ${item.description}` : ''}
         </p>
         <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontSize: '1.15rem', fontWeight: 400, lineHeight: 1.2 }}>
-          {item.name || <span style={{ opacity: 0.35 }}>Senza nome</span>}
+          {item.name || <span style={{ opacity: 0.35 }}>{t('furniture_untitled')}</span>}
         </h3>
         {item.cities.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -600,6 +604,7 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
 
 export default function AdminFurniturePage() {
   const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
+  const { t } = useI18n();
 
   const [items, setItems]           = useState<FurnitureItem[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -748,10 +753,10 @@ export default function AdminFurniturePage() {
       };
       setItems(prev => [newItem, ...prev]);
       removeStandby(id);
-      toast.success(`"${s.name}" aggiunto al catalogo.`);
+      toast.success(t('furniture_addedToast', { name: s.name }));
     } else {
       updateStandby(id, { saving: false });
-      toast.error('Errore salvataggio.');
+      toast.error(t('furniture_saveError'));
     }
   };
 
@@ -765,14 +770,14 @@ export default function AdminFurniturePage() {
 
   // ── Delete item ─────────────────────────────────────────────────────────────
   const handleDelete = async (item: FurnitureItem) => {
-    if (!confirm(`Eliminare "${item.name}"?`)) return;
+    if (!confirm(t('furniture_deleteConfirm', { name: item.name }))) return;
     setDeletingId(item.id);
     const result = await deleteFurnitureItem(item.id);
     if (result.success) {
       setItems(prev => prev.filter(i => i.id !== item.id));
-      toast.success('Elemento eliminato.');
+      toast.success(t('furniture_deleted'));
     } else {
-      toast.error(result.error ?? 'Errore eliminazione.');
+      toast.error(result.error ?? t('furniture_deleteError'));
     }
     setDeletingId(null);
   };
@@ -810,7 +815,7 @@ export default function AdminFurniturePage() {
         <div className="flex items-center gap-4">
           <Link href="/planner" className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            <ArrowLeft className="size-4" /> Dashboard
+            <ArrowLeft className="size-4" /> {t('dashboard')}
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2">
@@ -818,7 +823,7 @@ export default function AdminFurniturePage() {
               <Sofa className="size-4" />
             </div>
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Catalogo Mobili
+              {t('furniture_title')}
             </h1>
           </div>
         </div>
@@ -833,7 +838,7 @@ export default function AdminFurniturePage() {
                 style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', fontFamily: 'var(--font-body)' }}
               >
                 <Upload className="size-4" />
-                Carica Immagini
+                {t('furniture_uploadImages')}
               </button>
               <input ref={bulkRef} type="file" accept="image/*" multiple className="hidden"
                 onChange={e => handleBulkUpload(e.target.files)} />
@@ -842,16 +847,17 @@ export default function AdminFurniturePage() {
               <Link href="/planner/furniture/new"
                 className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-                <Plus className="size-4" /> Nuovo
+                <Plus className="size-4" /> {t('furniture_new')}
               </Link>
             </>
           )}
 
+          <LanguageSelector />
           <button onClick={logout}
             className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
             style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}>
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">Esci</span>
+            <span className="hidden sm:inline">{t('logout')}</span>
           </button>
         </div>
       </header>
@@ -862,7 +868,7 @@ export default function AdminFurniturePage() {
         {uploads.filter(u => !u.done).length > 0 && (
           <div className="rounded-2xl p-5 space-y-3" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             <p className="text-sm font-medium" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
-              Caricamento in corso…
+              {t('furniture_uploading')}
             </p>
             {uploads.filter(u => !u.done).map(u => (
               <div key={u.id}>
@@ -890,7 +896,7 @@ export default function AdminFurniturePage() {
               </span>
               <div className="flex-1 h-px" style={{ background: 'var(--tqf-beige-border)' }} />
               <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Rinomina e configura per pubblicare
+                {t('furniture_standby_hint')}
               </p>
             </div>
 
@@ -914,7 +920,7 @@ export default function AdminFurniturePage() {
           {/* Filter pills */}
           {allCategories.length > 1 && (
             <div className="flex gap-2 flex-wrap mb-6">
-              <button onClick={() => setCatFilter('all')} style={pill(catFilter === 'all')}>Tutto</button>
+              <button onClick={() => setCatFilter('all')} style={pill(catFilter === 'all')}>{t('furniture_all')}</button>
               {allCategories.map(cat => (
                 <button key={cat} onClick={() => setCatFilter(cat)} style={pill(catFilter === cat)}>{cat}</button>
               ))}
@@ -935,22 +941,22 @@ export default function AdminFurniturePage() {
                 <Sofa className="size-6" />
               </div>
               <h2 className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                Nessun elemento
+                {t('furniture_noItems')}
               </h2>
               {canEdit ? (
                 <>
                   <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                    Carica immagini per iniziare a costruire il catalogo.
+                    {t('furniture_noItemsDesc')}
                   </p>
                   <button onClick={() => bulkRef.current?.click()}
                     className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
                     style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
-                    <Upload className="size-4" /> Carica Immagini
+                    <Upload className="size-4" /> {t('furniture_uploadImages')}
                   </button>
                 </>
               ) : (
                 <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Nessun elemento nel catalogo.
+                  {t('furniture_noItemsReadOnly')}
                 </p>
               )}
             </div>

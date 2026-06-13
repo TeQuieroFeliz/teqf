@@ -2,6 +2,8 @@
 
 import { createTeqfProject } from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import { db } from '@/firebase/client';
 import { TeqfProject } from '@/lib/teqf-types';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
@@ -23,7 +25,7 @@ import { toast } from 'sonner';
 
 function fmtDate(d: string): string {
   if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
+  return new Date(d + 'T12:00').toLocaleDateString('es-MX', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 }
@@ -51,19 +53,20 @@ function CreateProjectModal({
   createdBy: string;
   createdByName: string;
 }) {
+  const { t } = useI18n();
   const [name,      setName]      = useState('');
   const [dateStart, setDateStart] = useState('');
   const [dateEnd,   setDateEnd]   = useState('');
   const [saving,    setSaving]    = useState(false);
 
   async function handleSave() {
-    if (!name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
+    if (!name.trim()) { toast.error(t('orario_nameRequired')); return; }
     setSaving(true);
     const r = await createTeqfProject({
       name: name.trim(), dateStart, dateEnd, createdBy, createdByName,
     });
-    if (r.success) { toast.success('Progetto creato.'); onCreated(); onClose(); }
-    else toast.error(r.error ?? 'Errore creazione.');
+    if (r.success) { toast.success(t('orario_created')); onCreated(); onClose(); }
+    else toast.error(r.error ?? t('orario_createError'));
     setSaving(false);
   }
 
@@ -78,23 +81,23 @@ function CreateProjectModal({
         <div className="px-5 pb-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nuovo progetto
+              {t('orario_newProjectTitle')}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
           <div>
-            <label style={lbl}>Nome progetto *</label>
+            <label style={lbl}>{t('orario_projectName')}</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder="es. Staff Matrimonio Rossi" autoFocus style={inputSt}
+              placeholder={t('orario_projectNamePlaceholder')} autoFocus style={inputSt}
               onKeyDown={e => e.key === 'Enter' && handleSave()} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={lbl}>Data inizio</label>
+              <label style={lbl}>{t('orario_startDate')}</label>
               <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} style={inputSt} />
             </div>
             <div>
-              <label style={lbl}>Data fine</label>
+              <label style={lbl}>{t('orario_endDate')}</label>
               <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} style={inputSt} />
             </div>
           </div>
@@ -103,12 +106,12 @@ function CreateProjectModal({
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              Crea
+              {t('orario_create')}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('cancel')}
             </button>
           </div>
         </div>
@@ -125,6 +128,7 @@ export default function OrarioDiLavoroPage() {
     plannerUser, adminUser,
     isLoading: authLoading,
   } = usePlannerAuth();
+  const { t } = useI18n();
   const [projects,    setProjects]    = useState<TeqfProject[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showCreate,  setShowCreate]  = useState(false);
@@ -160,10 +164,10 @@ export default function OrarioDiLavoroPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
           <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            Accesso non autorizzato
+            {t('orario_unauthorized')}
           </p>
           <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-            ← Dashboard
+            {t('orario_backDashboard')}
           </Link>
         </div>
       </div>
@@ -183,7 +187,7 @@ export default function OrarioDiLavoroPage() {
           <Link href="/planner"
             className="flex items-center gap-1.5 text-sm flex-shrink-0"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            <ArrowLeft className="size-4" /> Dashboard
+            <ArrowLeft className="size-4" /> {t('dashboard')}
           </Link>
           <div className="h-4 w-px flex-shrink-0" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2 min-w-0">
@@ -193,23 +197,26 @@ export default function OrarioDiLavoroPage() {
             </div>
             <div className="min-w-0">
               <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                Orario di Lavoro
+                {t('orario_title')}
               </h1>
               <p className="text-xs hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Registra ore lavorate dei dipendenti
+                {t('orario_subtitle')}
               </p>
             </div>
           </div>
         </div>
 
-        {canManageCashControl && (
-          <button onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl flex-shrink-0"
-            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">Nuovo progetto</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <LanguageSelector />
+          {canManageCashControl && (
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl flex-shrink-0"
+              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">{t('orario_newProject')}</span>
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
@@ -222,23 +229,23 @@ export default function OrarioDiLavoroPage() {
             </div>
             <p className="text-base mb-1"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nessun progetto ancora
+              {t('orario_noProjects')}
             </p>
             <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Crea un progetto per iniziare a registrare gli orari del team.
+              {t('orario_noProjectsDesc')}
             </p>
             {canManageCashControl && (
               <button onClick={() => setShowCreate(true)}
                 className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-xl"
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-                <Plus className="size-4" /> Crea primo progetto
+                <Plus className="size-4" /> {t('orario_createFirst')}
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-3">
             <p className="text-sm mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {projects.length} {projects.length === 1 ? 'progetto' : 'progetti'} · seleziona per gestire l&apos;orario del team
+              {t('orario_projectsHint', { n: projects.length })}
             </p>
             {projects.map(p => (
               <Link key={p.id}
@@ -275,7 +282,7 @@ export default function OrarioDiLavoroPage() {
                 <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                   <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
                     style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                    Orario →
+                    {t('orario_schedule')}
                   </span>
                   <ArrowRight className="size-4 sm:hidden" style={{ color: 'var(--tqf-muted)' }} />
                 </div>

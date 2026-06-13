@@ -9,7 +9,8 @@ import { formatCurrency } from '@/lib/format';
 import { compressImage } from '@/lib/cash-control/compressImage';
 import { TeqfCashMovement, TeqfMovementType, TeqfPaymentMethod, TeqfProject } from '@/lib/teqf-types';
 import { useT } from '@/hooks/useT';
-import IT from '@/locales/cash-control/it.json';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import EN from '@/locales/cash-control/en.json';
 import ES from '@/locales/cash-control/es.json';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,7 +26,7 @@ import {
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { format as fmtDateFns, parseISO } from 'date-fns';
-import { es as dateES, it as dateIT } from 'date-fns/locale';
+import { es as dateES, enUS as dateEN } from 'date-fns/locale';
 import {
   ArrowLeft,
   CalendarIcon,
@@ -63,10 +64,10 @@ function todayISO(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function fmtLocalDate(iso: string, lang: 'it' | 'es'): string {
+function fmtLocalDate(iso: string, lang: 'en' | 'es'): string {
   if (!iso) return '—';
   try {
-    return fmtDateFns(parseISO(iso), 'dd MMM yyyy', { locale: lang === 'it' ? dateIT : dateES });
+    return fmtDateFns(parseISO(iso), 'dd MMM yyyy', { locale: lang === 'es' ? dateES : dateEN });
   } catch {
     return iso;
   }
@@ -116,9 +117,9 @@ function MovementModal({
   createdByName: string;
   onClose: () => void;
   onSaved: () => void;
-  lang: 'it' | 'es';
+  lang: 'en' | 'es';
 }) {
-  const { t } = useT({ it: IT, es: ES });
+  const { t } = useT({ en: EN, es: ES });
 
   // PART-3: step 1 shows payment-method selector for new income movements
   const [step, setStep] = useState<'methodSelect' | 'form'>(() =>
@@ -272,7 +273,7 @@ function MovementModal({
   }
 
   const isIncome    = form.type === 'income';
-  const dateLocale  = lang === 'it' ? dateIT : dateES;
+  const dateLocale  = lang === 'es' ? dateES : dateEN;
 
   // ── Step 1: type + payment method ─────────────────────────────────────────
   if (step === 'methodSelect' && !existing) {
@@ -642,7 +643,7 @@ function CloseConfirmSheet({
   onClose: () => void;
   onClosed: (emailFailed: boolean) => void;
 }) {
-  const { t } = useT({ it: IT, es: ES });
+  const { t } = useT({ en: EN, es: ES });
   const [closing, setClosing] = useState(false);
 
   async function handleConfirm() {
@@ -731,8 +732,7 @@ export default function CashControlDetailPage() {
     isLoading: authLoading,
   } = usePlannerAuth();
 
-  // PART-3: IT/ES language switch persisted to localStorage
-  const { t, lang, setLang } = useT({ it: IT, es: ES });
+  const { t, lang } = useT({ en: EN, es: ES });
 
   const [project,   setProject]  = useState<TeqfProject | null>(null);
   const [movements, setMovements] = useState<TeqfCashMovement[]>([]);
@@ -781,11 +781,11 @@ export default function CashControlDetailPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
           <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            Accesso non autorizzato
+            {t('unauthorized')}
           </p>
           <Link href="/planner/cash-control" className="text-sm"
             style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-            ← Cash Control
+            {t('backToCashControl')}
           </Link>
         </div>
       </div>
@@ -808,17 +808,17 @@ export default function CashControlDetailPage() {
 
   async function handleRename() {
     const trimmed = renameDraft.trim();
-    if (!trimmed) { toast.error('Il nome è obbligatorio.'); return; }
+    if (!trimmed) { toast.error(t('nameRequired')); return; }
     if (trimmed === project?.name) { setShowRename(false); return; }
     setRenaming(true);
     try {
       await updateDoc(doc(db, 'teqfProjects', projectId), {
         name: trimmed, updatedAt: new Date().toISOString(),
       });
-      toast.success('Nome aggiornato.');
+      toast.success(t('nameUpdated'));
       setShowRename(false);
     } catch (e: any) {
-      toast.error(e.message ?? 'Errore durante il salvataggio.');
+      toast.error(e.message ?? t('saveError'));
     } finally {
       setRenaming(false);
     }
@@ -938,17 +938,7 @@ export default function CashControlDetailPage() {
             </div>
           </div>
 
-          {/* PART-3: IT/ES language toggle */}
-          <button onClick={() => setLang(lang === 'it' ? 'es' : 'it')}
-            className="text-xs px-2 py-1 rounded-lg flex-shrink-0"
-            style={{
-              border: '1px solid var(--tqf-beige-border)',
-              color: 'var(--tqf-muted)',
-              fontFamily: 'var(--font-body)',
-              background: 'white',
-            }}>
-            {t('langSwitch')}
-          </button>
+          <LanguageSelector />
 
           {canAddMovement && (
             <button onClick={openAdd}
@@ -1177,14 +1167,14 @@ export default function CashControlDetailPage() {
             <div className="px-5 pb-8 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                  Rinomina progetto
+                  {t('renameProject')}
                 </h2>
                 <button onClick={() => setShowRename(false)} style={{ color: 'var(--tqf-muted)' }}>
                   <X className="size-5" />
                 </button>
               </div>
               <div>
-                <label style={lbl}>Nome progetto *</label>
+                <label style={lbl}>{t('projectName')}</label>
                 <input type="text" value={renameDraft} onChange={e => setRenameDraft(e.target.value)}
                   autoFocus style={inputSt}
                   onKeyDown={e => e.key === 'Enter' && handleRename()} />
@@ -1194,12 +1184,12 @@ export default function CashControlDetailPage() {
                   className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
                   style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
                   {renaming && <Loader2 className="size-4 animate-spin" />}
-                  Salva
+                  {t('save')}
                 </button>
                 <button onClick={() => setShowRename(false)}
                   className="px-5 py-3.5 rounded-2xl text-sm"
                   style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Annulla
+                  {t('cancel')}
                 </button>
               </div>
             </div>

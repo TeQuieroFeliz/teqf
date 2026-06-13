@@ -9,6 +9,8 @@ import type { PortfolioProject } from '@/actions/portfolio/portfolio-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import ReadOnlyBanner from '@/components/planner/ReadOnlyBanner';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import { db, storage } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
@@ -42,6 +44,7 @@ function PortfolioPicker({
   onSelect: (imageUrl: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [selectedProject, setSelectedProject] = useState<PortfolioProject | null>(null);
 
   if (selectedProject) {
@@ -61,15 +64,15 @@ function PortfolioPicker({
               <button onClick={() => setSelectedProject(null)}
                 className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
                 style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                <ArrowLeft className="size-4" /> Matrimoni
+                <ArrowLeft className="size-4" /> {t('flowers_weddings')}
               </button>
               <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
               <h3 className="text-base" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                {selectedProject.title || 'Senza titolo'}
+                {selectedProject.title || t('flowers_untitled')}
               </h3>
               <span className="text-xs px-2 py-0.5 rounded-full"
                 style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                {images.length} foto
+                {t('portfolio_photos', { n: images.length })}
               </span>
             </div>
             <button onClick={onClose} className="size-8 flex items-center justify-center rounded-lg hover:opacity-70"
@@ -81,7 +84,7 @@ function PortfolioPicker({
             {images.length === 0 ? (
               <div className="py-16 text-center">
                 <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Nessuna immagine in questo matrimonio
+                  {t('flowers_noImages')}
                 </p>
               </div>
             ) : (
@@ -118,11 +121,11 @@ function PortfolioPicker({
           <div className="flex items-center gap-2">
             <ImagePlus className="size-4" style={{ color: 'var(--tqf-bordeaux)' }} />
             <h3 className="text-base" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Seleziona dal Portfolio
+              {t('flowers_selectFromPortfolio')}
             </h3>
             <span className="text-xs px-2 py-0.5 rounded-full"
               style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-              {projects.length} matrimoni
+              {t('flowers_weddingCount', { n: projects.length })}
             </span>
           </div>
           <button onClick={onClose} className="size-8 flex items-center justify-center rounded-lg hover:opacity-70"
@@ -134,7 +137,7 @@ function PortfolioPicker({
           {projects.length === 0 ? (
             <div className="py-16 text-center">
               <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Nessun progetto nel portfolio
+                {t('flowers_noProjects')}
               </p>
             </div>
           ) : (
@@ -163,14 +166,14 @@ function PortfolioPicker({
                       <div className="absolute bottom-1.5 right-1.5">
                         <span className="text-xs px-1.5 py-0.5 rounded-full"
                           style={{ background: 'rgba(0,0,0,0.55)', color: 'white', fontFamily: 'var(--font-body)', backdropFilter: 'blur(4px)' }}>
-                          {imgCount} foto
+                          {t('portfolio_photos', { n: imgCount })}
                         </span>
                       </div>
                     </div>
                     <div className="px-3 py-2.5">
                       <p className="text-sm leading-tight"
                         style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                        {project.title || 'Senza titolo'}
+                        {project.title || t('flowers_untitled')}
                       </p>
                       {project.location && (
                         <p className="text-xs mt-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
@@ -209,6 +212,7 @@ function CategoryForm({
   saving: boolean;
   title: string;
 }) {
+  const { t } = useI18n();
   const allCats = Array.from(new Set([...DEFAULT_CATEGORIES, ...existingCategories])).sort();
   const [category, setCategory] = useState(initialCategory ?? '');
   const [customCat, setCustomCat] = useState('');
@@ -239,17 +243,17 @@ function CategoryForm({
           <div>
             <label className="block text-xs uppercase tracking-wider mb-1.5"
               style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Categoria *
+              {t('flowers_categoryLabel')}
             </label>
             <select value={category} onChange={e => setCategory(e.target.value)} style={inputStyle}>
-              <option value="">Scegli categoria...</option>
+              <option value="">{t('flowers_categoryPlaceholder')}</option>
               {allCats.map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="__custom__">+ Nuova categoria...</option>
+              <option value="__custom__">{t('flowers_newCategory')}</option>
             </select>
             {useCustom && (
               <input
                 className="mt-2"
-                placeholder="Nome nuova categoria"
+                placeholder={t('flowers_newCategoryName')}
                 value={customCat}
                 onChange={e => setCustomCat(e.target.value)}
                 style={inputStyle}
@@ -259,16 +263,16 @@ function CategoryForm({
           <div>
             <label className="block text-xs uppercase tracking-wider mb-1.5"
               style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Titolo <span style={{ opacity: 0.5 }}>(opzionale)</span>
+              {t('flowers_titleLabel')}
             </label>
-            <input placeholder="es. Gazebo romantico con glicine" value={titleValue}
+            <input placeholder={t('flowers_examplePlaceholder')} value={titleValue}
               onChange={e => setTitleValue(e.target.value)} style={inputStyle} />
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onCancel}
               className="flex-1 py-2.5 rounded-xl text-sm transition-opacity hover:opacity-70"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('cancel')}
             </button>
             <button type="button"
               disabled={!finalCategory || saving}
@@ -276,7 +280,7 @@ function CategoryForm({
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm transition-opacity hover:opacity-80 disabled:opacity-40"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              Salva
+              {t('save')}
             </button>
           </div>
         </div>
@@ -288,6 +292,7 @@ function CategoryForm({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AdminFlowersPage() {
   const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
+  const { t } = useI18n();
 
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -367,9 +372,9 @@ export default function AdminFlowersPage() {
         updatedAt: new Date().toISOString(),
       };
       setItems(prev => [newItem, ...prev]);
-      toast.success('Aggiunto al catalogo ispirazione.');
+      toast.success(t('flowers_added'));
     } else {
-      toast.error('Errore salvataggio.');
+      toast.error(t('flowers_saveError'));
     }
     setSavingItem(false);
     setSelectedImage(null);
@@ -387,22 +392,22 @@ export default function AdminFlowersPage() {
     });
     if (result.success) {
       setItems(prev => prev.map(i => i.id === editingItem.id ? { ...i, category, title } : i));
-      toast.success('Categoria aggiornata.');
+      toast.success(t('flowers_categoryUpdated'));
     } else {
-      toast.error('Errore aggiornamento.');
+      toast.error(t('flowers_categoryUpdateError'));
     }
     setSavingItem(false);
     setEditingItem(null);
   };
 
   const handleDelete = async (item: InspirationItem) => {
-    if (!confirm(`Rimuovere questa foto dalla categoria "${item.category}"?`)) return;
+    if (!confirm(t('flowers_removeConfirm', { cat: item.category }))) return;
     setDeletingId(item.id);
     const result = await deleteInspirationItem(item.id);
     if (result.success) {
       setItems(prev => prev.filter(i => i.id !== item.id));
-      toast.success('Rimosso.');
-    } else toast.error('Errore eliminazione.');
+      toast.success(t('flowers_removed'));
+    } else toast.error(t('flowers_deleteError'));
     setDeletingId(null);
   };
 
@@ -425,7 +430,7 @@ export default function AdminFlowersPage() {
         });
       }
     } catch {
-      toast.error('Errore upload immagine.');
+      toast.error(t('flowers_uploadError'));
     }
     setUploading(false);
     if (uploadRef.current) uploadRef.current.value = '';
@@ -443,7 +448,7 @@ export default function AdminFlowersPage() {
         <div className="flex items-center gap-4">
           <Link href="/planner" className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            <ArrowLeft className="size-4" /> Dashboard
+            <ArrowLeft className="size-4" /> {t('dashboard')}
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2">
@@ -451,16 +456,19 @@ export default function AdminFlowersPage() {
               <Flower2 className="size-4" />
             </div>
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Ispirazione Floreale
+              {t('flowers_title')}
             </h1>
           </div>
         </div>
-        <button onClick={logout}
-          className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg hover:opacity-80"
-          style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}>
-          <LogOut className="size-4" />
-          <span className="hidden sm:inline">Esci</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSelector />
+          <button onClick={logout}
+            className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg hover:opacity-80"
+            style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}>
+            <LogOut className="size-4" />
+            <span className="hidden sm:inline">{t('logout')}</span>
+          </button>
+        </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
@@ -474,7 +482,7 @@ export default function AdminFlowersPage() {
                   ? { background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }
                   : { background: 'white', color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', fontFamily: 'var(--font-body)' }
                 }>
-                {cat === 'all' ? `Tutte (${items.length})` : `${cat} (${grouped[cat]?.length ?? 0})`}
+                {cat === 'all' ? t('flowers_allFilter', { n: items.length }) : `${cat} (${grouped[cat]?.length ?? 0})`}
               </button>
             ))}
           </div>
@@ -483,7 +491,7 @@ export default function AdminFlowersPage() {
               className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
               style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
               {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-              Carica immagine
+              {t('flowers_uploadImage')}
             </button>
             <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden"
               onChange={e => handleDirectUpload(e.target.files)} />
@@ -491,7 +499,7 @@ export default function AdminFlowersPage() {
               className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               <ImagePlus className="size-4" />
-              Da Portfolio
+              {t('flowers_fromPortfolio')}
             </button>
           </div>
         </div>
@@ -508,16 +516,16 @@ export default function AdminFlowersPage() {
               <Sparkles className="size-7" />
             </div>
             <h2 className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Galleria vuota
+              {t('flowers_emptyTitle')}
             </h2>
             <p className="text-sm mb-6 max-w-xs mx-auto" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Seleziona foto dal portfolio o carica nuove immagini per iniziare a costruire la galleria ispirazione.
+              {t('flowers_emptyDesc')}
             </p>
             <button type="button" onClick={openPicker}
               className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               <ImagePlus className="size-4" />
-              Seleziona dal Portfolio
+              {t('flowers_selectFromPortfolio')}
             </button>
           </div>
         ) : catFilter === 'all' ? (
@@ -581,7 +589,7 @@ export default function AdminFlowersPage() {
           onSave={handleSaveItem}
           onCancel={() => setSelectedImage(null)}
           saving={savingItem}
-          title="Aggiungi all'ispirazione"
+          title={t('flowers_addToInspiration')}
         />
       )}
 
@@ -595,7 +603,7 @@ export default function AdminFlowersPage() {
           onSave={handleEditItem}
           onCancel={() => setEditingItem(null)}
           saving={savingItem}
-          title="Modifica categoria"
+          title={t('flowers_editCategory')}
         />
       )}
     </div>

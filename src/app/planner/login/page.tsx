@@ -1,6 +1,8 @@
 'use client';
 
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -8,6 +10,7 @@ import { useState } from 'react';
 
 export default function PlannerLoginPage() {
   const { loginWithEmail, isLoading, authError } = usePlannerAuth();
+  const { t } = useI18n();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd]   = useState(false);
@@ -34,6 +37,11 @@ export default function PlannerLoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--tqf-beige)' }}>
+      {/* Language selector — top right corner */}
+      <div className="fixed top-4 right-4 z-10">
+        <LanguageSelector />
+      </div>
+
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8 gap-2">
@@ -50,17 +58,17 @@ export default function PlannerLoginPage() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.65rem', letterSpacing: '0.18em', marginTop: '4px' }}>
-              AREA PLANNER
+              {t('plannerArea')}
             </p>
           </div>
         </div>
 
         <div className="rounded-2xl p-7" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
           <h1 className="text-xl mb-1" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-            Accedi
+            {t('loginTitle')}
           </h1>
           <p className="text-xs mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Inserisci le tue credenziali per accedere all&apos;area riservata
+            {t('loginSubtitle')}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -112,21 +120,21 @@ export default function PlannerLoginPage() {
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
             >
               {submitting && <Loader2 className="size-4 animate-spin" />}
-              Accedi
+              {t('loginTitle')}
             </button>
           </form>
         </div>
 
         <div className="flex items-center justify-center gap-1.5 mt-5">
           <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Non hai un account?
+            {t('loginNoAccount')}
           </p>
           <Link
             href="/planner/register"
             className="text-xs font-medium transition-opacity hover:opacity-70"
             style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
           >
-            Registrati
+            {t('loginRegister')}
           </Link>
         </div>
       </div>

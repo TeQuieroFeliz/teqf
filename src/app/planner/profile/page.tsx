@@ -2,6 +2,8 @@
 
 import { updatePlannerAvatar, updatePlannerProfile } from '@/actions/planner/planner-auth';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import { storage } from '@/firebase/client';
 import { CONTRACT_TYPES } from '@/lib/planner-types';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
@@ -35,6 +37,7 @@ const labelStyle: React.CSSProperties = {
 
 export default function PlannerProfilePage() {
   const { plannerUser, refreshPlannerUser } = usePlannerAuth();
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarProgress, setAvatarProgress] = useState(0);
@@ -79,11 +82,11 @@ export default function PlannerProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      toast.error('Seleziona un file immagine.');
+      toast.error(t('profile_photoTypeError'));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast.error('Immagine troppo grande (max 5 MB).');
+      toast.error(t('profile_photoSizeError'));
       return;
     }
 
@@ -98,7 +101,7 @@ export default function PlannerProfilePage() {
       'state_changed',
       (snap) => setAvatarProgress(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
       () => {
-        toast.error('Errore upload foto.');
+        toast.error(t('profile_photoUploadError'));
         setAvatarUploading(false);
       },
       async () => {
@@ -106,9 +109,9 @@ export default function PlannerProfilePage() {
         const result = await updatePlannerAvatar(plannerUser!.id, url);
         if (result.success) {
           await refreshPlannerUser();
-          toast.success('Foto profilo aggiornata.');
+          toast.success(t('profile_photoUpdated'));
         } else {
-          toast.error(result.error ?? 'Errore salvataggio foto.');
+          toast.error(result.error ?? t('profile_photoSaveError'));
         }
         setAvatarUploading(false);
       }
@@ -118,7 +121,7 @@ export default function PlannerProfilePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) {
-      toast.error('Il nome è obbligatorio.');
+      toast.error(t('profile_nameRequired'));
       return;
     }
     setSaving(true);
@@ -134,9 +137,9 @@ export default function PlannerProfilePage() {
     });
     if (result.success) {
       await refreshPlannerUser();
-      toast.success('Profilo aggiornato.');
+      toast.success(t('profile_saved'));
     } else {
-      toast.error(result.error ?? 'Errore aggiornamento profilo.');
+      toast.error(result.error ?? t('profile_saveError'));
     }
     setSaving(false);
   }
@@ -162,23 +165,26 @@ export default function PlannerProfilePage() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              AREA PLANNER
+              PLANNER AREA
             </p>
           </div>
         </Link>
-        <Link
-          href="/planner"
-          className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-          style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-        >
-          <ArrowLeft className="size-4" />
-          Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          <LanguageSelector />
+          <Link
+            href="/planner"
+            className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
+            style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+          >
+            <ArrowLeft className="size-4" />
+            {t('dashboard')}
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-8">
         <h1 className="text-2xl mb-6" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-          Il mio profilo
+          {t('profile_title')}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -242,12 +248,12 @@ export default function PlannerProfilePage() {
                 className="mt-2 text-xs transition-opacity hover:opacity-70 disabled:opacity-40"
                 style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
               >
-                Cambia foto profilo
+                {t('profile_changePhoto')}
               </button>
             </div>
           </section>
 
-          {/* Dati personali */}
+          {/* Personal data */}
           <section
             className="rounded-2xl p-6"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
@@ -255,65 +261,65 @@ export default function PlannerProfilePage() {
             <div className="flex items-center gap-2 mb-5">
               <User className="size-4" style={{ color: 'var(--tqf-bordeaux)' }} />
               <h2 className="text-base" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                Dati personali
+                {t('profile_personalData')}
               </h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label style={labelStyle}>Nome *</label>
-                <input value={form.name} onChange={set('name')} required style={inputStyle} placeholder="Nome" />
+                <label style={labelStyle}>{t('profile_firstName')}</label>
+                <input value={form.name} onChange={set('name')} required style={inputStyle} placeholder={t('profile_firstName')} />
               </div>
               <div>
-                <label style={labelStyle}>Cognome</label>
-                <input value={form.lastName} onChange={set('lastName')} style={inputStyle} placeholder="Cognome" />
+                <label style={labelStyle}>{t('profile_lastName')}</label>
+                <input value={form.lastName} onChange={set('lastName')} style={inputStyle} placeholder={t('profile_lastName')} />
               </div>
               <div>
-                <label style={labelStyle}>Data di nascita</label>
+                <label style={labelStyle}>{t('profile_birthDate')}</label>
                 <input type="date" value={form.birthDate} onChange={set('birthDate')} style={inputStyle} />
               </div>
               <div>
-                <label style={labelStyle}>Numero di telefono</label>
-                <input type="tel" value={form.phone} onChange={set('phone')} style={inputStyle} placeholder="+52 55 1234 5678" />
+                <label style={labelStyle}>{t('profile_phone')}</label>
+                <input type="tel" value={form.phone} onChange={set('phone')} style={inputStyle} placeholder={t('profile_phonePlaceholder')} />
               </div>
               <div className="sm:col-span-2">
-                <label style={labelStyle}>Email di contatto</label>
-                <input type="email" value={form.contactEmail} onChange={set('contactEmail')} style={inputStyle} placeholder="email@esempio.com" />
+                <label style={labelStyle}>{t('profile_email')}</label>
+                <input type="email" value={form.contactEmail} onChange={set('contactEmail')} style={inputStyle} placeholder={t('profile_emailPlaceholder')} />
                 <p className="mt-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  Può essere diversa dall&apos;email di accesso
+                  {t('profile_emailHint')}
                 </p>
               </div>
             </div>
           </section>
 
-          {/* Dati lavorativi */}
+          {/* Work data */}
           <section
             className="rounded-2xl p-6"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
           >
             <h2 className="text-base mb-5" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Dati lavorativi
+              {t('profile_workData')}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label style={labelStyle}>Data di inizio lavoro</label>
+                <label style={labelStyle}>{t('profile_startDate')}</label>
                 <input type="date" value={form.startDate} onChange={set('startDate')} style={inputStyle} />
               </div>
               <div>
-                <label style={labelStyle}>Tipo di contratto</label>
+                <label style={labelStyle}>{t('profile_contractType')}</label>
                 <select value={form.contractType} onChange={set('contractType')} style={inputStyle}>
-                  <option value="">— Seleziona —</option>
+                  <option value="">{t('profile_selectContract')}</option>
                   {CONTRACT_TYPES.map((c) => (
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <label style={labelStyle}>Ruolo nel XB Team</label>
+                <label style={labelStyle}>{t('profile_roleLabel')}</label>
                 <input
                   value={form.role}
                   onChange={set('role')}
                   style={inputStyle}
-                  placeholder="es. Senior Planner, Coordinatrice eventi..."
+                  placeholder={t('profile_rolePlaceholder')}
                 />
               </div>
             </div>
@@ -326,7 +332,7 @@ export default function PlannerProfilePage() {
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
           >
             {saving && <Loader2 className="size-4 animate-spin" />}
-            Salva modifiche
+            {t('profile_save')}
           </button>
         </form>
       </main>

@@ -1,8 +1,10 @@
-// PART-1: ReadOnlyBanner is shown at the top of pages where canView=true but canEdit=false.
+'use client';
 
+import { useI18n } from '@/hooks/useI18n';
 import { Eye } from 'lucide-react';
 
 export default function ReadOnlyBanner() {
+  const { t } = useI18n();
   return (
     <div
       className="flex items-center gap-3 px-4 py-3 mb-4"
@@ -14,7 +16,7 @@ export default function ReadOnlyBanner() {
     >
       <Eye className="size-4 flex-shrink-0" />
       <p className="text-sm" style={{ fontFamily: 'var(--font-body)' }}>
-        Sei in modalità sola lettura — il tuo team non può modificare questa sezione.
+        {t('readOnlyBanner')}
       </p>
     </div>
   );

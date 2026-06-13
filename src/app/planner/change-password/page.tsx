@@ -2,6 +2,8 @@
 
 import { setPlannerMustChangePassword } from '@/actions/planner/planner-auth';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { auth } from '@/firebase/client';
 import { updatePassword } from 'firebase/auth';
 import { Eye, EyeOff, KeyRound, Loader2, LogOut } from 'lucide-react';
@@ -12,45 +14,36 @@ import { toast } from 'sonner';
 
 export default function ChangePasswordPage() {
   const { plannerUser, logout, refreshPlannerUser } = usePlannerAuth();
+  const { t } = useI18n();
   const router = useRouter();
 
-  const [newPassword, setNewPassword]     = useState('');
+  const [newPassword, setNewPassword]         = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showNew, setShowNew]             = useState(false);
-  const [showConfirm, setShowConfirm]     = useState(false);
-  const [saving, setSaving]               = useState(false);
+  const [showNew, setShowNew]                 = useState(false);
+  const [showConfirm, setShowConfirm]         = useState(false);
+  const [saving, setSaving]                   = useState(false);
 
   if (!plannerUser) return null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      toast.error('La password deve avere almeno 6 caratteri.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error('Le password non coincidono.');
-      return;
-    }
+    if (newPassword.length < 6) { toast.error(t('changePwd_tooShort')); return; }
+    if (newPassword !== confirmPassword) { toast.error(t('changePwd_mismatch')); return; }
     setSaving(true);
     try {
       const currentUser = auth.currentUser;
-      if (!currentUser) throw new Error('Sessione scaduta. Rieffettua il login.');
-
-      // Update password in Firebase Auth
+      if (!currentUser) throw new Error(t('changePwd_expired'));
       await updatePassword(currentUser, newPassword);
-
-      // Clear the mustChangePassword flag in Firestore and refresh context
       await setPlannerMustChangePassword(plannerUser!.email, false);
       await refreshPlannerUser();
-
-      toast.success('Password aggiornata con successo!');
+      toast.success(t('changePwd_success'));
       router.replace('/planner');
-    } catch (err: any) {
-      const msg =
-        err.code === 'auth/requires-recent-login'
-          ? 'La sessione è scaduta. Esci e rientra, poi cambia la password.'
-          : err.message ?? 'Errore aggiornamento password.';
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      const message = (err as Error).message;
+      const msg = code === 'auth/requires-recent-login'
+        ? t('changePwd_expired2')
+        : message ?? t('changePwd_error');
       toast.error(msg);
     }
     setSaving(false);
@@ -70,8 +63,11 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--tqf-beige)' }}>
+      <div className="fixed top-4 right-4 z-10">
+        <LanguageSelector />
+      </div>
+
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8 gap-2">
           <Image
             src="/logo.png"
@@ -86,7 +82,7 @@ export default function ChangePasswordPage() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.65rem', letterSpacing: '0.18em', marginTop: '4px' }}>
-              AREA PLANNER
+              {t('plannerArea')}
             </p>
           </div>
         </div>
@@ -95,17 +91,17 @@ export default function ChangePasswordPage() {
           <div className="flex items-center gap-2 mb-1">
             <KeyRound className="size-5" style={{ color: 'var(--tqf-bordeaux)' }} />
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-              Imposta Password
+              {t('changePwd_title')}
             </h1>
           </div>
           <p className="text-xs mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Ciao <strong>{plannerUser.name}</strong>! Devi impostare una nuova password personale prima di continuare.
+            {t('changePwd_instructions', { name: plannerUser.name ?? '' })}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Nuova Password *
+                {t('changePwd_new')}
               </label>
               <div className="relative">
                 <input
@@ -122,13 +118,13 @@ export default function ChangePasswordPage() {
                 </button>
               </div>
               <p className="mt-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Minimo 6 caratteri
+                {t('changePwd_minLength')}
               </p>
             </div>
 
             <div>
               <label className="block text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Conferma Password *
+                {t('changePwd_confirm')}
               </label>
               <div className="relative">
                 <input
@@ -145,10 +141,9 @@ export default function ChangePasswordPage() {
               </div>
             </div>
 
-            {/* Password match indicator */}
             {confirmPassword.length > 0 && (
               <p className="text-xs" style={{ color: newPassword === confirmPassword ? '#15803d' : '#991b1b', fontFamily: 'var(--font-body)' }}>
-                {newPassword === confirmPassword ? '✓ Le password coincidono' : '✗ Le password non coincidono'}
+                {newPassword === confirmPassword ? t('changePwd_match') : t('changePwd_noMatch')}
               </p>
             )}
 
@@ -159,7 +154,7 @@ export default function ChangePasswordPage() {
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
             >
               {saving && <Loader2 className="size-4 animate-spin" />}
-              Salva e continua
+              {t('changePwd_save')}
             </button>
           </form>
         </div>
@@ -170,7 +165,7 @@ export default function ChangePasswordPage() {
           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
         >
           <LogOut className="size-3.5" />
-          Esci
+          {t('logout')}
         </button>
       </div>
     </div>

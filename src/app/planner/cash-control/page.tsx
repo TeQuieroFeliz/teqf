@@ -1,14 +1,15 @@
 'use client';
 
-// PART-3: IT/ES language switch + date localization
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import { db } from '@/firebase/client';
 import { TeqfProject } from '@/lib/teqf-types';
 import { useT } from '@/hooks/useT';
-import IT from '@/locales/cash-control/it.json';
+import EN from '@/locales/cash-control/en.json';
 import ES from '@/locales/cash-control/es.json';
 import { format as fmtDateFns, parseISO } from 'date-fns';
-import { es as dateES, it as dateIT } from 'date-fns/locale';
+import { es as dateES, enUS as dateEN } from 'date-fns/locale';
 import { addDoc, collection, doc, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import {
   ArrowLeft,
@@ -28,10 +29,10 @@ import { toast } from 'sonner';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtDate(d: string, lang: 'it' | 'es'): string {
+function fmtDate(d: string, lang: 'en' | 'es'): string {
   if (!d) return '—';
   try {
-    return fmtDateFns(parseISO(d), 'dd MMM yyyy', { locale: lang === 'it' ? dateIT : dateES });
+    return fmtDateFns(parseISO(d), 'dd MMM yyyy', { locale: lang === 'es' ? dateES : dateEN });
   } catch {
     return d;
   }
@@ -59,13 +60,14 @@ function CreateProjectModal({
   createdBy: string;
   createdByName: string;
 }) {
+  const { t } = useT({ en: EN, es: ES });
   const [name,      setName]      = useState('');
   const [dateStart, setDateStart] = useState('');
   const [dateEnd,   setDateEnd]   = useState('');
   const [saving,    setSaving]    = useState(false);
 
   async function handleSave() {
-    if (!name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
+    if (!name.trim()) { toast.error(t('nameRequired')); return; }
     setSaving(true);
     try {
       const now = new Date().toISOString();
@@ -73,10 +75,10 @@ function CreateProjectModal({
         name: name.trim(), dateStart, dateEnd, createdBy, createdByName,
         status: 'active', createdAt: now, updatedAt: now,
       });
-      toast.success('Progetto creato.');
+      toast.success(t('projectCreated'));
       onClose();
     } catch (e: any) {
-      toast.error(e.message ?? 'Errore creazione.');
+      toast.error(e.message ?? t('saveError'));
     } finally {
       setSaving(false);
     }
@@ -93,23 +95,23 @@ function CreateProjectModal({
         <div className="px-5 pb-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nuovo progetto
+              {t('newProject')}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
           <div>
-            <label style={lbl}>Nome progetto *</label>
+            <label style={lbl}>{t('projectName')}</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
-              placeholder="es. Bilancio Matrimonio Rossi" autoFocus style={inputSt}
+              placeholder={t('projectNamePlaceholder')} autoFocus style={inputSt}
               onKeyDown={e => e.key === 'Enter' && handleSave()} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={lbl}>Data inizio</label>
+              <label style={lbl}>{t('startDate')}</label>
               <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)} style={inputSt} />
             </div>
             <div>
-              <label style={lbl}>Data fine</label>
+              <label style={lbl}>{t('endDate')}</label>
               <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} style={inputSt} />
             </div>
           </div>
@@ -118,12 +120,12 @@ function CreateProjectModal({
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              Crea
+              {t('create')}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('cancel')}
             </button>
           </div>
         </div>
@@ -135,22 +137,23 @@ function CreateProjectModal({
 // ─── Rename modal ─────────────────────────────────────────────────────────────
 
 function RenameModal({ project, onClose }: { project: TeqfProject; onClose: () => void }) {
+  const { t } = useT({ en: EN, es: ES });
   const [name,   setName]   = useState(project.name);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (!trimmed) { toast.error('Il nome è obbligatorio.'); return; }
+    if (!trimmed) { toast.error(t('nameRequired')); return; }
     if (trimmed === project.name) { onClose(); return; }
     setSaving(true);
     try {
       await updateDoc(doc(db, 'teqfProjects', project.id), {
         name: trimmed, updatedAt: new Date().toISOString(),
       });
-      toast.success('Nome aggiornato.');
+      toast.success(t('nameUpdated'));
       onClose();
     } catch (e: any) {
-      toast.error(e.message ?? 'Errore durante il salvataggio.');
+      toast.error(e.message ?? t('saveError'));
     } finally {
       setSaving(false);
     }
@@ -167,12 +170,12 @@ function RenameModal({ project, onClose }: { project: TeqfProject; onClose: () =
         <div className="px-5 pb-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Rinomina progetto
+              {t('renameProject')}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
           <div>
-            <label style={lbl}>Nome progetto *</label>
+            <label style={lbl}>{t('projectName')}</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
               autoFocus style={inputSt}
               onKeyDown={e => e.key === 'Enter' && handleSave()} />
@@ -182,12 +185,12 @@ function RenameModal({ project, onClose }: { project: TeqfProject; onClose: () =
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving && <Loader2 className="size-4 animate-spin" />}
-              Salva
+              {t('save')}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('cancel')}
             </button>
           </div>
         </div>
@@ -205,8 +208,8 @@ export default function CashControlPage() {
     isLoading: authLoading,
   } = usePlannerAuth();
 
-  // PART-3: IT/ES language switch
-  const { t, lang, setLang } = useT({ it: IT, es: ES });
+  const { t: tg } = useI18n();
+  const { t, lang } = useT({ en: EN, es: ES });
 
   const [projects,        setProjects]        = useState<TeqfProject[]>([]);
   const [loading,         setLoading]         = useState(true);
@@ -244,10 +247,10 @@ export default function CashControlPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
           <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            Accesso non autorizzato
+            {t('unauthorized')}
           </p>
           <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-            ← Dashboard
+            {tg('dashboard')}
           </Link>
         </div>
       </div>
@@ -258,7 +261,7 @@ export default function CashControlPage() {
   const createdByName = adminUser?.name  ?? plannerUser?.name  ?? 'TeQF';
 
   async function handleDeleteProject(p: TeqfProject) {
-    const msg = `Eliminare "${p.name}"?\nI movimenti verranno conservati per ragioni contabili.`;
+    const msg = t('deleteProjectConfirm').replace('{name}', p.name);
     if (!confirm(msg)) return;
     try {
       await updateDoc(doc(db, 'teqfProjects', p.id), {
@@ -267,9 +270,9 @@ export default function CashControlPage() {
         deletedBy: createdBy,
         updatedAt: new Date().toISOString(),
       });
-      toast.success('Progetto eliminato.');
+      toast.success(t('projectDeleted'));
     } catch (e: any) {
-      toast.error(e.message ?? 'Errore durante l\'eliminazione.');
+      toast.error(e.message ?? t('saveError'));
     }
   }
 
@@ -283,7 +286,7 @@ export default function CashControlPage() {
           <Link href="/planner"
             className="flex items-center gap-1.5 text-sm flex-shrink-0"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            <ArrowLeft className="size-4" /> Dashboard
+            <ArrowLeft className="size-4" /> {tg('dashboard')}
           </Link>
           <div className="h-4 w-px flex-shrink-0" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2 min-w-0">
@@ -295,30 +298,20 @@ export default function CashControlPage() {
                 Cash Control
               </h1>
               <p className="text-xs hidden sm:block" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Registra movimenti monetari
+                {t('subtitle')}
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* PART-3: IT/ES language toggle */}
-          <button onClick={() => setLang(lang === 'it' ? 'es' : 'it')}
-            className="text-xs px-2 py-1 rounded-lg"
-            style={{
-              border: '1px solid var(--tqf-beige-border)',
-              color: 'var(--tqf-muted)',
-              fontFamily: 'var(--font-body)',
-              background: 'white',
-            }}>
-            {t('langSwitch')}
-          </button>
+          <LanguageSelector />
           {canManageCashControl && (
             <button onClick={() => setShowCreate(true)}
               className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               <Plus className="size-4" />
-              <span className="hidden sm:inline">Nuovo progetto</span>
+              <span className="hidden sm:inline">{t('newProject')}</span>
             </button>
           )}
         </div>
@@ -334,23 +327,23 @@ export default function CashControlPage() {
             </div>
             <p className="text-base mb-1"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nessun progetto ancora
+              {t('noProjects')}
             </p>
             <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Crea un progetto per iniziare a registrare i movimenti.
+              {t('noProjectsDesc')}
             </p>
             {canManageCashControl && (
               <button onClick={() => setShowCreate(true)}
                 className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-xl"
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
-                <Plus className="size-4" /> Crea primo progetto
+                <Plus className="size-4" /> {t('createFirstProject')}
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-3">
             <p className="text-sm mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {projects.length} {projects.length === 1 ? 'progetto' : 'progetti'} · seleziona per gestire il cash control
+              {t('projectsHint').replace('{n}', String(projects.length))}
             </p>
             {projects.map(p => (
               <div key={p.id}
@@ -371,7 +364,7 @@ export default function CashControlPage() {
                       {p.isClosed && (
                         <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
                           style={{ background: '#fef2f2', color: '#991b1b', fontFamily: 'var(--font-body)' }}>
-                          <Lock className="size-2.5" /> Chiuso
+                          <Lock className="size-2.5" /> {t('closed')}
                         </span>
                       )}
                     </div>
@@ -393,7 +386,6 @@ export default function CashControlPage() {
                   </div>
                 </Link>
                 <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
-                  {/* Rename/delete only when project is open, or when superAdmin */}
                   {((canManageCashControl && !p.isClosed) || isSuperAdmin) && (
                     <>
                       <button
@@ -412,7 +404,7 @@ export default function CashControlPage() {
                   )}
                   <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
                     style={{ background: p.isClosed ? '#fef2f2' : '#f0fdf4', color: p.isClosed ? '#991b1b' : '#15803d', fontFamily: 'var(--font-body)' }}>
-                    {p.isClosed ? 'Sola lettura →' : 'Cash Control →'}
+                    {p.isClosed ? t('readOnlyLink') : t('cashControlLink')}
                   </span>
                   <ArrowRight className="size-4 sm:hidden" style={{ color: 'var(--tqf-muted)' }} />
                 </div>

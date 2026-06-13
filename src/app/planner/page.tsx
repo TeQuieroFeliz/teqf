@@ -4,9 +4,12 @@ import { deletePlannerEvent, getAllPlannerEvents } from '@/actions/planner/plann
 import { db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { useLangContext } from '@/context/LangContext';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { deriveTeams } from '@/lib/user-permissions';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
-import { Lang, LANG_OPTIONS, T } from '@/lib/planner-i18n';
+import { Lang, T } from '@/lib/planner-i18n';
 import AccessDenied from '@/components/planner/AccessDenied';
 import {
   Bell,
@@ -31,8 +34,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-
-const LANG_KEY = 'tqf-planner-lang';
 
 // ─── Tile definitions ─────────────────────────────────────────────────────────
 
@@ -123,6 +124,8 @@ const BOTH_TEAMS_TILE_KEYS  = ['eventi', 'cash_control', 'mobili', 'fiori', 'ora
 // ─── TileGrid ─────────────────────────────────────────────────────────────────
 
 function TileGrid({ tileKeys, pendingCount = 0 }: { tileKeys: string[]; pendingCount?: number }) {
+  const { t } = useI18n();
+  const tt = (key: string) => t(`tile_${key}` as Parameters<typeof t>[0]);
   const tiles = tileKeys.map(k => DASHBOARD_TILES[k]).filter(Boolean);
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -151,13 +154,13 @@ function TileGrid({ tileKeys, pendingCount = 0 }: { tileKeys: string[]; pendingC
             className="text-sm mb-0.5"
             style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
           >
-            {tile.label}
+            {tt(`${tile.key}_label`) || tile.label}
           </h3>
           <p
             className="text-xs leading-relaxed hidden sm:block"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
           >
-            {tile.description}
+            {tt(`${tile.key}_desc`) || tile.description}
           </p>
         </a>
       ))}
@@ -169,6 +172,7 @@ function TileGrid({ tileKeys, pendingCount = 0 }: { tileKeys: string[]; pendingC
 
 function SuperAdminDashboard() {
   const { adminUser, logout } = usePlannerAuth();
+  const { t } = useI18n();
   const [events, setEvents] = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
@@ -209,7 +213,7 @@ function SuperAdminDashboard() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              PANNELLO DI CONTROLLO
+              {t('controlPanel')}
             </p>
           </div>
         </Link>
@@ -232,14 +236,17 @@ function SuperAdminDashboard() {
           >
             <Shield className="size-4" />
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-1.5 text-sm px-2.5 py-2 rounded-lg transition-colors hover:opacity-80"
-            style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
-          >
-            <LogOut className="size-4" />
-            <span className="hidden sm:inline">Esci</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <LanguageSelector />
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 text-sm px-2.5 py-2 rounded-lg transition-colors hover:opacity-80"
+              style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
+            >
+              <LogOut className="size-4" />
+              <span className="hidden sm:inline">{t('logout')}</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -250,10 +257,10 @@ function SuperAdminDashboard() {
             className="text-3xl"
             style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}
           >
-            Benvenuto
+            {t('welcome')}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Dashboard completa — accesso a tutte le sezioni
+            {t('fullDashboardSubtitle')}
           </p>
         </div>
 
@@ -267,11 +274,11 @@ function SuperAdminDashboard() {
             <Bell className="size-5 flex-shrink-0" style={{ color: '#d97706' }} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>
-                {pendingCount} {pendingCount === 1 ? 'richiesta di accesso in attesa' : 'richieste di accesso in attesa'}
+                {pendingCount} {pendingCount === 1 ? t('pendingRequest') : t('pendingRequests')}
               </p>
             </div>
             <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0" style={{ background: '#d97706', color: 'white', fontFamily: 'var(--font-body)' }}>
-              Gestisci →
+              {t('manageAction')}
             </span>
           </Link>
         )}
@@ -282,7 +289,7 @@ function SuperAdminDashboard() {
             className="text-base mb-4"
             style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400, letterSpacing: '0.05em' }}
           >
-            Gestione
+            {t('management')}
           </h2>
           <TileGrid tileKeys={ADMIN_TILE_KEYS} pendingCount={pendingCount} />
         </div>
@@ -294,13 +301,13 @@ function SuperAdminDashboard() {
               className="text-base"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400, letterSpacing: '0.05em' }}
             >
-              Tutti gli eventi planner
+              {t('allPlannerEvents')}
             </h2>
             <span
               className="text-xs px-2.5 py-1 rounded-full"
               style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
             >
-              {loading ? '…' : `${events.length} totali`}
+              {loading ? '…' : t('eventsTotalCount', { n: events.length })}
             </span>
           </div>
 
@@ -314,7 +321,7 @@ function SuperAdminDashboard() {
               style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
             >
               <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Nessun evento planner ancora.
+                {t('noPlannerEvents')}
               </p>
             </div>
           ) : (
@@ -344,7 +351,7 @@ function SuperAdminDashboard() {
                           className="text-sm truncate"
                           style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)', fontWeight: 500 }}
                         >
-                          {evt.eventCode || evt.eventName || 'Evento senza nome'}
+                          {evt.eventCode || evt.eventName || t('tile_eventi_label')}
                         </p>
                         <div className="flex flex-wrap gap-x-3 mt-0.5">
                           {evt.plannerName && (
@@ -365,9 +372,9 @@ function SuperAdminDashboard() {
                           )}
                           {(furnitureCount > 0 || flowerCount > 0) && (
                             <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                              {furnitureCount > 0 && `${furnitureCount} mobili`}
+                              {furnitureCount > 0 && `${furnitureCount} ${t('tile_mobili_label').toLowerCase()}`}
                               {furnitureCount > 0 && flowerCount > 0 && ' · '}
-                              {flowerCount > 0 && `${flowerCount} fiori`}
+                              {flowerCount > 0 && `${flowerCount} ${t('tile_fiori_label').toLowerCase()}`}
                             </span>
                           )}
                         </div>
@@ -381,7 +388,7 @@ function SuperAdminDashboard() {
                         title="Nómina & Gastos"
                       >
                         <Users className="size-3" />
-                        <span className="hidden sm:inline">Progetto</span>
+                        <span className="hidden sm:inline">{t('projectLabel')}</span>
                       </Link>
                       <span
                         className="text-xs px-2 py-0.5 rounded-full"
@@ -391,7 +398,7 @@ function SuperAdminDashboard() {
                             : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }
                         }
                       >
-                        {evt.status === 'submitted' ? 'Inviato' : 'Bozza'}
+                        {evt.status === 'submitted' ? t('submitted') : t('draft')}
                       </span>
                     </div>
                   </div>
@@ -409,6 +416,7 @@ function SuperAdminDashboard() {
 
 function TeQFUserDashboard() {
   const { plannerUser, logout } = usePlannerAuth();
+  const { t } = useI18n();
   if (!plannerUser) return null;
 
   return (
@@ -431,11 +439,12 @@ function TeQFUserDashboard() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              AREA PLANNER
+              {t('plannerArea')}
             </p>
           </div>
         </Link>
         <div className="flex items-center gap-2">
+          <LanguageSelector />
           <span className="text-sm hidden sm:block" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
             {plannerUser.name}
           </span>
@@ -445,7 +454,7 @@ function TeQFUserDashboard() {
             style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
           >
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">Esci</span>
+            <span className="hidden sm:inline">{t('logout')}</span>
           </button>
         </div>
       </header>
@@ -453,10 +462,10 @@ function TeQFUserDashboard() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-8">
           <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-            Benvenuta, {plannerUser.name}
+            {t('welcome')}, {plannerUser.name}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            TeQF Team
+            {t('teamTeqf')}
           </p>
         </div>
 
@@ -470,24 +479,13 @@ function TeQFUserDashboard() {
 
 function PlannerDashboard() {
   const { plannerUser, logout, canManageCashControl } = usePlannerAuth();
+  const { lang } = useLangContext();
+  const { t: tg } = useI18n();
   const [events, setEvents] = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [lang, setLang] = useState<Lang>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(LANG_KEY) as Lang | null;
-      if (stored && ['it', 'en', 'es'].includes(stored)) return stored;
-    }
-    return 'it';
-  });
-
-  const t = T[lang];
-
-  const changeLang = (l: Lang) => {
-    setLang(l);
-    localStorage.setItem(LANG_KEY, l);
-  };
+  const t = T[lang as Lang] ?? T.en;
 
   useEffect(() => {
     if (!plannerUser) return;
@@ -534,32 +532,13 @@ function PlannerDashboard() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              AREA PLANNER
+              {tg('plannerArea')}
             </p>
           </div>
         </Link>
 
         <div className="flex items-center gap-1.5 sm:gap-2.5">
-          {/* Language switcher */}
-          <div className="hidden sm:flex items-center rounded-lg overflow-hidden" style={{ border: '1px solid var(--tqf-beige-border)' }}>
-            {LANG_OPTIONS.map((opt, idx) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => changeLang(opt.value)}
-                className="text-xs px-2.5 py-1.5 transition-colors"
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontWeight: lang === opt.value ? 600 : 400,
-                  background: lang === opt.value ? 'var(--tqf-bordeaux)' : 'white',
-                  color: lang === opt.value ? 'white' : 'var(--tqf-muted)',
-                  borderLeft: idx > 0 ? '1px solid var(--tqf-beige-border)' : 'none',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <LanguageSelector />
 
           <Link
             href="/planner/events/new"
@@ -575,10 +554,9 @@ function PlannerDashboard() {
               href="/planner/cash-control"
               className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
               style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
-              title="Control de Gastos"
             >
               <Wallet className="size-4" />
-              <span className="hidden sm:inline">Gastos</span>
+              <span className="hidden sm:inline">{tg('spending')}</span>
             </Link>
           )}
 
@@ -622,7 +600,7 @@ function PlannerDashboard() {
 
         <div className="mb-6">
           <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-            Eventi
+            {tg('eventsSection')}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             {loading ? '' : t.eventCount(events.length)}
@@ -683,7 +661,7 @@ function PlannerDashboard() {
                             <Calendar className="size-3" />
                             {evt.days.length === 1
                               ? new Date(evt.days[0].date + 'T00:00:00').toLocaleDateString(
-                                  lang === 'it' ? 'it-IT' : lang === 'es' ? 'es-MX' : 'en-US',
+                                  lang === 'es' ? 'es-MX' : 'en-US',
                                   { day: 'numeric', month: 'long', year: 'numeric' }
                                 )
                               : t.daysCount(evt.days.length)}
@@ -692,7 +670,7 @@ function PlannerDashboard() {
                           <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                             <Calendar className="size-3" />
                             {new Date(evt.eventDate).toLocaleDateString(
-                              lang === 'it' ? 'it-IT' : lang === 'es' ? 'es-MX' : 'en-US',
+                              lang === 'es' ? 'es-MX' : 'en-US',
                               { day: 'numeric', month: 'long', year: 'numeric' }
                             )}
                           </span>
@@ -754,6 +732,7 @@ function PlannerDashboard() {
 
 function AllTilesDashboard() {
   const { plannerUser, logout } = usePlannerAuth();
+  const { t } = useI18n();
   if (!plannerUser) return null;
 
   return (
@@ -776,11 +755,12 @@ function AllTilesDashboard() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              AREA PLANNER
+              {t('plannerArea')}
             </p>
           </div>
         </Link>
         <div className="flex items-center gap-2">
+          <LanguageSelector />
           <div className="hidden sm:block text-right">
             <p className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
               {plannerUser.name}
@@ -789,7 +769,7 @@ function AllTilesDashboard() {
               className="text-xs px-2 py-0.5 rounded-full"
               style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
             >
-              XB + TeQF
+              {t('teamXbTeqf')}
             </span>
           </div>
           <button
@@ -798,7 +778,7 @@ function AllTilesDashboard() {
             style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
           >
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">Esci</span>
+            <span className="hidden sm:inline">{t('logout')}</span>
           </button>
         </div>
       </header>
@@ -806,10 +786,10 @@ function AllTilesDashboard() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-8">
           <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-            Benvenuto/a, {plannerUser.name}
+            {t('welcome')}, {plannerUser.name}
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Team XB + TeQF
+            {t('teamXbTeqf')}
           </p>
         </div>
         <TileGrid tileKeys={BOTH_TEAMS_TILE_KEYS} />
@@ -822,6 +802,7 @@ function AllTilesDashboard() {
 
 function NotAssignedDashboard() {
   const { logout } = usePlannerAuth();
+  const { t } = useI18n();
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
@@ -833,10 +814,10 @@ function NotAssignedDashboard() {
           <Users className="size-7" />
         </div>
         <p className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-          Nessun team assegnato
+          {t('accessDeniedTitle')}
         </p>
         <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-          Contatta l&apos;amministratore per essere assegnata a un team.
+          {t('accessDeniedDesc')}
         </p>
         <button
           onClick={logout}
@@ -844,7 +825,7 @@ function NotAssignedDashboard() {
           style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
         >
           <LogOut className="size-4" />
-          Esci
+          {t('logout')}
         </button>
       </div>
     </div>

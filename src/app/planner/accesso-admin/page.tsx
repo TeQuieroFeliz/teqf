@@ -2,6 +2,8 @@
 
 import { getAdminByEmail } from '@/actions/admin/user-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import {
   AdminPermissionLevel,
   AdminUser,
@@ -22,6 +24,7 @@ const PERMISSION_COLORS: Record<AdminPermissionLevel, { bg: string; text: string
 
 export default function PlannerAdminAccessPage() {
   const { plannerUser } = usePlannerAuth();
+  const { t } = useI18n();
   const [adminRecord, setAdminRecord] = useState<AdminUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,23 +59,26 @@ export default function PlannerAdminAccessPage() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              AREA PLANNER
+              {t('plannerArea')}
             </p>
           </div>
         </Link>
-        <Link
-          href="/planner"
-          className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-          style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
-        >
-          <ArrowLeft className="size-4" />
-          Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          <LanguageSelector />
+          <Link
+            href="/planner"
+            className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
+            style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+          >
+            <ArrowLeft className="size-4" />
+            {t('dashboard')}
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-8">
         <h1 className="text-2xl mb-6" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-          Accesso Admin
+          {t('adminAccess_title')}
         </h1>
 
         {loading ? (
@@ -91,15 +97,14 @@ export default function PlannerAdminAccessPage() {
               <ShieldOff className="size-6" />
             </div>
             <h2 className="text-lg mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nessun accesso admin
+              {t('adminAccess_none')}
             </h2>
             <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Non hai accesso al pannello di amministrazione. Contatta un super admin se ritieni che si tratti di un errore.
+              {t('adminAccess_noneDesc')}
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Status card */}
             <div
               className="rounded-2xl p-6"
               style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
@@ -113,7 +118,7 @@ export default function PlannerAdminAccessPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
-                    Accesso al pannello admin attivo
+                    {t('adminAccess_active')}
                   </p>
                   <span
                     className="text-xs px-2 py-0.5 rounded-full"
@@ -131,17 +136,16 @@ export default function PlannerAdminAccessPage() {
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
               >
                 <ExternalLink className="size-4" />
-                Apri pannello admin
+                {t('adminAccess_open')}
               </Link>
             </div>
 
-            {/* Permissions card */}
             <div
               className="rounded-2xl p-6"
               style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
             >
               <h2 className="text-base mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                I tuoi permessi
+                {t('adminAccess_yourPerms')}
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

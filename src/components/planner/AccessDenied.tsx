@@ -1,10 +1,11 @@
-// PART-1: AccessDenied replaces the previous `if (!adminUser) return null` pattern
-// that caused a blank white screen when a user lacked permission.
+'use client';
 
+import { useI18n } from '@/hooks/useI18n';
 import { Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AccessDenied() {
+  const { t } = useI18n();
   return (
     <div
       className="min-h-screen flex items-center justify-center"
@@ -21,21 +22,20 @@ export default function AccessDenied() {
           className="text-xl mb-2"
           style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}
         >
-          Accesso non consentito
+          {t('accessDeniedTitle')}
         </h1>
         <p
           className="text-sm mb-6"
           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
         >
-          Non hai i permessi necessari per visualizzare questa sezione.
-          Contatta l&apos;amministratore se ritieni che si tratti di un errore.
+          {t('accessDeniedDesc')}
         </p>
         <Link
           href="/planner"
           className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
           style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
         >
-          Torna alla dashboard
+          {t('backToDashboard')}
         </Link>
       </div>
     </div>

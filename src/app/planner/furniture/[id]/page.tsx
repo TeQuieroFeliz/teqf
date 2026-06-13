@@ -9,6 +9,8 @@ import {
 } from '@/actions/furniture/furniture-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import { storage } from '@/firebase/client';
 import { compressFurnitureImage } from '@/lib/furniture/compressImage';
 import { FurnitureCurrency, FurnitureItem } from '@/lib/planner-types';
@@ -95,6 +97,7 @@ const labelStyle: React.CSSProperties = {
 
 export default function FurnitureEditorPage() {
   const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
+  const { t } = useI18n();
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id as string;
@@ -151,7 +154,7 @@ export default function FurnitureEditorPage() {
 
   useEffect(() => {
     if (!isLoading && !permissions.furniture.canEdit) {
-      toast.error('Non hai i permessi per modificare questa sezione');
+      toast.error(t('furniture_noPermission'));
       router.replace('/planner/furniture');
     }
   }, [isLoading, permissions.furniture.canEdit, router]);
@@ -184,7 +187,7 @@ export default function FurnitureEditorPage() {
     setShowNewCategory(false);
     setNewCategoryName('');
     setSavingCategory(false);
-    toast.success(`Categoria "${name}" aggiunta.`);
+    toast.success(t('furniture_categoryAdded', { name }));
   }
 
   async function handleAddCity() {
@@ -196,7 +199,7 @@ export default function FurnitureEditorPage() {
       updatedCities = [...availableCities, name];
       await saveFurnitureMeta(availableCategories, updatedCities);
       setAvailableCities(updatedCities);
-      toast.success(`Città "${name}" aggiunta.`);
+      toast.success(t('furniture_cityAdded', { name }));
     }
     setForm((prev) => ({
       ...prev,
@@ -233,7 +236,7 @@ export default function FurnitureEditorPage() {
       const res = await fetch('/api/remove-background', { method: 'POST', body: fd });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? `Errore ${res.status}`);
+        throw new Error((body as { error?: string }).error ?? `Error ${res.status}`);
       }
       const blob = await res.blob();
       const processedUrl = URL.createObjectURL(blob);
@@ -241,7 +244,7 @@ export default function FurnitureEditorPage() {
         prev.map((x) => (x.id === id ? { ...x, state: 'bg-done', processedBlob: blob, processedUrl } : x))
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Errore sconosciuto';
+      const msg = err instanceof Error ? err.message : 'Unknown error';
       setPendingUploads((prev) =>
         prev.map((x) => (x.id === id ? { ...x, state: 'bg-error', errorMsg: msg } : x))
       );
@@ -304,14 +307,14 @@ export default function FurnitureEditorPage() {
       if (!coverImage && updatedImages.length > 0) setCoverImage(updatedImages[0]);
       if (!isNew) await updateFurnitureImages(projectId, updatedImages);
 
-      toast.success('Immagine caricata.');
+      toast.success(t('furniture_imageUploaded'));
       return true;
     } catch {
       setUploads((prev) => prev.filter((u) => u.name !== displayName));
       setPendingUploads((prev) =>
-        prev.map((x) => (x.id === id ? { ...x, state: 'upload-error', errorMsg: 'Errore caricamento' } : x))
+        prev.map((x) => (x.id === id ? { ...x, state: 'upload-error', errorMsg: 'Upload error' } : x))
       );
-      toast.error('Errore caricamento immagine.');
+      toast.error(t('furniture_imageUploadError'));
       return false;
     }
   };
@@ -335,9 +338,9 @@ export default function FurnitureEditorPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) { toast.error('Inserisci il nome dell\'elemento.'); return; }
-    if (!form.category) { toast.error('Seleziona una categoria.'); return; }
-    if (form.cities.length === 0) { toast.error('Seleziona almeno una città.'); return; }
+    if (!form.name.trim()) { toast.error(t('furniture_nameRequired')); return; }
+    if (!form.category) { toast.error(t('furniture_categorySelectRequired')); return; }
+    if (form.cities.length === 0) { toast.error(t('furniture_cityRequired')); return; }
 
     // Auto-commit any pending (uncommitted) images before saving
     const toCommit = pendingUploads.filter(
@@ -349,7 +352,7 @@ export default function FurnitureEditorPage() {
         toCommit.map((p) => commitPendingUpload(p.id, p.state === 'bg-done'))
       );
       if (results.some((ok) => !ok)) {
-        toast.error('Alcune immagini non si sono caricate. Rimuovile o riprova prima di salvare.');
+        toast.error(t('furniture_pendingUploadsError'));
         setSaving(false);
         return;
       }
@@ -363,10 +366,10 @@ export default function FurnitureEditorPage() {
     setSaving(false);
     if (result.success) {
       if (isNew && result.id) await updateFurnitureImages(result.id, imagesToSave);
-      toast.success('Elemento salvato.');
+      toast.success(t('furniture_saved'));
       router.push('/planner/furniture');
     } else {
-      toast.error(result.error ?? 'Errore salvataggio.');
+      toast.error(result.error ?? t('furniture_saveError'));
     }
   };
 
@@ -395,7 +398,7 @@ export default function FurnitureEditorPage() {
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
           >
             <ArrowLeft className="size-4" />
-            Catalogo Mobili
+            {t('furniture_title')}
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2">
@@ -403,7 +406,7 @@ export default function FurnitureEditorPage() {
               <Sofa className="size-4" />
             </div>
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              {isNew ? 'Nuovo Elemento' : 'Modifica Elemento'}
+              {isNew ? t('furniture_newItem') : t('furniture_editItem')}
             </h1>
           </div>
         </div>
@@ -418,7 +421,7 @@ export default function FurnitureEditorPage() {
                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
               >
                 {(saving || isUploadingImages) && <Loader2 className="size-4 animate-spin" />}
-                {isUploadingImages ? 'Caricamento immagini…' : 'Salva'}
+                {isUploadingImages ? t('furniture_uploadingImages') : t('save')}
               </button>
             );
           })()}
@@ -428,8 +431,9 @@ export default function FurnitureEditorPage() {
             style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
           >
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">Esci</span>
+            <span className="hidden sm:inline">{t('logout')}</span>
           </button>
+          <LanguageSelector />
         </div>
       </header>
 
@@ -438,18 +442,18 @@ export default function FurnitureEditorPage() {
         <div className="space-y-5">
           <div className="rounded-2xl p-6" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             <h2 className="text-lg mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Informazioni
+              {t('furniture_infoTitle')}
             </h2>
 
             <div className="space-y-4">
               {/* Name */}
               <div>
-                <label style={labelStyle}>Nome *</label>
+                <label style={labelStyle}>{t('furniture_nameItemLabel')}</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
-                  placeholder="es. Sedia Chiavari Oro"
+                  placeholder={t('furniture_namePlaceholder')}
                   style={inputStyle}
                   onFocus={(e) => (e.target.style.borderColor = 'var(--tqf-bordeaux)')}
                   onBlur={(e) => (e.target.style.borderColor = 'var(--tqf-beige-border)')}
@@ -458,7 +462,7 @@ export default function FurnitureEditorPage() {
 
               {/* Category */}
               <div>
-                <label style={labelStyle}>Categoria *</label>
+                <label style={labelStyle}>{t('furniture_categoryRequired')}</label>
                 <select
                   value={showNewCategory ? '__new__' : form.category}
                   onChange={(e) => {
@@ -474,7 +478,7 @@ export default function FurnitureEditorPage() {
                   {availableCategories.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
-                  <option value="__new__">＋ Aggiungi nuova categoria...</option>
+                  <option value="__new__">{t('furniture_addCategoryOption')}</option>
                 </select>
 
                 {showNewCategory && (
@@ -484,7 +488,7 @@ export default function FurnitureEditorPage() {
                       value={newCategoryName}
                       onChange={(e) => setNewCategoryName(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                      placeholder="Nome categoria..."
+                      placeholder={t('furniture_categoryNewPlaceholder')}
                       autoFocus
                       style={{ ...inputStyle, flex: 1 }}
                       onFocus={(e) => (e.target.style.borderColor = 'var(--tqf-bordeaux)')}
@@ -498,7 +502,7 @@ export default function FurnitureEditorPage() {
                       style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
                     >
                       {savingCategory ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                      Aggiungi
+                      {t('furniture_addCategory')}
                     </button>
                     <button
                       type="button"
@@ -514,7 +518,7 @@ export default function FurnitureEditorPage() {
 
               {/* Price + Currency */}
               <div>
-                <label style={labelStyle}>Prezzo *</label>
+                <label style={labelStyle}>{t('furniture_priceRequired')}</label>
                 <div className="flex gap-2">
                   <input
                     type="number"
@@ -541,7 +545,7 @@ export default function FurnitureEditorPage() {
 
               {/* Cities */}
               <div>
-                <label style={labelStyle}>Disponibile a *</label>
+                <label style={labelStyle}>{t('furniture_citiesLabel')} *</label>
 
                 {/* Selected cities as removable pills */}
                 {form.cities.length > 0 && (
@@ -608,7 +612,7 @@ export default function FurnitureEditorPage() {
                         style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
                       >
                         <Plus className="size-3.5" />
-                        Aggiungi nuova città...
+                        {t('furniture_addNewCity')}
                       </button>
                     ) : (
                       <div className="flex gap-2">
@@ -617,7 +621,7 @@ export default function FurnitureEditorPage() {
                           value={newCityName}
                           onChange={(e) => setNewCityName(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleAddCity()}
-                          placeholder="Nome città..."
+                          placeholder={t('furniture_cityNewPlaceholder')}
                           autoFocus
                           style={{ ...inputStyle, flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.8125rem' }}
                           onFocus={(e) => (e.target.style.borderColor = 'var(--tqf-bordeaux)')}
@@ -631,7 +635,7 @@ export default function FurnitureEditorPage() {
                           style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
                         >
                           {savingCity ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
-                          Aggiungi
+                          {t('furniture_addCategory')}
                         </button>
                         <button
                           type="button"
@@ -649,12 +653,12 @@ export default function FurnitureEditorPage() {
 
               {/* Description */}
               <div>
-                <label style={labelStyle}>Descrizione</label>
+                <label style={labelStyle}>{t('furniture_descLabel')}</label>
                 <textarea
                   value={form.description}
                   onChange={(e) => set('description', e.target.value)}
                   rows={3}
-                  placeholder="Note opzionali sull'elemento..."
+                  placeholder={t('furniture_descPlaceholder')}
                   style={{ ...inputStyle, resize: 'vertical' }}
                 />
               </div>
@@ -662,7 +666,7 @@ export default function FurnitureEditorPage() {
               {/* Published toggle */}
               <div className="flex items-center justify-between pt-2">
                 <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--tqf-dark)' }}>
-                  Pubblicato nel catalogo
+                  {t('furniture_publishedLabel')}
                 </span>
                 <button
                   type="button"
@@ -684,7 +688,7 @@ export default function FurnitureEditorPage() {
         <div className="space-y-5">
           <div className="rounded-2xl p-6" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
             <h2 className="text-lg mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Immagini
+              {t('furniture_imagesTitle')}
             </h2>
 
             <div
@@ -696,10 +700,10 @@ export default function FurnitureEditorPage() {
             >
               <Upload className="size-6" style={{ color: 'var(--tqf-bordeaux)' }} />
               <p className="text-sm text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Trascina le immagini qui o <span style={{ color: 'var(--tqf-bordeaux)' }}>clicca per caricare</span>
+                {t('furniture_dragHint')} <span style={{ color: 'var(--tqf-bordeaux)' }}>{t('furniture_clickUpload')}</span>
               </p>
               <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Qualità originale · nessun limite di dimensione
+                {t('furniture_qualityHint')}
               </p>
               <input
                 ref={fileInputRef}
@@ -721,14 +725,14 @@ export default function FurnitureEditorPage() {
                       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-beige)' }}>
                         <div className="px-3 py-2" style={{ background: 'var(--tqf-cipria-light)', borderBottom: '1px solid var(--tqf-cipria)' }}>
                           <p className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-bordeaux)', fontWeight: 500 }}>
-                            Scegli la versione da caricare
+                            {t('furniture_chooseVersion')}
                           </p>
                         </div>
                         <div className="grid grid-cols-2">
                           {/* Original */}
                           <div className="p-3" style={{ borderRight: '1px solid var(--tqf-cipria)' }}>
                             <p className="text-xs text-center mb-2" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
-                              Originale
+                              {t('furniture_original')}
                             </p>
                             <div
                               className="rounded-lg overflow-hidden mb-2"
@@ -742,13 +746,13 @@ export default function FurnitureEditorPage() {
                               className="w-full text-xs py-1.5 rounded-lg transition-opacity hover:opacity-80"
                               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)', background: 'white' }}
                             >
-                              Usa Originale
+                              {t('furniture_useOriginal')}
                             </button>
                           </div>
                           {/* Processed */}
                           <div className="p-3">
                             <p className="text-xs text-center mb-2" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-bordeaux)', fontWeight: 500 }}>
-                              ✦ Sfondo Rimosso
+                              {t('furniture_bgRemoved')}
                             </p>
                             <div
                               className="rounded-lg overflow-hidden mb-2"
@@ -769,7 +773,7 @@ export default function FurnitureEditorPage() {
                               className="w-full text-xs py-1.5 rounded-lg transition-opacity hover:opacity-80"
                               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}
                             >
-                              Usa Sfondo Rimosso
+                              {t('furniture_useBgRemoved')}
                             </button>
                           </div>
                         </div>
@@ -800,14 +804,14 @@ export default function FurnitureEditorPage() {
                                 style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}
                               >
                                 <Scissors className="size-3" />
-                                Rimuovi Sfondo
+                                {t('furniture_removeBg')}
                               </button>
                               <button
                                 onClick={() => commitPendingUpload(p.id, false)}
                                 className="text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-70"
                                 style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}
                               >
-                                Carica così
+                                {t('furniture_uploadAsIs')}
                               </button>
                             </div>
                           )}
@@ -816,7 +820,7 @@ export default function FurnitureEditorPage() {
                             <div className="flex items-center gap-1.5">
                               <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
                               <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
-                                Rimozione sfondo in corso…
+                                {t('furniture_removingBg')}
                               </span>
                             </div>
                           )}
@@ -825,7 +829,7 @@ export default function FurnitureEditorPage() {
                             <div className="flex items-center gap-1.5">
                               <Loader2 className="size-3 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
                               <span className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
-                                Caricamento in corso…
+                                {t('furniture_uploadingImage')}
                               </span>
                             </div>
                           )}
@@ -833,7 +837,7 @@ export default function FurnitureEditorPage() {
                           {(p.state === 'bg-error' || p.state === 'upload-error') && (
                             <div>
                               <p className="text-xs mb-1.5" style={{ fontFamily: 'var(--font-body)', color: '#991b1b' }}>
-                                {p.errorMsg ?? 'Errore'}
+                                {p.errorMsg ?? t('errorConnection')}
                               </p>
                               <div className="flex gap-1.5">
                                 {p.state === 'bg-error' && (
@@ -843,7 +847,7 @@ export default function FurnitureEditorPage() {
                                     style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', background: 'white' }}
                                   >
                                     <RotateCcw className="size-3" />
-                                    Riprova
+                                    {t('furniture_retry')}
                                   </button>
                                 )}
                                 <button
@@ -851,7 +855,7 @@ export default function FurnitureEditorPage() {
                                   className="text-xs px-2 py-1 rounded-lg transition-opacity hover:opacity-70"
                                   style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', background: 'white' }}
                                 >
-                                  Carica Originale
+                                  {t('furniture_uploadOriginal')}
                                 </button>
                               </div>
                             </div>
@@ -904,7 +908,7 @@ export default function FurnitureEditorPage() {
                     >
                       <button
                         type="button"
-                        title="Imposta come principale"
+                        title={t('furniture_mainImageTitle')}
                         onClick={() => setCoverImage(url)}
                         className="size-7 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
                         style={{ background: coverImage === url ? 'var(--tqf-gold)' : 'rgba(255,255,255,0.8)' }}

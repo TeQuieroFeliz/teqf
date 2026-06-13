@@ -6,6 +6,8 @@ import {
 } from '@/actions/portfolio/portfolio-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { useI18n } from '@/hooks/useI18n';
 import {
   ArrowLeft,
   Edit2,
@@ -35,6 +37,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function AdminPortfolioPage() {
   const { adminUser, logout } = usePlannerAuth();
+  const { t } = useI18n();
   const [projects, setProjects] = useState<PortfolioProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -49,14 +52,14 @@ export default function AdminPortfolioPage() {
   if (!adminUser) return <AccessDenied />;
 
   async function handleDelete(project: PortfolioProject) {
-    if (!confirm(`Eliminare "${project.title}"? Questa azione è irreversibile.`)) return;
+    if (!confirm(t('portfolio_deleteConfirm', { title: project.title }))) return;
     setDeletingId(project.id);
     const result = await deletePortfolioProject(project.id);
     if (result.success) {
       setProjects((prev) => prev.filter((p) => p.id !== project.id));
-      toast.success('Progetto eliminato.');
+      toast.success(t('portfolio_deleted'));
     } else {
-      toast.error(result.error ?? 'Errore durante l\'eliminazione.');
+      toast.error(result.error ?? t('portfolio_deleteError'));
     }
     setDeletingId(null);
   }
@@ -75,7 +78,7 @@ export default function AdminPortfolioPage() {
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
           >
             <ArrowLeft className="size-4" />
-            Dashboard
+            {t('dashboard')}
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2">
@@ -101,8 +104,9 @@ export default function AdminPortfolioPage() {
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
           >
             <Plus className="size-4" />
-            Nuovo Progetto
+            {t('portfolio_new')}
           </Link>
+          <LanguageSelector />
           <button
             onClick={logout}
             className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-colors hover:opacity-80"
@@ -113,7 +117,7 @@ export default function AdminPortfolioPage() {
             }}
           >
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">Esci</span>
+            <span className="hidden sm:inline">{t('logout')}</span>
           </button>
         </div>
       </header>
@@ -139,10 +143,10 @@ export default function AdminPortfolioPage() {
               className="text-xl mb-2"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
             >
-              Nessun progetto ancora
+              {t('portfolio_noProjects')}
             </h2>
             <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Crea il primo progetto per iniziare a costruire il portfolio.
+              {t('portfolio_noProjectsDesc')}
             </p>
             <Link
               href="/planner/portfolio/new"
@@ -150,13 +154,13 @@ export default function AdminPortfolioPage() {
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
             >
               <Plus className="size-4" />
-              Nuovo Progetto
+              {t('portfolio_new')}
             </Link>
           </div>
         ) : (
           <>
             <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {projects.length} {projects.length === 1 ? 'progetto' : 'progetti'}
+              {t('portfolio_projectsCount', { n: projects.length })}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {projects.map((project) => {
@@ -197,7 +201,7 @@ export default function AdminPortfolioPage() {
                             : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }
                         }
                       >
-                        {project.published ? 'Pubblicato' : 'Bozza'}
+                        {project.published ? t('portfolio_published') : t('portfolio_draft')}
                       </span>
                     </div>
 
@@ -211,7 +215,7 @@ export default function AdminPortfolioPage() {
                           {CATEGORY_LABELS[project.category] ?? project.category}
                         </span>
                         <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                          {project.images.length} foto
+                          {t('portfolio_photos', { n: project.images.length })}
                         </span>
                       </div>
 
@@ -219,7 +223,7 @@ export default function AdminPortfolioPage() {
                         className="text-base leading-snug"
                         style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}
                       >
-                        {project.title || <span style={{ opacity: 0.4 }}>Senza titolo</span>}
+                        {project.title || <span style={{ opacity: 0.4 }}>{t('portfolio_untitled')}</span>}
                       </h3>
 
                       {project.location && (
@@ -244,7 +248,7 @@ export default function AdminPortfolioPage() {
                         }}
                       >
                         <Edit2 className="size-3" />
-                        Modifica
+                        {t('edit')}
                       </Link>
                       <button
                         onClick={() => handleDelete(project)}

@@ -1,6 +1,7 @@
 'use client';
 
 import { PlannerAuthContextProvider, usePlannerAuth } from '@/context/PlannerAuthContext';
+import { LangProvider } from '@/context/LangContext';
 import { Loader2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -73,8 +74,10 @@ function PlannerGuard({ children }: { children: React.ReactNode }) {
 
 export default function PlannerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <PlannerAuthContextProvider>
-      <PlannerGuard>{children}</PlannerGuard>
-    </PlannerAuthContextProvider>
+    <LangProvider>
+      <PlannerAuthContextProvider>
+        <PlannerGuard>{children}</PlannerGuard>
+      </PlannerAuthContextProvider>
+    </LangProvider>
   );
 }
