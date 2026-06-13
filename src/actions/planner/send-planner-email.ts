@@ -22,7 +22,7 @@ function formatDate(iso: string, locale: string) {
 
 export async function sendPlannerEventEmail(
   event: PlannerEvent,
-  lang: Lang = 'it'
+  lang: Lang = 'en'
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);

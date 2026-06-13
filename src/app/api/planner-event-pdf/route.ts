@@ -52,7 +52,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const event: PlannerEvent = body.event;
-    const lang: Lang = body.lang ?? 'it';
+    const lang: Lang = body.lang ?? 'en';
     if (!event) return NextResponse.json({ error: 'Missing event data' }, { status: 400 });
 
     const dt = DT[lang];

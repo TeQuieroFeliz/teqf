@@ -730,9 +730,9 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(LANG_KEY) as Lang | null;
-      if (stored && ['it','en','es'].includes(stored)) return stored;
+      if (stored && ['en','es'].includes(stored)) return stored;
     }
-    return 'it';
+    return 'en';
   });
 
   const t = T[lang];
