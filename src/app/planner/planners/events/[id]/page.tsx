@@ -3,6 +3,8 @@
 import { getPlannerEvent } from '@/actions/planner/planner-event-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { CITIES, EventDay, PlannerEvent } from '@/lib/planner-types';
 import {
   ArrowLeft,
@@ -20,37 +22,41 @@ import {
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
-async function downloadPdf(event: PlannerEvent) {
+async function downloadPdf(event: PlannerEvent, errMsg: string) {
   const res = await fetch('/api/planner-event-pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event }),
   });
-  if (!res.ok) { alert('Errore generazione PDF.'); return; }
+  if (!res.ok) { toast.error(errMsg); return; }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `TQF_${(event.eventCode || event.eventName || 'evento').replace(/\s+/g, '_')}.pdf`;
+  a.download = `TQF_${(event.eventCode || event.eventName || 'event').replace(/\s+/g, '_')}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function formatDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('it-IT', {
+function formatDate(iso: string, locale: string) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString(locale, {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 }
 
 export default function AdminPlannerEventPage() {
   const { adminUser } = usePlannerAuth();
+  const { t, lang } = useI18n();
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
   const [event, setEvent] = useState<PlannerEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
 
   useEffect(() => {
     getPlannerEvent(id).then((e) => {
@@ -60,7 +66,6 @@ export default function AdminPlannerEventPage() {
     });
   }, [id, router]);
 
-  // BUG-09 fix: replaced `return null` with AccessDenied.
   if (!adminUser) return <AccessDenied />;
 
   if (loading) {
@@ -120,7 +125,7 @@ export default function AdminPlannerEventPage() {
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-            {event.eventCode || event.eventName || 'Evento'}
+            {event.eventCode || event.eventName || 'Event'}
           </h1>
           <span
             className="text-xs px-2 py-0.5 rounded-full"
@@ -128,32 +133,37 @@ export default function AdminPlannerEventPage() {
               ? { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
               : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }}
           >
-            {event.status === 'submitted' ? 'Inviato' : 'Bozza'}
+            {event.status === 'submitted' ? t('submitted') : t('draft')}
           </span>
         </div>
-        <button
-          onClick={async () => { setPdfLoading(true); await downloadPdf(event!); setPdfLoading(false); }}
-          disabled={pdfLoading}
-          className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
-          style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
-        >
-          {pdfLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          Scarica PDF
-        </button>
+        <div className="flex items-center gap-3">
+          <LanguageSelector />
+          <button
+            onClick={async () => { setPdfLoading(true); await downloadPdf(event!, t('plannerEvt_pdfError')); setPdfLoading(false); }}
+            disabled={pdfLoading}
+            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+          >
+            {pdfLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            {t('plannerEvt_downloadPdf')}
+          </button>
+        </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-5" id="print-area">
-        {section('Dettagli Evento', <Calendar className="size-4" />, (
+        {section(t('plannerEvt_eventDetails'), <Calendar className="size-4" />, (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {field('Codice Evento', event.eventCode)}
-            {field('Cliente', event.clientName)}
-            {field('Città', event.city ? cityLabel(event.city) : undefined)}
-            {field('Giorni', event.days?.length ? `${event.days.length} ${event.days.length === 1 ? 'giorno' : 'giorni'}` : undefined)}
+            {field(t('plannerEvt_eventCode'), event.eventCode)}
+            {field(t('plannerEvt_client'), event.clientName)}
+            {field(t('plannerEvt_city'), event.city ? cityLabel(event.city) : undefined)}
+            {field(t('plannerEvt_days'), event.days?.length
+              ? `${event.days.length} ${event.days.length === 1 ? t('plannerEvt_day') : t('plannerEvt_daysWord')}`
+              : undefined)}
           </div>
         ))}
 
         {event.days && event.days.length > 0 && section(
-          `Giorni & Venue (${event.days.length})`,
+          t('plannerEvt_daysVenue', { n: String(event.days.length) }),
           <MapPin className="size-4" />,
           <div className="space-y-6">
             {event.days.map((day: EventDay, idx: number) => (
@@ -166,15 +176,15 @@ export default function AdminPlannerEventPage() {
                     {idx + 1}
                   </span>
                   <span className="text-sm font-medium" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                    {formatDate(day.date)}
+                    {formatDate(day.date, locale)}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {field('Descrizione', day.eventName)}
-                  {field('Venue', day.venue)}
+                  {field(t('plannerEvt_description'), day.eventName)}
+                  {field(t('plannerEvt_venue'), day.venue)}
                   {day.venueAddress && (
                     <div>
-                      <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Indirizzo</p>
+                      <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_address')}</p>
                       <div className="flex items-start gap-1">
                         <p className="text-sm flex-1" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>{day.venueAddress}</p>
                         {day.venueMapUrl && (
@@ -185,19 +195,19 @@ export default function AdminPlannerEventPage() {
                       </div>
                     </div>
                   )}
-                  {field('Note', day.notes)}
+                  {field(t('plannerEvt_notes'), day.notes)}
                 </div>
                 {(day.setupTime || day.eventStartTime || day.breakdownTime || day.supplierAccessTime) && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                    {field('Montaggio', day.setupTime)}
-                    {field('Inizio Evento', day.eventStartTime)}
-                    {field('Smontaggio', day.breakdownTime)}
-                    {field('Accesso Fornitori', day.supplierAccessTime)}
+                    {field(t('plannerEvt_setup'), day.setupTime)}
+                    {field(t('plannerEvt_eventStart'), day.eventStartTime)}
+                    {field(t('plannerEvt_breakdown'), day.breakdownTime)}
+                    {field(t('plannerEvt_supplierAccess'), day.supplierAccessTime)}
                   </div>
                 )}
                 {(day.supplierRegulationUrl || day.layoutUrls?.length > 0) && (
                   <div className="pt-3 border-t space-y-1.5" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                    <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Documenti</p>
+                    <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_documents')}</p>
                     {day.supplierRegulationUrl && (
                       <a
                         href={day.supplierRegulationUrl}
@@ -207,7 +217,7 @@ export default function AdminPlannerEventPage() {
                         style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
                       >
                         <FileText className="size-3.5" />
-                        Regolamento Fornitori
+                        {t('plannerEvt_supplierReg')}
                       </a>
                     )}
                     {day.layoutUrls?.map((url: string, i: number) => (
@@ -230,7 +240,7 @@ export default function AdminPlannerEventPage() {
                     <div className="flex items-center gap-1.5 mb-3">
                       <ImagePlus className="size-3.5" style={{ color: 'var(--tqf-muted)' }} />
                       <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                        Idee & Elementi ({day.customItems.length})
+                        {t('plannerEvt_customItems', { n: String(day.customItems.length) })}
                       </p>
                     </div>
                     <div className="space-y-3">
@@ -263,20 +273,20 @@ export default function AdminPlannerEventPage() {
           </div>
         )}
 
-        {section('Planner', <User className="size-4" />, (
+        {section(t('plannerEvt_plannerSection'), <User className="size-4" />, (
           <div className="grid grid-cols-2 gap-4">
-            {field('Nome', event.plannerName)}
-            {field('Email', event.plannerEmail)}
+            {field(t('plannerEvt_name'), event.plannerName)}
+            {field(t('plannerEvt_email'), event.plannerEmail)}
           </div>
         ))}
 
-        {allFurniture.length > 0 && section(`Mobiliario (${allFurniture.length} articoli)`, <Sofa className="size-4" />, (
+        {allFurniture.length > 0 && section(t('plannerEvt_furniture', { n: String(allFurniture.length) }), <Sofa className="size-4" />, (
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 pb-2 border-b" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-              <p className="col-span-6 text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Articolo</p>
-              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Cat.</p>
-              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Qtà</p>
-              <p className="col-span-2 text-xs uppercase tracking-wider text-right" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Totale</p>
+              <p className="col-span-6 text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_item')}</p>
+              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_cat')}</p>
+              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_qty')}</p>
+              <p className="col-span-2 text-xs uppercase tracking-wider text-right" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_total')}</p>
             </div>
             {allFurniture.map((item, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 py-2 border-b last:border-0" style={{ borderColor: 'var(--tqf-beige-border)' }}>
@@ -290,19 +300,19 @@ export default function AdminPlannerEventPage() {
             ))}
             <div className="flex justify-end pt-2">
               <p className="text-sm font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                Subtotale: ${furnitureTotal.toLocaleString('es-MX')} MXN
+                {t('plannerEvt_subtotal')} ${furnitureTotal.toLocaleString('es-MX')} MXN
               </p>
             </div>
           </div>
         ))}
 
-        {allFlowers.length > 0 && section(`Fiori (${allFlowers.length} articoli)`, <Flower2 className="size-4" />, (
+        {allFlowers.length > 0 && section(t('plannerEvt_flowers', { n: String(allFlowers.length) }), <Flower2 className="size-4" />, (
           <div className="space-y-2">
             <div className="grid grid-cols-12 gap-2 pb-2 border-b" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-              <p className="col-span-6 text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Articolo</p>
-              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Cat.</p>
-              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Qtà</p>
-              <p className="col-span-2 text-xs uppercase tracking-wider text-right" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Totale</p>
+              <p className="col-span-6 text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_item')}</p>
+              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_cat')}</p>
+              <p className="col-span-2 text-xs uppercase tracking-wider text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_qty')}</p>
+              <p className="col-span-2 text-xs uppercase tracking-wider text-right" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('plannerEvt_total')}</p>
             </div>
             {allFlowers.map((item, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 py-2 border-b last:border-0" style={{ borderColor: 'var(--tqf-beige-border)' }}>
@@ -316,7 +326,7 @@ export default function AdminPlannerEventPage() {
             ))}
             <div className="flex justify-end pt-2">
               <p className="text-sm font-semibold" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                Subtotale: ${flowersTotal.toLocaleString('es-MX')} MXN
+                {t('plannerEvt_subtotal')} ${flowersTotal.toLocaleString('es-MX')} MXN
               </p>
             </div>
           </div>
@@ -325,7 +335,7 @@ export default function AdminPlannerEventPage() {
         {grandTotal > 0 && (
           <div className="rounded-2xl p-5 flex justify-between items-center" style={{ background: 'var(--tqf-bordeaux)' }}>
             <span className="text-base" style={{ color: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-display)' }}>
-              Totale Stimato
+              {t('plannerEvt_grandTotal')}
             </span>
             <span className="text-xl font-semibold" style={{ color: 'white', fontFamily: 'var(--font-display)' }}>
               ${grandTotal.toLocaleString('es-MX')} MXN
@@ -333,7 +343,7 @@ export default function AdminPlannerEventPage() {
           </div>
         )}
 
-        {event.notes && section('Note', <FileText className="size-4" />, (
+        {event.notes && section(t('plannerEvt_notes'), <FileText className="size-4" />, (
           <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
             {event.notes}
           </p>

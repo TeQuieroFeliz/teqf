@@ -17,12 +17,14 @@ import {
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtDate(d: string): string {
+function fmtDate(d: string, locale: string): string {
   if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
+  return new Date(d + 'T12:00').toLocaleDateString(locale, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 }
@@ -45,9 +47,11 @@ export default function EventViewPage() {
   const eventId = params?.id as string;
 
   const { isSuperAdmin, canManageCashControl, isLoading: authLoading } = usePlannerAuth();
+  const { t, lang } = useI18n();
   const [event,   setEvent]   = useState<PlannerEvent | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
   const canView = isSuperAdmin || canManageCashControl;
 
   useEffect(() => {
@@ -72,11 +76,11 @@ export default function EventViewPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
           <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            {!canView ? 'Accesso non autorizzato' : 'Evento non trovato'}
+            {!canView ? t('event_unauthorized') : t('event_notFound')}
           </p>
           <Link href="/planner/events" className="text-sm"
             style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-            ← Torna agli eventi
+            {t('event_backToEvents')}
           </Link>
         </div>
       </div>
@@ -104,11 +108,12 @@ export default function EventViewPage() {
               </p>
             )}
           </div>
+          <LanguageSelector />
           <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0"
             style={event.status === 'submitted'
               ? { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
               : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
-            {event.status === 'submitted' ? 'Inviato' : 'Bozza'}
+            {event.status === 'submitted' ? t('submitted') : t('draft')}
           </span>
         </div>
       </header>
@@ -120,7 +125,7 @@ export default function EventViewPage() {
           style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
           <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--tqf-beige-border)' }}>
             <p style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400, fontSize: '0.95rem' }}>
-              Informazioni
+              {t('event_information')}
             </p>
           </div>
           <div className="px-4 py-3 space-y-2.5">
@@ -151,7 +156,7 @@ export default function EventViewPage() {
               <div className="flex items-center gap-2.5">
                 <Calendar className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
                 <span className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                  {event.days.length} {event.days.length === 1 ? 'giorno' : 'giorni'}
+                  {event.days.length} {event.days.length === 1 ? t('event_day') : t('event_days')}
                 </span>
               </div>
             )}
@@ -175,12 +180,12 @@ export default function EventViewPage() {
                   <Calendar className="size-4" style={{ color: 'var(--tqf-bordeaux)' }} />
                   <p className="text-sm font-medium"
                     style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
-                    {day.eventName || `Giorno ${i + 1}`}
+                    {day.eventName || t('event_dayLabel').replace('{n}', String(i + 1))}
                   </p>
                 </div>
                 {day.date && (
                   <p className="text-xs mt-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                    {fmtDate(day.date)}
+                    {fmtDate(day.date, locale)}
                   </p>
                 )}
               </div>
@@ -209,9 +214,9 @@ export default function EventViewPage() {
                     <Clock className="size-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--tqf-muted)' }} />
                     <div className="text-sm space-y-0.5" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
                       {day.setupTime && <p>Setup: {day.setupTime}</p>}
-                      {day.supplierAccessTime && <p>Accesso fornitori: {day.supplierAccessTime}</p>}
-                      {day.eventStartTime && <p>Inizio evento: {day.eventStartTime}</p>}
-                      {day.breakdownTime && <p>Breakdowns: {day.breakdownTime}</p>}
+                      {day.supplierAccessTime && <p>{t('event_supplierAccess')} {day.supplierAccessTime}</p>}
+                      {day.eventStartTime && <p>{t('event_eventStart')} {day.eventStartTime}</p>}
+                      {day.breakdownTime && <p>Breakdown: {day.breakdownTime}</p>}
                     </div>
                   </div>
                 )}
@@ -221,7 +226,7 @@ export default function EventViewPage() {
                   <div>
                     <div className="flex items-center gap-1.5 mb-2">
                       <Sofa className="size-3.5" style={{ color: 'var(--tqf-muted)' }} />
-                      <p style={sectionLbl}>Mobili</p>
+                      <p style={sectionLbl}>{t('event_furniture')}</p>
                     </div>
                     <div className="space-y-1.5">
                       {furniture.map((item, j) => (
@@ -244,7 +249,7 @@ export default function EventViewPage() {
                   <div>
                     <div className="flex items-center gap-1.5 mb-2">
                       <Flower2 className="size-3.5" style={{ color: 'var(--tqf-muted)' }} />
-                      <p style={sectionLbl}>Fiori</p>
+                      <p style={sectionLbl}>{t('event_flowers')}</p>
                     </div>
                     <div className="space-y-1.5">
                       {flowers.map((item, j) => (
@@ -264,7 +269,7 @@ export default function EventViewPage() {
 
                 {!hasItems && (
                   <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                    Nessun articolo selezionato.
+                    {t('event_noItems')}
                   </p>
                 )}
               </div>
@@ -276,7 +281,7 @@ export default function EventViewPage() {
         {(event as any).notes && (
           <div className="rounded-2xl px-4 py-3"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-            <p style={{ ...sectionLbl, marginBottom: '0.4rem' }}>Note</p>
+            <p style={{ ...sectionLbl, marginBottom: '0.4rem' }}>{t('event_notes')}</p>
             <p className="text-sm" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
               {(event as any).notes}
             </p>

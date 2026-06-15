@@ -19,6 +19,8 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 // ── Create event modal ────────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ function CreateEventModal({
   creatorName: string;
   creatorEmail: string;
 }) {
+  const { t } = useI18n();
   const [nome, setNome]       = useState('');
   const [data, setData]       = useState('');
   const [location, setLocation] = useState('');
@@ -52,7 +55,7 @@ function CreateEventModal({
   };
 
   async function handleSave() {
-    if (!nome.trim()) { toast.error('Il nome evento è obbligatorio.'); return; }
+    if (!nome.trim()) { toast.error(t('orarioEvt_nameRequired')); return; }
     setSaving(true);
     const result = await savePlannerEvent({
       plannerId:    creatorId,
@@ -84,11 +87,11 @@ function CreateEventModal({
     });
 
     if (result.success) {
-      toast.success('Evento creato.');
+      toast.success(t('orarioEvt_created'));
       onCreated();
       onClose();
     } else {
-      toast.error(result.error ?? 'Errore creazione evento.');
+      toast.error(result.error ?? t('orarioEvt_createError'));
     }
     setSaving(false);
   }
@@ -108,25 +111,25 @@ function CreateEventModal({
         <div className="px-5 pb-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Crea nuovo evento
+              {t('orarioEvt_createTitle')}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
 
           <div>
-            <label style={lbl}>Nome evento *</label>
+            <label style={lbl}>{t('orarioEvt_nameLbl')}</label>
             <input type="text" value={nome} onChange={e => setNome(e.target.value)}
               placeholder="es. Matrimonio García" autoFocus style={inputSt}
               onKeyDown={e => e.key === 'Enter' && handleSave()} />
           </div>
 
           <div>
-            <label style={lbl}>Data (opzionale)</label>
+            <label style={lbl}>{t('orarioEvt_dateLbl')}</label>
             <input type="date" value={data} onChange={e => setData(e.target.value)} style={inputSt} />
           </div>
 
           <div>
-            <label style={lbl}>Location (opzionale)</label>
+            <label style={lbl}>{t('orarioEvt_locationLbl')}</label>
             <input type="text" value={location} onChange={e => setLocation(e.target.value)}
               placeholder="es. Villa Taverna, CDMX" style={inputSt} />
           </div>
@@ -136,12 +139,12 @@ function CreateEventModal({
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              Crea evento
+              {t('orarioEvt_createBtn')}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('cancel')}
             </button>
           </div>
         </div>
@@ -158,11 +161,13 @@ export default function OrarioListPage() {
     plannerUser, adminUser,
     isLoading: authLoading,
   } = usePlannerAuth();
+  const { t, lang } = useI18n();
 
   const [events,  setEvents]  = useState<PlannerEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
 
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
   const canAccess = isSuperAdmin || canManageCashControl;
 
   // Real-time list of all planner events
@@ -190,8 +195,10 @@ export default function OrarioListPage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
-          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>Accesso non autorizzato</p>
-          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>← Dashboard</Link>
+          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>{t('errorUnauthorized')}</p>
+          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+            <ArrowLeft className="size-4 inline mr-1" />{t('dashboard')}
+          </Link>
         </div>
       </div>
     );
@@ -212,7 +219,7 @@ export default function OrarioListPage() {
           <Link href="/planner"
             className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            <ArrowLeft className="size-4" /> Dashboard
+            <ArrowLeft className="size-4" /> {t('dashboard')}
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2">
@@ -220,19 +227,22 @@ export default function OrarioListPage() {
               <Clock className="size-4" />
             </div>
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Orario di Lavoro
+              {t('orarioEvt_title')}
             </h1>
           </div>
         </div>
 
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
-          style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
-        >
-          <Plus className="size-4" />
-          <span className="hidden sm:inline">Crea evento</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSelector />
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">{t('orarioEvt_createBtn')}</span>
+          </button>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
@@ -243,28 +253,28 @@ export default function OrarioListPage() {
               <Users className="size-6" />
             </div>
             <p className="text-base mb-1" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nessun evento ancora
+              {t('orarioEvt_noEvents')}
             </p>
             <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Crea un evento per iniziare a registrare gli orari del team.
+              {t('orarioEvt_noEventsDesc')}
             </p>
             <button
               onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-xl transition-opacity hover:opacity-80"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
             >
-              <Plus className="size-4" /> Crea primo evento
+              <Plus className="size-4" /> {t('orarioEvt_createFirst')}
             </button>
           </div>
         ) : (
           <div className="space-y-3">
             <p className="text-sm mb-4" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {events.length} {events.length === 1 ? 'evento' : 'eventi'} · seleziona per gestire l&apos;orario del team
+              {events.length} {events.length === 1 ? t('orarioEvt_hint1') : t('orarioEvt_hintN')}
             </p>
             {events.map(evt => {
               const firstDay = evt.days?.[0];
               const dateLabel = firstDay
-                ? new Date(firstDay.date + 'T12:00').toLocaleDateString('it-IT', {
+                ? new Date(firstDay.date + 'T12:00').toLocaleDateString(locale, {
                     day: 'numeric', month: 'long', year: 'numeric',
                   })
                 : null;
@@ -284,7 +294,7 @@ export default function OrarioListPage() {
                     <div className="min-w-0">
                       <p className="text-base font-medium truncate"
                         style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-display)', fontWeight: 400 }}>
-                        {evt.eventCode || evt.clientName || 'Evento senza nome'}
+                        {evt.eventCode || evt.clientName || t('orarioEvt_unnamed')}
                       </p>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                         {evt.clientName && evt.eventCode && (
@@ -314,7 +324,7 @@ export default function OrarioListPage() {
                   <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                     <span className="text-xs px-2.5 py-1 rounded-lg hidden sm:block"
                       style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                      Orario →
+                      {t('orarioEvt_schedule')}
                     </span>
                     <ArrowRight className="size-4 sm:hidden" style={{ color: 'var(--tqf-muted)' }} />
                   </div>

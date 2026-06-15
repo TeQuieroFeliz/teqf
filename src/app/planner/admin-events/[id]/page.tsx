@@ -21,37 +21,42 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  draft:     { label: 'Bozza',   bg: '#f3f4f6', text: '#6b7280' },
-  active:    { label: 'Attivo',  bg: '#f0fdf4', text: '#166534' },
-  submitted: { label: 'Inviato', bg: '#fef9ee', text: '#b45309' },
-};
+function getStatusConfig(t: (k: string) => string) {
+  return {
+    draft:     { label: t('draft'),      bg: '#f3f4f6', text: '#6b7280' },
+    active:    { label: t('adminEvent_statusActive'),    bg: '#f0fdf4', text: '#166534' },
+    submitted: { label: t('submitted'),  bg: '#fef9ee', text: '#b45309' },
+  } as Record<string, { label: string; bg: string; text: string }>;
+}
 
-async function downloadPdf(event: PlannerEvent) {
+async function downloadPdf(event: PlannerEvent, errMsg: string) {
   const res = await fetch('/api/planner-event-pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event }),
   });
-  if (!res.ok) { toast.error('Errore generazione PDF.'); return; }
+  if (!res.ok) { toast.error(errMsg); return; }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `TQF_${(event.eventCode || event.eventName || 'evento').replace(/\s+/g, '_')}.pdf`;
+  a.download = `TQF_${(event.eventCode || event.eventName || 'event').replace(/\s+/g, '_')}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function formatDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('it-IT', {
+function formatDate(iso: string, locale: string) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString(locale, {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 }
 
 export default function AdminEventDetailPage() {
   const { adminUser } = usePlannerAuth();
+  const { t, lang } = useI18n();
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
@@ -69,6 +74,7 @@ export default function AdminEventDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const isSuperAdmin = adminUser?.role === 'superadmin';
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
 
   useEffect(() => {
     getPlannerEvent(id).then(e => {
@@ -99,23 +105,23 @@ export default function AdminEventDetailPage() {
     if (res.success) {
       setEvent(prev => prev ? { ...prev, eventCode: editCode.trim().toUpperCase(), clientName: editClient.trim(), city: editCity } : prev);
       setEditMode(false);
-      toast.success('Evento aggiornato.');
+      toast.success(t('adminEvent_updated'));
     } else {
-      toast.error('Errore salvataggio.');
+      toast.error(t('adminEvent_saveError'));
     }
   }
 
   async function handleDelete() {
     if (!event) return;
-    if (!confirm(`Eliminare definitivamente l'evento "${event.eventCode || event.eventName}"?\n\nQuesta azione non può essere annullata.`)) return;
+    if (!confirm(t('adminEvent_deleteConfirm').replace('{name}', event.eventCode || event.eventName || ''))) return;
     setIsDeleting(true);
     const res = await deletePlannerEvent(event.id);
     setIsDeleting(false);
     if (res.success) {
-      toast.success('Evento eliminato.');
+      toast.success(t('adminEvent_deleted'));
       router.replace('/planner/admin-events');
     } else {
-      toast.error('Errore durante l\'eliminazione.');
+      toast.error(t('adminEvent_deleteError'));
     }
   }
 
@@ -124,9 +130,9 @@ export default function AdminEventDetailPage() {
     const res = await updatePlannerEventStatus(event.id, status);
     if (res.success) {
       setEvent(prev => prev ? { ...prev, status } : prev);
-      toast.success('Stato aggiornato.');
+      toast.success(t('adminEvent_statusUpdated'));
     } else {
-      toast.error('Errore aggiornamento stato.');
+      toast.error(t('adminEvent_statusError'));
     }
   }
 
@@ -146,6 +152,7 @@ export default function AdminEventDetailPage() {
 
   if (!event) return null;
 
+  const STATUS_CONFIG = getStatusConfig(t as unknown as (k: string) => string);
   const cfg = STATUS_CONFIG[event.status] ?? STATUS_CONFIG.draft;
   const cityLabel = (val: string) => CITIES.find(c => c.value === val)?.label ?? val;
 
@@ -177,7 +184,7 @@ export default function AdminEventDetailPage() {
               {event.plannerName ?? event.plannerEmail}
             </p>
             <h1 className="text-lg truncate" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              {event.eventCode || event.eventName || 'Evento'}
+              {event.eventCode || event.eventName || t('adminEvent_unnamed')}
             </h1>
           </div>
           <span
@@ -187,15 +194,18 @@ export default function AdminEventDetailPage() {
             {cfg.label}
           </span>
         </div>
-        <button
-          onClick={async () => { setPdfLoading(true); await downloadPdf(event); setPdfLoading(false); }}
-          disabled={pdfLoading}
-          className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50 flex-shrink-0"
-          style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
-        >
-          {pdfLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          <span className="hidden sm:inline">Scarica PDF</span>
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <LanguageSelector />
+          <button
+            onClick={async () => { setPdfLoading(true); await downloadPdf(event, t('adminEvent_pdfError')); setPdfLoading(false); }}
+            disabled={pdfLoading}
+            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+            style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
+          >
+            {pdfLoading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            <span className="hidden sm:inline">{t('adminEvent_downloadPdf')}</span>
+          </button>
+        </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-8 space-y-5">
@@ -208,7 +218,7 @@ export default function AdminEventDetailPage() {
           >
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                Gestione Admin
+                {t('adminEvent_adminSection')}
               </p>
               {!editMode && (
                 <button
@@ -217,7 +227,7 @@ export default function AdminEventDetailPage() {
                   style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
                 >
                   <Pencil className="size-3.5" />
-                  Modifica
+                  {t('edit')}
                 </button>
               )}
             </div>
@@ -252,7 +262,7 @@ export default function AdminEventDetailPage() {
                 style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontFamily: 'var(--font-body)' }}
               >
                 <Lock className="size-3.5" />
-                Chiudi evento
+                {t('adminEvent_close')}
               </button>
               <button
                 onClick={handleDelete}
@@ -261,7 +271,7 @@ export default function AdminEventDetailPage() {
                 style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fca5a5', fontFamily: 'var(--font-body)' }}
               >
                 {isDeleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                Elimina evento
+                {t('adminEvent_delete')}
               </button>
             </div>
 
@@ -270,7 +280,7 @@ export default function AdminEventDetailPage() {
               <div className="space-y-3 pt-3 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Codice Evento</label>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('adminEvent_fieldCode')}</label>
                     <input
                       type="text"
                       value={editCode}
@@ -279,7 +289,7 @@ export default function AdminEventDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Cliente</label>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('adminEvent_fieldClient')}</label>
                     <input
                       type="text"
                       value={editClient}
@@ -288,7 +298,7 @@ export default function AdminEventDetailPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Città</label>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('adminEvent_fieldCity')}</label>
                     <input
                       type="text"
                       value={editCity}
@@ -305,7 +315,7 @@ export default function AdminEventDetailPage() {
                     style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
                   >
                     {editSaving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                    Salva
+                    {t('save')}
                   </button>
                   <button
                     onClick={() => setEditMode(false)}
@@ -313,7 +323,7 @@ export default function AdminEventDetailPage() {
                     style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
                   >
                     <X className="size-4" />
-                    Annulla
+                    {t('cancel')}
                   </button>
                 </div>
               </div>
@@ -328,16 +338,16 @@ export default function AdminEventDetailPage() {
               <Calendar className="size-4" />
             </div>
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Dettagli Evento
+              {t('adminEvent_detailsTitle')}
             </h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {field('Codice', event.eventCode)}
-            {field('Cliente', event.clientName)}
-            {field('Città', event.city ? cityLabel(event.city) : undefined)}
-            {field('Giorni', event.days?.length ? `${event.days.length}` : undefined)}
-            {field('Planner', event.plannerName)}
-            {field('Email', event.plannerEmail)}
+            {field(t('adminEvent_fieldCode'), event.eventCode)}
+            {field(t('adminEvent_fieldClient'), event.clientName)}
+            {field(t('adminEvent_fieldCity'), event.city ? cityLabel(event.city) : undefined)}
+            {field(t('adminEvent_fieldDays'), event.days?.length ? `${event.days.length}` : undefined)}
+            {field(t('adminEvent_fieldPlanner'), event.plannerName)}
+            {field(t('adminEvent_fieldEmail'), event.plannerEmail)}
           </div>
         </div>
 
@@ -349,7 +359,7 @@ export default function AdminEventDetailPage() {
                 <MapPin className="size-4" />
               </div>
               <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                Giorni & Venue ({event.days.length})
+                {t('adminEvent_daysTitle')} ({event.days.length})
               </h2>
             </div>
             <div className="space-y-5">
@@ -363,15 +373,15 @@ export default function AdminEventDetailPage() {
                       {idx + 1}
                     </span>
                     <span className="text-sm font-medium" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                      {formatDate(day.date)}
+                      {formatDate(day.date, locale)}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {field('Descrizione', day.eventName)}
-                    {field('Venue', day.venue)}
+                    {field(t('adminEvent_dayDesc'), day.eventName)}
+                    {field(t('adminEvent_dayVenue'), day.venue)}
                     {day.venueAddress && (
                       <div>
-                        <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Indirizzo</p>
+                        <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('adminEvent_dayAddress')}</p>
                         <div className="flex items-start gap-1">
                           <p className="text-sm flex-1" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>{day.venueAddress}</p>
                           {day.venueMapUrl && (
@@ -382,24 +392,24 @@ export default function AdminEventDetailPage() {
                         </div>
                       </div>
                     )}
-                    {field('Note', day.notes)}
+                    {field(t('adminEvent_dayNotes'), day.notes)}
                   </div>
                   {(day.setupTime || (day as any).eventStartTime || day.breakdownTime || day.supplierAccessTime) && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                      {field('Montaggio', day.setupTime)}
-                      {field('Inizio Evento', (day as any).eventStartTime)}
-                      {field('Smontaggio', day.breakdownTime)}
-                      {field('Accesso Fornitori', day.supplierAccessTime)}
+                      {field(t('adminEvent_setup'), day.setupTime)}
+                      {field(t('adminEvent_eventStart'), (day as any).eventStartTime)}
+                      {field(t('adminEvent_breakdown'), day.breakdownTime)}
+                      {field(t('adminEvent_supplierAccess'), day.supplierAccessTime)}
                     </div>
                   )}
                   {(day.supplierRegulationUrl || day.layoutUrls?.length > 0) && (
                     <div className="pt-3 border-t space-y-1.5" style={{ borderColor: 'var(--tqf-beige-border)' }}>
-                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Documenti</p>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('adminEvent_documents')}</p>
                       {day.supplierRegulationUrl && (
                         <a href={day.supplierRegulationUrl} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-2 text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
                           <FileText className="size-3.5" />
-                          Regolamento Fornitori
+                          {t('adminEvent_supplierReg')}
                         </a>
                       )}
                       {day.layoutUrls?.map((url: string, i: number) => (
@@ -416,7 +426,7 @@ export default function AdminEventDetailPage() {
                       {day.selectedFurniture?.length > 0 && (
                         <div>
                           <p className="text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            Mobili ({day.selectedFurniture.reduce((s, i) => s + i.quantity, 0)} pezzi)
+                            {t('adminEvent_furniture')} ({day.selectedFurniture.reduce((s, i) => s + i.quantity, 0)} {t('adminEvent_pieces')})
                           </p>
                           <div className="space-y-1">
                             {day.selectedFurniture.map(item => (
@@ -431,7 +441,7 @@ export default function AdminEventDetailPage() {
                       {day.selectedFlowers?.length > 0 && (
                         <div>
                           <p className="text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            Fiori
+                            {t('adminEvent_flowers')}
                           </p>
                           <div className="space-y-1">
                             {day.selectedFlowers.map(item => (

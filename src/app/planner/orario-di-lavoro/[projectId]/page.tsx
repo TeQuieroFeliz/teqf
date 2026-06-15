@@ -6,6 +6,8 @@ import {
   updateTeqfOrarioEntry,
 } from '@/actions/planner/teqf-projects';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import { db } from '@/firebase/client';
 import {
   OrarioEntry,
@@ -69,18 +71,18 @@ function fmtOre(h: number): string {
   return m > 0 ? `${hrs}h ${m}m` : `${hrs}h`;
 }
 
-function fmtDate(d: string): string {
+function fmtDate(d: string, locale: string): string {
   if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
+  return new Date(d + 'T12:00').toLocaleDateString(locale, {
     day: 'numeric', month: 'long', year: 'numeric',
   });
 }
 
-function fmtDataOra(iso: string): string {
+function fmtDataOra(iso: string, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' })
-    + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: '2-digit' })
+    + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 function oreColor(h: number): string {
@@ -145,6 +147,7 @@ interface GiornoFormCardProps {
 }
 
 function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: GiornoFormCardProps) {
+  const { t } = useI18n();
   const oreAM     = calcOre(giorno.entrataAM, giorno.uscitaAM);
   const orePM     = calcOre(giorno.entrataPM, giorno.uscitaPM);
   const oreGiorno = parseFloat((oreAM + orePM).toFixed(2));
@@ -156,7 +159,10 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
     return (
       <>
         <div className="grid grid-cols-2 gap-2">
-          {([['Entrata', eKey], ['Uscita', uKey]] as [string, typeof eKey | typeof uKey][]).map(([label, key]) => {
+          {([
+            [t('orarioDl_entryLabel'), eKey],
+            [t('orarioDl_exitLabel'), uKey],
+          ] as [string, typeof eKey | typeof uKey][]).map(([label, key]) => {
             const val = giorno[key as keyof GiornoForm];
             return (
               <div key={key}>
@@ -188,7 +194,7 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
       style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)' }}>
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label style={lbl}>📅 Data</label>
+          <label style={lbl}>{t('orarioDl_dateLabel')}</label>
           <input type="date" value={giorno.data} onChange={e => up({ data: e.target.value })} style={inputSt} />
         </div>
         {canRemove && (
@@ -200,18 +206,18 @@ function GiornoFormCard({ giorno, index, canRemove, onChange, onRemove }: Giorno
         )}
       </div>
       <div>
-        <label style={lbl}>🌅 Turno AM (opzionale)</label>
+        <label style={lbl}>{t('orarioDl_amShift')}</label>
         <TimeFields eKey="entrataAM" uKey="uscitaAM" />
       </div>
       <div>
-        <label style={lbl}>🌆 Turno PM (opzionale)</label>
+        <label style={lbl}>{t('orarioDl_pmShift')}</label>
         <TimeFields eKey="entrataPM" uKey="uscitaPM" />
       </div>
       {oreGiorno > 0 && (
         <div className="flex justify-end">
           <span className="text-xs px-2.5 py-1 rounded-lg font-semibold"
             style={{ background: oreBg(oreGiorno), color: oreColor(oreGiorno), fontFamily: 'var(--font-body)' }}>
-            Ore giorno: {fmtOre(oreGiorno)}
+            {t('orarioDl_dayHours')} {fmtOre(oreGiorno)}
           </span>
         </div>
       )}
@@ -236,6 +242,7 @@ function OrarioModal({
   createdBy: string; extraRoles: string[];
   onClose: () => void; onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const initGiorni = (): GiornoForm[] => {
     if (entry?.turni?.length) {
       return entry.turni.map(g => ({
@@ -275,7 +282,7 @@ function OrarioModal({
   }
 
   async function handleSave() {
-    if (!form.name.trim()) { toast.error('Il nome è obbligatorio.'); return; }
+    if (!form.name.trim()) { toast.error(t('orarioDl_nameRequired')); return; }
 
     const finalRole = form.showCustomRole
       ? form.customRoleInput.trim() || form.role : form.role;
@@ -308,10 +315,10 @@ function OrarioModal({
         });
 
     if (result.success) {
-      toast.success(mode === 'add' ? 'Persona aggiunta.' : 'Aggiornato.');
+      toast.success(mode === 'add' ? t('orarioDl_savedAdd') : t('orarioDl_savedEdit'));
       onSaved(); onClose();
     } else {
-      toast.error(result.error ?? 'Errore salvataggio.');
+      toast.error(result.error ?? t('orarioDl_saveError'));
     }
     setSaving(false);
   }
@@ -328,19 +335,19 @@ function OrarioModal({
         <div className="px-5 pb-8 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              {mode === 'add' ? 'Aggiungi persona' : 'Modifica persona'}
+              {mode === 'add' ? t('orarioDl_addTitle') : t('orarioDl_editTitle')}
             </h2>
             <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
           </div>
 
           <div>
-            <label style={lbl}>Nome e cognome *</label>
+            <label style={lbl}>{t('orarioDl_nameLabel')}</label>
             <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
               placeholder="Maria García" autoFocus={mode === 'add'} style={inputSt} />
           </div>
 
           <div>
-            <label style={lbl}>Ruolo *</label>
+            <label style={lbl}>{t('orarioDl_roleLabel')}</label>
             {!form.showCustomRole ? (
               <div className="flex flex-wrap gap-2">
                 {allRoles.map(r => {
@@ -361,14 +368,14 @@ function OrarioModal({
                 <button type="button" onClick={() => set('showCustomRole', true)}
                   className="px-3 py-2 rounded-xl text-sm"
                   style={{ border: '1.5px dashed var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  + Aggiungi categoria
+                  {t('orarioDl_addCategory')}
                 </button>
               </div>
             ) : (
               <div className="flex gap-2">
                 <input type="text" value={form.customRoleInput}
                   onChange={e => set('customRoleInput', e.target.value)}
-                  placeholder="Nome categoria..." autoFocus
+                  placeholder={t('orarioDl_categoryPlaceholder')} autoFocus
                   style={{ ...inputSt, flex: 1 }} />
                 <button type="button"
                   onClick={() => { set('showCustomRole', false); if (form.customRoleInput.trim()) set('role', form.customRoleInput.trim()); }}
@@ -384,7 +391,7 @@ function OrarioModal({
           </div>
 
           <div className="space-y-3">
-            <label style={lbl}>Giorni di lavoro</label>
+            <label style={lbl}>{t('orarioDl_workDays')}</label>
             {form.giorni.map((g, i) => (
               <GiornoFormCard key={i} giorno={g} index={i}
                 canRemove={form.giorni.length > 1}
@@ -396,7 +403,7 @@ function OrarioModal({
               onClick={() => setForm(f => ({ ...f, giorni: [...f.giorni, emptyGiornoForm()] }))}
               className="w-full py-3 rounded-2xl text-sm flex items-center justify-center gap-2"
               style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
-              <Plus className="size-4" /> Aggiungi giorno
+              <Plus className="size-4" /> {t('orarioDl_addDay')}
             </button>
           </div>
 
@@ -404,13 +411,13 @@ function OrarioModal({
             <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: oreBg(totale) }}>
               <Clock className="size-4" style={{ color: oreColor(totale) }} />
               <span className="text-sm font-semibold" style={{ color: oreColor(totale), fontFamily: 'var(--font-body)' }}>
-                TOTALE: {totale.toFixed(1)}h
+                TOTAL: {totale.toFixed(1)}h
               </span>
             </div>
           )}
 
           <div>
-            <label style={lbl}>Desmontaje</label>
+            <label style={lbl}>{t('orarioDl_desLabel')}</label>
             <div className="flex items-center gap-0 w-fit">
               <button type="button" disabled={form.desmontaje <= 0}
                 onClick={() => set('desmontaje', Math.max(0, form.desmontaje - 1))}
@@ -435,12 +442,12 @@ function OrarioModal({
               className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
               style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
               {saving && <Loader2 className="size-4 animate-spin" />}
-              {mode === 'add' ? 'Aggiungi' : 'Salva modifiche'}
+              {mode === 'add' ? t('orarioDl_addBtn') : t('orarioDl_saveBtn')}
             </button>
             <button onClick={onClose}
               className="px-5 py-3.5 rounded-2xl text-sm"
               style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Annulla
+              {t('orarioDl_cancel')}
             </button>
           </div>
         </div>
@@ -457,6 +464,8 @@ function OrarioCard({
   entry: OrarioEntry; canEdit: boolean;
   onEdit: () => void; onDelete: () => void;
 }) {
+  const { t, lang } = useI18n();
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
   const [expanded, setExpanded] = useState(false);
   const rs = roleStyle(entry.role);
   const hasTurni = entry.turni?.length > 0;
@@ -491,12 +500,12 @@ function OrarioCard({
               )}
               {hasTurni && (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  {entry.turni.length} {entry.turni.length === 1 ? 'giorno' : 'giorni'}
+                  {entry.turni.length} {entry.turni.length === 1 ? t('orarioDl_day1') : t('orarioDl_dayN')}
                 </span>
               )}
               {entry.desmontaje > 0 && (
                 <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                  {entry.desmontaje} desm.
+                  {entry.desmontaje} {t('orarioDl_desmontaje')}
                 </span>
               )}
             </div>
@@ -518,7 +527,7 @@ function OrarioCard({
                   <p className="text-xs font-semibold flex items-center gap-1.5 mb-2"
                     style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
                     <Calendar className="size-3.5 flex-shrink-0" />
-                    {fmtDate(giorno.data)}
+                    {fmtDate(giorno.data, locale)}
                   </p>
                 )}
                 {giorno.turnoAM && (
@@ -556,12 +565,12 @@ function OrarioCard({
                   </div>
                 )}
                 {!giorno.turnoAM && !giorno.turnoPM && (
-                  <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Nessun turno registrato</p>
+                  <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('orarioDl_noShift')}</p>
                 )}
                 {oreGiorno > 0 && giorno.turnoAM && giorno.turnoPM && (
                   <div className="text-right pt-1">
                     <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                      Ore giorno: <strong>{fmtOre(oreGiorno)}</strong>
+                      {t('orarioDl_dayHours')} <strong>{fmtOre(oreGiorno)}</strong>
                     </span>
                   </div>
                 )}
@@ -576,18 +585,18 @@ function OrarioCard({
                 {fmtOre(entry.totaleOre)}
               </span>
               <span className="text-xs opacity-70" style={{ color: oreColor(entry.totaleOre), fontFamily: 'var(--font-body)' }}>
-                totali
+                {t('orarioDl_total')}
               </span>
             </div>
             {entry.desmontaje > 0 && (
               <span className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                {entry.desmontaje} desmontaje
+                {entry.desmontaje} {t('orarioDl_desLabel')}
               </span>
             )}
           </div>
 
           <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Ultima modifica: {fmtDataOra(entry.ultimaModifica)}
+            {t('orarioDl_lastModified')} {fmtDataOra(entry.ultimaModifica, locale)}
           </p>
 
           {canEdit && (
@@ -595,7 +604,7 @@ function OrarioCard({
               <button onClick={onEdit}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm"
                 style={{ border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-                <Pencil className="size-3.5" /> Modifica
+                <Pencil className="size-3.5" /> {t('orarioDl_editBtn')}
               </button>
               <button onClick={onDelete}
                 className="flex items-center justify-center px-4 py-2.5 rounded-xl text-sm"
@@ -615,6 +624,7 @@ function OrarioCard({
 export default function OrarioDetailPage() {
   const params    = useParams();
   const projectId = params?.projectId as string;
+  const { t, lang } = useI18n();
 
   const {
     isSuperAdmin, canManageCashControl,
@@ -662,11 +672,11 @@ export default function OrarioDetailPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
           <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            Accesso non autorizzato
+            {t('orarioDl_unauthorized')}
           </p>
           <Link href="/planner/orario-di-lavoro" className="text-sm"
             style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
-            ← Orario di Lavoro
+            {t('orarioDl_backLink')}
           </Link>
         </div>
       </div>
@@ -684,10 +694,10 @@ export default function OrarioDetailPage() {
   function openEdit(e: OrarioEntry) { setModalMode('edit'); setEditEntry(e); setShowModal(true); }
 
   async function handleDelete(entry: OrarioEntry) {
-    if (!confirm(`Eliminare ${entry.name}?`)) return;
+    if (!confirm(t('orarioDl_deleteConfirm', { name: entry.name }))) return;
     const r = await deleteTeqfOrarioEntry(projectId, entry.id);
-    if (r.success) toast.success('Rimosso.');
-    else toast.error(r.error ?? 'Errore.');
+    if (r.success) toast.success(t('orarioDl_deleted'));
+    else toast.error(r.error ?? t('orarioDl_error'));
   }
 
   return (
@@ -707,18 +717,19 @@ export default function OrarioDetailPage() {
             </div>
             <p className="text-sm font-medium truncate"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}>
-              {projectName || 'Orario di Lavoro'}
+              {projectName || t('orarioDl_fallback')}
             </p>
           </div>
+          <LanguageSelector />
         </div>
 
         {/* Stats bar */}
         <div className="grid grid-cols-3 gap-2 px-2 py-3 mb-3 rounded-xl"
           style={{ background: 'var(--tqf-beige)' }}>
           {[
-            { label: 'Persone',    value: String(entries.length) },
-            { label: 'Ore totali', value: fmtOre(totalOre), color: totalOre > 0 ? oreColor(totalOre) : undefined },
-            { label: 'Desmontaje', value: String(totalDesm) },
+            { label: t('orarioDl_statPeople'), value: String(entries.length) },
+            { label: t('orarioDl_statHours'), value: fmtOre(totalOre), color: totalOre > 0 ? oreColor(totalOre) : undefined },
+            { label: t('orarioDl_statDesm'), value: String(totalDesm) },
           ].map(({ label, value, color }) => (
             <div key={label} className="text-center">
               <p className="text-lg font-semibold"
@@ -737,7 +748,7 @@ export default function OrarioDetailPage() {
           <button onClick={openAdd}
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-medium"
             style={{ border: '2px dashed var(--tqf-beige-border)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)' }}>
-            <Plus className="size-4" /> Aggiungi persona
+            <Plus className="size-4" /> {t('orarioDl_addPerson')}
           </button>
         </div>
       )}
@@ -751,7 +762,7 @@ export default function OrarioDetailPage() {
             <Users className="size-6" />
           </div>
           <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            Nessuna persona ancora. Usa il pulsante qui sopra.
+            {t('orarioDl_noPeople')}
           </p>
         </div>
       ) : (

@@ -35,6 +35,8 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -51,12 +53,13 @@ function nowHHMM() {
 function fmtCurrency(n: number) {
   return `$${Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 }
-function fmtDate(dateStr: string) {
+function fmtDate(dateStr: string, tFn: (k: 'cc_today' | 'cc_yesterday') => string, lang: string) {
   const today = todayISO();
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  if (dateStr === today) return 'Oggi';
-  if (dateStr === yesterday) return 'Ieri';
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
+  if (dateStr === today) return tFn('cc_today');
+  if (dateStr === yesterday) return tFn('cc_yesterday');
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -72,6 +75,7 @@ function BalanceCard({
   onEditBudget: () => void;
   canAdmin: boolean;
 }) {
+  const { t } = useI18n();
   const totalSpent   = movements.reduce((s, m) => s + m.amount, 0);
   const totalPending = movements.filter(m => m.status === 'pending').reduce((s, m) => s + m.amount, 0);
   const balance      = budget - totalSpent;
@@ -90,7 +94,7 @@ function BalanceCard({
       {/* Budget row */}
       <div className="flex items-center justify-between mb-1">
         <p className="text-xs uppercase tracking-widest opacity-50" style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.16em' }}>
-          {hasBudget ? 'Saldo attuale' : 'Spesa totale'}
+          {hasBudget ? t('cc_balanceLabel') : t('cc_spendLabel')}
         </p>
         {canAdmin && (
           <button
@@ -125,15 +129,15 @@ function BalanceCard({
           </span>
         )}
         <span className="text-xs opacity-60" style={{ fontFamily: 'var(--font-body)' }}>
-          Gastato {fmtCurrency(totalSpent)}
+          {t('cc_spent')} {fmtCurrency(totalSpent)}
         </span>
         {totalPending > 0 && (
           <span className="text-xs" style={{ color: '#fbbf24', fontFamily: 'var(--font-body)' }}>
-            In attesa {fmtCurrency(totalPending)}
+            {t('cc_pending')} {fmtCurrency(totalPending)}
           </span>
         )}
         <span className="text-xs opacity-50" style={{ fontFamily: 'var(--font-body)' }}>
-          {movements.length} movimenti
+          {movements.length} {t('cc_movements')}
         </span>
       </div>
     </div>
@@ -153,6 +157,7 @@ function MovementRow({
   canEdit: boolean;
   onTap: () => void;
 }) {
+  const { t, lang } = useI18n();
   const cat = CASH_CATEGORIES.find(c => c.value === movement.category);
 
   return (
@@ -197,7 +202,7 @@ function MovementRow({
             </p>
           )}
           <p className="text-xs flex-shrink-0" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            {fmtDate(movement.date)} {movement.time}
+            {fmtDate(movement.date, t, lang)} {movement.time}
           </p>
         </div>
       </div>
@@ -236,6 +241,7 @@ function EditModal({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
+  const { t, lang } = useI18n();
   const [date, setDate]       = useState(movement.date);
   const [time, setTime]       = useState(movement.time);
   const [amount, setAmount]   = useState(String(movement.amount));
@@ -250,31 +256,31 @@ function EditModal({
 
   async function handleSave() {
     const parsed = parseFloat(amount.replace(',', '.'));
-    if (isNaN(parsed) || parsed <= 0) { toast.error('Importo non valido.'); return; }
+    if (isNaN(parsed) || parsed <= 0) { toast.error(t('cc_editInvalidAmount')); return; }
     setSaving(true);
     const result = await updateCashMovement(eventId, movement.id, {
       date, time,
       ...(canAdmin ? { amount: parsed, category, paymentMethod: method, note } : {}),
     });
-    if (result.success) { toast.success('Aggiornato.'); onUpdated(); onClose(); }
-    else toast.error(result.error ?? 'Errore aggiornamento.');
+    if (result.success) { toast.success(t('cc_editUpdated')); onUpdated(); onClose(); }
+    else toast.error(result.error ?? t('cc_editUpdateError'));
     setSaving(false);
   }
 
   async function handleDelete() {
-    if (!confirm('Eliminare questo movimento?')) return;
+    if (!confirm(t('cc_editDeleteConfirm'))) return;
     setDeleting(true);
     const result = await deleteCashMovement(eventId, movement.id);
-    if (result.success) { toast.success('Movimento eliminato.'); onDeleted(); onClose(); }
-    else toast.error(result.error ?? 'Errore eliminazione.');
+    if (result.success) { toast.success(t('cc_editDeleted')); onDeleted(); onClose(); }
+    else toast.error(result.error ?? t('cc_editDeleteError'));
     setDeleting(false);
   }
 
   async function handleApprove() {
     setApproving(true);
     const result = await approveCashMovement(eventId, movement.id);
-    if (result.success) { toast.success('Approvato.'); onUpdated(); onClose(); }
-    else toast.error(result.error ?? 'Errore approvazione.');
+    if (result.success) { toast.success(t('cc_editApproved')); onUpdated(); onClose(); }
+    else toast.error(result.error ?? t('cc_editApproveError'));
     setApproving(false);
   }
 
@@ -321,7 +327,7 @@ function EditModal({
         {/* Amount (SuperAdmin only) */}
         {canAdmin && (
           <div>
-            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Importo</p>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editAmount')}</p>
             <input
               type="text"
               inputMode="decimal"
@@ -335,7 +341,7 @@ function EditModal({
         {/* Category (SuperAdmin only) */}
         {canAdmin && (
           <div>
-            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Categoria</p>
+            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editCategory')}</p>
             <div className="grid grid-cols-3 gap-2">
               {CASH_CATEGORIES.map(c => (
                 <button
@@ -360,7 +366,7 @@ function EditModal({
         {/* Payment method (SuperAdmin only) */}
         {canAdmin && (
           <div>
-            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Metodo</p>
+            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editMethod')}</p>
             <div className="grid grid-cols-2 gap-2">
               {(['tarjeta', 'efectivo'] as const).map(m => (
                 <button
@@ -385,11 +391,11 @@ function EditModal({
         {/* Date + Time */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Data</p>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editDate')}</p>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Ora</p>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editTime')}</p>
             <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} />
           </div>
         </div>
@@ -397,12 +403,12 @@ function EditModal({
         {/* Note (SuperAdmin only) */}
         {canAdmin && (
           <div>
-            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Nota</p>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editNote')}</p>
             <input
               type="text"
               value={note}
               onChange={e => setNote(e.target.value)}
-              placeholder="Nota opzionale..."
+              placeholder={t('cc_editNotePlaceholder')}
               style={inputStyle}
             />
           </div>
@@ -411,11 +417,11 @@ function EditModal({
         {/* Receipt preview */}
         {movement.receiptUrl && (
           <div>
-            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Ricevuta</p>
+            <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('cc_editReceipt')}</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={movement.receiptUrl}
-              alt="Ricevuta"
+              alt={t('cc_editReceipt')}
               className="w-full rounded-xl object-contain max-h-48"
               style={{ border: '1px solid var(--tqf-beige-border)' }}
             />
@@ -431,7 +437,7 @@ function EditModal({
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            Salva
+            {t('cc_editSave')}
           </button>
 
           {canAdmin && movement.status === 'pending' && (
@@ -459,7 +465,7 @@ function EditModal({
 
         {/* Registered by info */}
         <p className="text-xs text-center" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-          Registrato da {movement.registeredByName} · {fmtDate(movement.date)} alle {movement.time}
+          {t('cc_editRegisteredBy', { name: movement.registeredByName ?? '', date: fmtDate(movement.date, t, lang), time: movement.time })}
         </p>
       </div>
     </div>
@@ -481,6 +487,7 @@ function UserPickerSheet({
   onSelect: (u: UserOption) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center"
@@ -501,7 +508,7 @@ function UserPickerSheet({
           className="px-5 pb-3 text-xs uppercase tracking-widest"
           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
         >
-          Cambia utente registrante
+          {t('cc_userPickerTitle')}
         </p>
 
         <div className="divide-y" style={{ borderColor: 'var(--tqf-beige-border)' }}>
@@ -551,16 +558,17 @@ function BudgetModal({
   onClose: () => void;
   onSaved: (b: number) => void;
 }) {
+  const { t } = useI18n();
   const [value, setValue] = useState(currentBudget > 0 ? String(currentBudget) : '');
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     const parsed = parseFloat(value.replace(',', '.'));
-    if (isNaN(parsed) || parsed < 0) { toast.error('Valore non valido.'); return; }
+    if (isNaN(parsed) || parsed < 0) { toast.error(t('cc_invalidValue')); return; }
     setSaving(true);
     const result = await updateEventCashBudget(eventId, parsed);
-    if (result.success) { toast.success('Budget impostato.'); onSaved(parsed); onClose(); }
-    else toast.error(result.error ?? 'Errore.');
+    if (result.success) { toast.success(t('cc_budgetSet')); onSaved(parsed); onClose(); }
+    else toast.error(result.error ?? t('cc_budgetError'));
     setSaving(false);
   }
 
@@ -571,10 +579,10 @@ function BudgetModal({
           <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
         </div>
         <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-          Budget evento
+          {t('cc_budgetTitle')}
         </h2>
         <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-          Importo totale disponibile per le spese di questo evento.
+          {t('cc_budgetDesc')}
         </p>
         <div className="relative">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold" style={{ color: 'var(--tqf-muted)' }}>$</span>
@@ -597,7 +605,7 @@ function BudgetModal({
           style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
         >
           {saving && <Loader2 className="size-4 animate-spin" />}
-          Imposta budget
+          {t('cc_setBudget')}
         </button>
       </div>
     </div>
@@ -610,6 +618,7 @@ export default function CashControlPage() {
   const params = useParams();
   const router = useRouter();
   const eventId = params?.id as string;
+  const { t, lang } = useI18n();
 
   const { plannerUser, adminUser, isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
 
@@ -724,8 +733,8 @@ export default function CashControlPage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center">
-          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>Accesso non autorizzato</p>
-          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>← Dashboard</Link>
+          <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>{t('errorUnauthorized')}</p>
+          <Link href="/planner" className="text-sm" style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>← {t('dashboard')}</Link>
         </div>
       </div>
     );
@@ -737,10 +746,10 @@ export default function CashControlPage() {
 
   async function handleSubmit() {
     const parsed = parseFloat(amount.replace(',', '.'));
-    if (!parsed || parsed <= 0) { toast.error('Inserisci un importo valido.'); return; }
-    if (!method)            { toast.error('Seleziona il metodo di pagamento.'); return; }
-    if (!category)          { toast.error('Seleziona una categoria.'); return; }
-    if (!registeredAsUser)  { toast.error('Nessun utente selezionato.'); return; }
+    if (!parsed || parsed <= 0) { toast.error(t('cc_invalidAmount')); return; }
+    if (!method)            { toast.error(t('cc_noMethod')); return; }
+    if (!category)          { toast.error(t('cc_noCategory')); return; }
+    if (!registeredAsUser)  { toast.error(t('cc_noUser')); return; }
 
     setSubmitting(true);
     try {
@@ -756,7 +765,7 @@ export default function CashControlPage() {
         time: now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
       });
 
-      if (!result.success) { toast.error(result.error ?? 'Errore.'); return; }
+      if (!result.success) { toast.error(result.error ?? t('cc_budgetError')); return; }
 
       // Upload pending receipt if any
       if (pendingReceipt && result.id) {
@@ -772,14 +781,14 @@ export default function CashControlPage() {
             });
           });
         } catch {
-          toast.warning('Spesa registrata, ma caricamento ricevuta fallito.');
+          toast.warning(t('cc_receiptFailed'));
         }
         setUploadingFor(null);
         setPendingReceipt(null);
         if (fileRef.current) fileRef.current.value = '';
       }
 
-      toast.success('Movimento registrato.');
+      toast.success(t('cc_registered'));
       setAmount('');
       setMethod(null);
       setCategory(null);
@@ -792,8 +801,8 @@ export default function CashControlPage() {
   function handleReceiptPick(files: FileList | null) {
     if (!files || !files[0]) return;
     const file = files[0];
-    if (!file.type.startsWith('image/')) { toast.error('Seleziona un file immagine.'); return; }
-    if (file.size > 8 * 1024 * 1024) { toast.error('Immagine troppo grande (max 8 MB).'); return; }
+    if (!file.type.startsWith('image/')) { toast.error(t('cc_invalidImage')); return; }
+    if (file.size > 8 * 1024 * 1024) { toast.error(t('cc_imageTooLarge')); return; }
     setPendingReceipt(file);
     toast.success(`📎 ${file.name} allegata.`);
   }
@@ -817,7 +826,7 @@ export default function CashControlPage() {
           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
         >
           <ArrowLeft className="size-4" />
-          <span className="hidden xs:inline">Evento</span>
+          <span className="hidden xs:inline">{t('cc_event')}</span>
         </Link>
 
         <div className="flex items-center gap-2">
@@ -825,7 +834,7 @@ export default function CashControlPage() {
             className="text-sm font-medium truncate max-w-[160px]"
             style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-bordeaux)', fontWeight: 400 }}
           >
-            {event?.eventCode || event?.clientName || 'Evento'}
+            {event?.eventCode || event?.clientName || t('cc_event')}
           </p>
           <span
             className="text-xs px-2 py-0.5 rounded-full"
@@ -835,7 +844,7 @@ export default function CashControlPage() {
           </span>
         </div>
 
-        <div className="w-16" /> {/* spacer */}
+        <LanguageSelector />
       </header>
 
       {/* Balance card */}
@@ -899,7 +908,7 @@ export default function CashControlPage() {
                 className="text-xs flex-shrink-0 transition-opacity hover:opacity-70"
                 style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}
               >
-                Cambiar
+                {t('cc_changeUser')}
               </button>
             )}
           </div>
@@ -953,7 +962,7 @@ export default function CashControlPage() {
             type="text"
             value={note}
             onChange={e => setNote(e.target.value)}
-            placeholder="Nota (opzionale)"
+            placeholder={t('cc_notePlaceholder')}
             className="w-full px-4 py-2.5 rounded-2xl text-sm outline-none"
             style={{
               border: '1px solid var(--tqf-beige-border)',
@@ -990,7 +999,7 @@ export default function CashControlPage() {
               }}
             >
               <Camera className="size-4" />
-              <span className="hidden sm:inline">Ricevuta</span>
+              <span className="hidden sm:inline">{t('cc_receipt')}</span>
             </button>
             <input
               ref={fileRef}
@@ -1014,7 +1023,7 @@ export default function CashControlPage() {
               }}
             >
               {(submitting || uploadingFor !== null) && <Loader2 className="size-5 animate-spin" />}
-              Registra
+              {t('cc_register')}
             </button>
           </div>
         </div>
@@ -1024,7 +1033,7 @@ export default function CashControlPage() {
       <div className="mx-4 mt-4 rounded-3xl overflow-hidden" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
         <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--tqf-beige-border)' }}>
           <h2 className="text-sm font-medium" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-            Movimenti recenti
+            {t('cc_recentMoves')}
           </h2>
           <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             {movements.length}
@@ -1034,7 +1043,7 @@ export default function CashControlPage() {
         {movements.length === 0 ? (
           <div className="py-10 text-center">
             <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {canAdd ? 'Registra il primo movimento qui sopra.' : 'Nessun movimento ancora.'}
+              {canAdd ? t('cc_noMovesFirst') : t('cc_noMoves')}
             </p>
           </div>
         ) : (
@@ -1056,8 +1065,8 @@ export default function CashControlPage() {
                 style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', borderTop: '1px solid var(--tqf-beige-border)' }}
               >
                 {showAllMoves
-                  ? <><ChevronUp className="size-4" /> Mostra meno</>
-                  : <><ChevronDown className="size-4" /> Vedi tutti ({movements.length})</>
+                  ? <><ChevronUp className="size-4" /> {t('cc_showLess')}</>
+                  : <><ChevronDown className="size-4" /> {t('cc_showAll', { n: String(movements.length) })}</>
                 }
               </button>
             )}

@@ -18,27 +18,20 @@ import Link from 'next/link';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
-const TEAM_ROLE_OPTIONS: { value: TeamRole; label: string; description: string }[] = [
-  {
-    value: 'xb_planner',
-    label: 'XB Team (Planner)',
-    description: 'Crea progetti, vede/modifica cash control e nomina dei propri eventi',
-  },
-  {
-    value: 'teqf_user',
-    label: 'TeQF Team (Utente)',
-    description: 'Vede tutti i progetti, modifica cash control e nomina per qualsiasi evento, modifica cataloghi',
-  },
-  {
-    value: 'both',
-    label: 'Entrambi',
-    description: 'Accesso completo a tutte le funzionalità di entrambi i ruoli',
-  },
-];
+function getTeamRoleOptions(t: (k: 'requests_role_xb_desc' | 'requests_role_teqf_desc' | 'planners_both' | 'requests_role_both_desc') => string) {
+  return [
+    { value: 'xb_planner' as TeamRole, label: 'XB Team (Planner)', description: t('requests_role_xb_desc') },
+    { value: 'teqf_user' as TeamRole, label: 'TeQF Team', description: t('requests_role_teqf_desc') },
+    { value: 'both' as TeamRole, label: t('planners_both'), description: t('requests_role_both_desc') },
+  ];
+}
 
 export default function PlannerRequestsPage() {
   const { isSuperAdmin } = usePlannerAuth();
+  const { t, lang } = useI18n();
   const [requests, setRequests] = useState<PlannerRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingReq, setProcessingReq] = useState<string | null>(null);
@@ -48,6 +41,8 @@ export default function PlannerRequestsPage() {
   const [approvalReq, setApprovalReq] = useState<PlannerRequest | null>(null);
   const [teamRole, setTeamRole] = useState<TeamRole>('xb_planner');
   const [approving, setApproving] = useState(false);
+
+  const TEAM_ROLE_OPTIONS = getTeamRoleOptions(t);
 
   // Real-time listener for pending requests
   useEffect(() => {
@@ -60,7 +55,6 @@ export default function PlannerRequestsPage() {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        // orderBy('createdAt','desc') in the query handles ordering server-side
         setRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() } as PlannerRequest)));
         setLoading(false);
         setReqError(null);
@@ -78,7 +72,7 @@ export default function PlannerRequestsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-          Accesso non autorizzato.
+          {t('errorUnauthorized')}
         </p>
       </div>
     );
@@ -89,7 +83,7 @@ export default function PlannerRequestsPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tqf-beige)' }}>
         <div className="text-center px-6 max-w-sm">
           <p className="text-base mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)' }}>
-            Errore di connessione
+            {t('errorConnection')}
           </p>
           <p className="text-xs mb-4" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             {reqError}
@@ -99,7 +93,7 @@ export default function PlannerRequestsPage() {
             className="text-sm px-4 py-2 rounded-lg"
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
           >
-            Ricarica
+            {t('requests_reload')}
           </button>
         </div>
       </div>
@@ -132,7 +126,7 @@ export default function PlannerRequestsPage() {
       : await approvePlannerRequest(req.id, req.email, req.name, teamRole, '', req.phone);
 
     if (!result.success) {
-      toast.error(result.error ?? 'Errore approvazione.');
+      toast.error(result.error ?? t('requests_errorApprove'));
       setApproving(false);
       return;
     }
@@ -141,26 +135,26 @@ export default function PlannerRequestsPage() {
     setApproving(false);
 
     if (result.emailSent) {
-      toast.success(`${req.name} approvata/o. Email di conferma inviata.`);
+      toast.success(t('requests_approved').replace('{name}', req.name));
     } else {
-      toast.success(`${req.name} approvata/o.`);
+      toast.success(t('requests_approvedNoEmail').replace('{name}', req.name));
       if (result.emailError) {
-        toast.warning(`Email non inviata: ${result.emailError}.`);
+        toast.warning(t('requests_emailNotSent').replace('{error}', result.emailError!));
       }
     }
   }
 
   async function handleReject(req: PlannerRequest) {
-    if (!confirm(`Rifiutare la richiesta di "${req.name}"?`)) return;
+    if (!confirm(t('requests_rejectConfirm').replace('{name}', req.name))) return;
     setProcessingReq(req.id);
     const result = await rejectPlannerRequest(req.id, req.email, req.name);
     if (result.success) {
-      toast.success(`Richiesta di ${req.name} rifiutata.`);
+      toast.success(t('requests_rejected').replace('{name}', req.name));
       if (!result.emailSent && result.emailError) {
-        toast.warning(`Email non inviata: ${result.emailError}.`);
+        toast.warning(t('requests_emailNotSent').replace('{error}', result.emailError!));
       }
     } else {
-      toast.error(result.error ?? 'Errore rifiuto.');
+      toast.error(result.error ?? t('requests_errorReject'));
     }
     setProcessingReq(null);
   }
@@ -181,7 +175,7 @@ export default function PlannerRequestsPage() {
             style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
           >
             <ArrowLeft className="size-4" />
-            <span className="hidden sm:inline">Dashboard</span>
+            <span className="hidden sm:inline">{t('dashboard')}</span>
           </Link>
           <div className="h-4 w-px" style={{ background: 'var(--tqf-beige-border)' }} />
           <div className="flex items-center gap-2">
@@ -189,21 +183,24 @@ export default function PlannerRequestsPage() {
               <ClipboardList className="size-4" />
             </div>
             <h1 className="text-xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Richieste di Accesso
+              {t('requests_title')}
             </h1>
           </div>
         </div>
 
-        <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-75">
-          <Image
-            src="/logo.png"
-            alt="Te Quiero Feliz"
-            width={28}
-            height={28}
-            className="object-contain"
-            style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
-          />
-        </Link>
+        <div className="flex items-center gap-3">
+          <LanguageSelector />
+          <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-75">
+            <Image
+              src="/logo.png"
+              alt="Te Quiero Feliz"
+              width={28}
+              height={28}
+              className="object-contain"
+              style={{ filter: 'invert(9%) sepia(80%) saturate(900%) hue-rotate(308deg) brightness(145%)' }}
+            />
+          </Link>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -219,17 +216,16 @@ export default function PlannerRequestsPage() {
               <div className="flex items-center gap-2 mb-1">
                 <UserCheck className="size-5" style={{ color: '#15803d' }} />
                 <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                  Approva richiesta
+                  {t('requests_approveModal')}
                 </h2>
               </div>
-              <p className="text-sm mb-5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                Stai approvando <strong>{approvalReq.name}</strong> ({approvalReq.email}).
-                Assegna un ruolo e imposta la password temporanea.
-              </p>
+              <p className="text-sm mb-5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}
+                dangerouslySetInnerHTML={{ __html: t('requests_approveDesc').replace('{name}', `<strong>${approvalReq.name}</strong>`).replace('{email}', approvalReq.email) }}
+              />
 
               {/* Role selection */}
               <div className="mb-5">
-                <label style={labelStyle}>Ruolo *</label>
+                <label style={labelStyle}>{t('requests_roleLabel')}</label>
                 <div className="space-y-2">
                   {TEAM_ROLE_OPTIONS.map((opt) => (
                     <label
@@ -270,7 +266,7 @@ export default function PlannerRequestsPage() {
                   style={{ background: '#15803d', color: 'white', fontFamily: 'var(--font-body)' }}
                 >
                   {approving ? <Loader2 className="size-4 animate-spin" /> : <UserCheck className="size-4" />}
-                  Approva e assegna team
+                  {t('requests_approveBtn')}
                 </button>
                 <button
                   onClick={() => setApprovalReq(null)}
@@ -278,7 +274,7 @@ export default function PlannerRequestsPage() {
                   className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-70"
                   style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
                 >
-                  Annulla
+                  {t('cancel')}
                 </button>
               </div>
             </div>
@@ -299,10 +295,10 @@ export default function PlannerRequestsPage() {
               <UserCheck className="size-7" />
             </div>
             <h2 className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Nessuna richiesta in attesa
+              {t('requests_noRequests')}
             </h2>
             <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              Tutte le richieste sono state gestite.
+              {t('requests_allHandled')}
             </p>
           </div>
         ) : (
@@ -313,7 +309,7 @@ export default function PlannerRequestsPage() {
                 style={{ background: '#d97706' }}
               />
               <p className="text-sm" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>
-                {requests.length} {requests.length === 1 ? 'richiesta in attesa' : 'richieste in attesa'}
+                {requests.length} {requests.length === 1 ? t('requests_pending1') : t('requests_pendingN')}
               </p>
             </div>
 
@@ -349,7 +345,7 @@ export default function PlannerRequestsPage() {
 
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="hidden sm:block text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                      {req.createdAt ? new Date(req.createdAt).toLocaleDateString('it-IT') : '—'}
+                      {req.createdAt ? new Date(req.createdAt).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US') : '—'}
                     </span>
                     <button
                       onClick={() => openApproveModal(req)}
@@ -362,7 +358,7 @@ export default function PlannerRequestsPage() {
                       ) : (
                         <Check className="size-3.5" />
                       )}
-                      Approva
+                      {t('requests_approve')}
                     </button>
                     <button
                       onClick={() => handleReject(req)}
@@ -371,7 +367,7 @@ export default function PlannerRequestsPage() {
                       style={{ background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontFamily: 'var(--font-body)' }}
                     >
                       <UserX className="size-3.5" />
-                      Rifiuta
+                      {t('requests_reject')}
                     </button>
                   </div>
                 </div>

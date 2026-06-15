@@ -30,6 +30,8 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { useLangContext } from '@/context/LangContext';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -37,7 +39,7 @@ import { toast } from 'sonner';
 
 // ─── Translations ─────────────────────────────────────────────────────────────
 
-type Lang = 'it' | 'es' | 'en';
+type Lang = 'en' | 'es';
 
 type Tr = {
   accessDenied: string;
@@ -84,49 +86,6 @@ type Tr = {
 };
 
 const T: Record<Lang, Tr> = {
-  it: {
-    accessDenied: 'Accesso non autorizzato',
-    dashboardBack: 'Dashboard',
-    tabOrario: 'Orario',
-    modifica: 'Modifica',
-    persone: 'Persone',
-    oreTotali: 'Ore totali',
-    desmontaje: 'Desmontaje',
-    aggiungiPersona: 'Aggiungi persona',
-    nessuna: 'Nessuna persona ancora. Usa il pulsante qui sopra.',
-    modalAdd: 'Aggiungi persona',
-    modalEdit: 'Modifica persona',
-    nomeCognome: 'Nome e cognome *',
-    ruolo: 'Ruolo *',
-    aggiungiCategoria: '+ Aggiungi categoria',
-    nomeCategoria: 'Nome categoria...',
-    giorni: 'Giorni di lavoro',
-    aggiungiGiorno: 'Aggiungi giorno',
-    data: '📅 Data',
-    turnoAM: '🌅 Turno AM (opzionale)',
-    turnoPM: '🌆 Turno PM (opzionale)',
-    oreGiorno: 'Ore giorno:',
-    entrata: 'Entrata',
-    uscita: 'Uscita',
-    desLabel: 'Desmontaje',
-    btnAdd: 'Aggiungi',
-    btnSave: 'Salva modifiche',
-    btnCancel: 'Annulla',
-    giorno1: 'giorno',
-    giornoN: 'giorni',
-    desm: 'desm.',
-    nessunTurno: 'Nessun turno registrato',
-    totali: 'totali',
-    ultimaModifica: 'Ultima modifica:',
-    editar: 'Modifica',
-    toastAdded: 'Persona aggiunta.',
-    toastUpdated: 'Aggiornato.',
-    toastDeleted: 'Rimosso.',
-    toastError: 'Errore.',
-    confirmDelete: (name) => `Eliminare ${name}?`,
-    valNome: 'Il nome è obbligatorio.',
-    valGiorni: 'Aggiungi almeno un giorno.',
-  },
   es: {
     accessDenied: 'Acceso no autorizado',
     dashboardBack: 'Dashboard',
@@ -217,8 +176,7 @@ const T: Record<Lang, Tr> = {
 
 function langLocale(lang: Lang): string {
   if (lang === 'es') return 'es-MX';
-  if (lang === 'en') return 'en-US';
-  return 'it-IT';
+  return 'en-US';
 }
 
 // ─── Time / hour helpers ──────────────────────────────────────────────────────
@@ -953,22 +911,13 @@ export default function ProjectPage() {
     isLoading: authLoading,
   } = usePlannerAuth();
 
+  const { lang } = useLangContext();
+
   const [event,     setEvent]     = useState<PlannerEvent | null>(null);
   const [entries,   setEntries]   = useState<OrarioEntry[]>([]);
   const [loading,   setLoading]   = useState(true);
-  const [lang,      setLangState] = useState<Lang>('it');
 
   const canOrario = isSuperAdmin || canManageCashControl;
-
-  useEffect(() => {
-    const saved = localStorage.getItem('tqf-lang') as Lang | null;
-    if (saved && (['it', 'es', 'en'] as Lang[]).includes(saved)) setLangState(saved);
-  }, []);
-
-  function setLang(l: Lang) {
-    setLangState(l);
-    localStorage.setItem('tqf-lang', l);
-  }
 
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>('add');
@@ -1067,23 +1016,7 @@ export default function ProjectPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Language switcher */}
-            <div className="flex items-center rounded-lg overflow-hidden"
-              style={{ border: '1px solid var(--tqf-beige-border)' }}>
-              {(['it', 'es', 'en'] as Lang[]).map(l => (
-                <button key={l} onClick={() => setLang(l)}
-                  className="px-2 py-1 text-xs font-semibold uppercase"
-                  style={{
-                    background: lang === l ? 'var(--tqf-bordeaux)' : 'white',
-                    color: lang === l ? 'white' : 'var(--tqf-muted)',
-                    fontFamily: 'var(--font-body)',
-                    letterSpacing: '0.04em',
-                    transition: 'all 0.12s',
-                  }}>
-                  {l}
-                </button>
-              ))}
-            </div>
+            <LanguageSelector />
 
             <Link href={`/planner/events/${eventId}`}
               className="text-xs px-2.5 py-1.5 rounded-lg"

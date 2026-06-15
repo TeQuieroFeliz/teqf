@@ -157,7 +157,7 @@ export default function FurnitureEditorPage() {
       toast.error(t('furniture_noPermission'));
       router.replace('/planner/furniture');
     }
-  }, [isLoading, permissions.furniture.canEdit, router]);
+  }, [isLoading, permissions.furniture.canEdit, router, t]);
 
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [field]: value }));

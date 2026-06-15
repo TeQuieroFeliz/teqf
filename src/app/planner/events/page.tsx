@@ -18,12 +18,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useI18n } from '@/hooks/useI18n';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtDate(d: string): string {
+function fmtDate(d: string, locale: string): string {
   if (!d) return '—';
-  return new Date(d + 'T12:00').toLocaleDateString('it-IT', {
+  return new Date(d + 'T12:00').toLocaleDateString(locale, {
     day: 'numeric', month: 'long', year: 'numeric',
   });
 }
@@ -36,10 +38,12 @@ function cityLabel(val: string): string {
 
 export default function EventsListPage() {
   const { isSuperAdmin, canManageCashControl, canCreateProjects, isLoading: authLoading } = usePlannerAuth();
+  const { t, lang } = useI18n();
   const [events,  setEvents]  = useState<PlannerEvent[]>([]);
   const [search,  setSearch]  = useState('');
   const [loading, setLoading] = useState(true);
 
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
   const canView = isSuperAdmin || canManageCashControl || canCreateProjects;
   // XB users (canCreateProjects) can edit any event; TeQF users are read-only
   const canEdit = isSuperAdmin || canCreateProjects;
@@ -108,12 +112,13 @@ export default function EventsListPage() {
           </Link>
           <div className="flex-1 min-w-0">
             <h1 style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400, fontSize: '1.25rem', lineHeight: 1.2 }}>
-              Eventi
+              {t('events_title')}
             </h1>
             <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {(isSuperAdmin || canManageCashControl) ? 'Visualizza eventi e gestisci orario e cash control' : 'I tuoi eventi'}
+              {(isSuperAdmin || canManageCashControl) ? t('events_subtitle_admin') : t('events_subtitle_planner')}
             </p>
           </div>
+          <LanguageSelector />
           <span className="text-xs px-2.5 py-1 rounded-full flex-shrink-0"
             style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
             {events.length}
@@ -127,7 +132,7 @@ export default function EventsListPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Cerca per codice, cliente, sede o organizzatore…"
+            placeholder={t('events_search')}
             style={{
               width: '100%', padding: '0.6rem 2.25rem 0.6rem 2.25rem',
               borderRadius: '0.75rem', border: '1px solid var(--tqf-beige-border)',
@@ -147,7 +152,7 @@ export default function EventsListPage() {
       {search && (
         <div className="px-4 pt-3">
           <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            {filtered.length} {filtered.length === 1 ? 'risultato' : 'risultati'} per &ldquo;{search}&rdquo;
+            {filtered.length} {filtered.length === 1 ? t('events_result') : t('events_results')} per &ldquo;{search}&rdquo;
           </p>
         </div>
       )}
@@ -162,7 +167,7 @@ export default function EventsListPage() {
               <Calendar className="size-6" />
             </div>
             <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {search ? 'Nessun evento trovato.' : 'Nessun evento ancora.'}
+              {search ? t('events_noFound') : t('events_noEvents')}
             </p>
           </div>
         ) : (
@@ -190,13 +195,13 @@ export default function EventsListPage() {
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <p className="text-sm font-semibold truncate"
                         style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
-                        {evt.eventCode || evt.eventName || '(senza nome)'}
+                        {evt.eventCode || evt.eventName || t('events_unnamed')}
                       </p>
                       <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
                         style={evt.status === 'submitted'
                           ? { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
                           : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }}>
-                        {evt.status === 'submitted' ? 'Inviato' : 'Bozza'}
+                        {evt.status === 'submitted' ? t('submitted') : t('draft')}
                       </span>
                     </div>
 
@@ -213,7 +218,7 @@ export default function EventsListPage() {
                         <span className="flex items-center gap-1 text-xs"
                           style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                           <Calendar className="size-3" />
-                          {dayCount > 1 ? `${dayCount} giorni` : fmtDate(firstDay.date)}
+                          {dayCount > 1 ? t('events_dayCount').replace('{n}', String(dayCount)) : fmtDate(firstDay.date, locale)}
                         </span>
                       )}
                       {(firstDay?.venue || evt.city) && (
@@ -238,13 +243,13 @@ export default function EventsListPage() {
                         {furnitureCount > 0 && (
                           <span className="text-xs px-2 py-0.5 rounded-full"
                             style={{ background: '#f3f4f6', color: '#374151', fontFamily: 'var(--font-body)' }}>
-                            🛋 {furnitureCount} mobili
+                            🛋 {furnitureCount} {t('events_furniture')}
                           </span>
                         )}
                         {flowerCount > 0 && (
                           <span className="text-xs px-2 py-0.5 rounded-full"
                             style={{ background: '#f3f4f6', color: '#374151', fontFamily: 'var(--font-body)' }}>
-                            🌸 {flowerCount} fiori
+                            🌸 {flowerCount} {t('events_flowers')}
                           </span>
                         )}
                       </div>
@@ -260,7 +265,7 @@ export default function EventsListPage() {
                         style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)', textDecoration: 'none' }}
                       >
                         <Edit2 className="size-3" />
-                        Modifica
+                        {t('edit')}
                       </Link>
                     ) : (
                       <ChevronRight className="size-4" style={{ color: 'var(--tqf-muted)' }} />
