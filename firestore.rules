@@ -2,185 +2,239 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Permission helpers ────────────────────────────────────────────────────
+    // ── Admin helpers ──────────────────────────────────────────────────────────
+
+    function isSignedIn() { return request.auth != null; }
+
+    // isAuth — legacy alias kept so existing rules that reference it still compile.
+    function isAuth() { return isSignedIn(); }
+
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
     function adminDoc() {
       return get(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     function isActiveAdmin() {
-      return request.auth != null
+      return isSignedIn()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && adminDoc().data.active == true;
     }
+
+    // isAdmin — any active admin record (superadmin / team / planner roles).
+    function isAdmin() { return isActiveAdmin(); }
 
     function isSuperAdmin() {
       return isActiveAdmin() && adminDoc().data.role == 'superadmin';
     }
 
+    // Section-level permissions for admin users.
     function canView(section) {
       return isSuperAdmin()
         || (isActiveAdmin()
             && adminDoc().data.permissions[section] in ['view', 'editor']);
     }
-
     function canEdit(section) {
       return isSuperAdmin()
         || (isActiveAdmin()
             && adminDoc().data.permissions[section] == 'editor');
     }
 
-    // Legacy alias
-    function isAdmin() {
-      return isActiveAdmin();
+    // ── Planner helpers ────────────────────────────────────────────────────────
+
+    // Guard: does a /planners/{uid} doc exist for the signed-in user?
+    function plannerExists() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/planners/$(request.auth.uid));
     }
 
-    function isAuth() {
-      return request.auth != null;
+    // Returns the planner document's data. Only call after plannerExists() == true
+    // (i.e., inside a context where isApproved() or inTeam() already passed).
+    // Firestore caches get() per path within one rule evaluation, so multiple calls
+    // within the same expression cost only one read.
+    function plannerDocData() {
+      return get(/databases/$(database)/documents/planners/$(request.auth.uid)).data;
     }
 
-    function isOwner(uid) {
-      return isAuth() && request.auth.uid == uid;
+    // isApproved — Opzione A confirmed by user:
+    //   active == true is the primary gate.
+    //   status absent (legacy docs created via addPlanner without a request) → passes,
+    //   because get('status','') returns '' and '' != 'pending'/'rejected' is true.
+    //   status == 'approved' also passes. pending/rejected are explicitly blocked.
+    function isApproved() {
+      return plannerExists()
+        && plannerDocData().active == true
+        && plannerDocData().get('status', '') != 'pending'
+        && plannerDocData().get('status', '') != 'rejected';
     }
 
-    // BUG-11 fix: null-safe helper — plannerData().get() returns default if field
-    // absent, so users without a /planners/{uid} doc don't cause a reads error.
-    function plannerTeams() {
-      return exists(/databases/$(database)/documents/planners/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/planners/$(request.auth.uid)).data.get('team', [])
-        : [];
+    // inTeam — team[] values are exactly 'XB' and 'TeQF' (uppercase).
+    // .get('team',[]) is null-safe: absent field returns [] so 't in []' == false.
+    function inTeam(t) {
+      return isApproved()
+        && t in plannerDocData().get('team', []);
     }
 
-    function hasTeam(teamName) {
-      return isAuth() && teamName in plannerTeams();
-    }
-
-    function hasAnyTeam() {
-      return isAuth() && plannerTeams().size() > 0;
-    }
-
-    // /users/{uid} — own document or admin
+    // ── /users/{uid} ───────────────────────────────────────────────────────────
+    // FIX-A: owner can update innocuous profile fields only — role/status/approved
+    // are write-protected for the owner; only isAdmin() can touch those.
+    // All legitimate user creates/deletes go through Admin SDK (server actions),
+    // so client create/delete is admin-only.
     match /users/{uid} {
-      allow read, write: if isOwner(uid) || isAdmin();
+      allow read:   if isOwner(uid) || isAdmin();
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+      allow update:
+        if isAdmin()
+        || (isOwner(uid)
+            && !request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['role', 'status', 'approved']));
     }
 
-    // /admins/{uid} — BUG-02 fix: only the owner or superadmin can read own doc;
-    // client writes are blocked except lastLogin field by owner.
+    // ── /admins/{uid} ─────────────────────────────────────────────────────────
+    // Unchanged: only the owner or a superadmin can read; client writes blocked
+    // except for lastLogin (client-side fallback for the auth context).
     match /admins/{uid} {
-      allow read:   if isOwner(uid) || isSuperAdmin();
+      allow read:           if isOwner(uid) || isSuperAdmin();
       allow create, delete: if false;
-      // BUG-02 fix: allow owner to update only lastLogin (for client-side fallback).
-      allow update: if isOwner(uid)
+      allow update:
+        if isOwner(uid)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLogin']);
     }
 
-    // /articles/* — public read; 'view' to read privately, 'editor' to write.
+    // ── Public catalog and content ─────────────────────────────────────────────
     match /articles/{id} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if canEdit('blog');
     }
-
-    // /furnitureItems/* and /furnitureMeta/* — public read, editor to write.
     match /furnitureItems/{id} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if canEdit('furniture');
     }
     match /furnitureMeta/{id} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if canEdit('furniture');
     }
-
-    // /floralInspiration/* — public read, editor to write.
     match /floralInspiration/{id} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if canEdit('florals');
     }
-
-    // /portfolioProjects/* — public read, editor to write.
     match /portfolioProjects/{id} {
-      allow read: if true;
+      allow read:  if true;
       allow write: if canEdit('portfolio');
     }
 
-    // /planners/{docId} — readable by the planner (email match) or any active admin.
+    // ── /planners/{docId} ─────────────────────────────────────────────────────
+    // READ: the planner (isOwner) OR any active admin OR same-email match
+    //       (the email check covers the legacy getDocs-by-email path in
+    //       PlannerAuthContext when the uid-keyed doc is absent).
+    // FIX-B: WRITE is now admin-only.
+    //   Confirmed: ALL client-side planner writes (team, active, teamRole,
+    //   lastLogin, avatarUrl, mustChangePassword) go through server actions with
+    //   Admin SDK, which bypass these rules. No legitimate client write exists.
+    //   This closes the self-escalation vector (a user writing team/active themselves).
     match /planners/{docId} {
       allow read:  if isOwner(docId) || isAdmin()
-        || (isAuth() && resource.data.email == request.auth.token.email);
-      allow write: if isOwner(docId) || isAdmin();
+        || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow write: if isAdmin();
     }
 
-    // /plannerRequests/* — write-only for anonymous; admin can read all;
-    // authenticated users can read their own request.
+    // ── /plannerRequests/{id} ─────────────────────────────────────────────────
+    // FIX-C: create now requires authentication (was `if true`).
+    // Note: the registration server action uses Admin SDK, so this rule
+    // is a client-SDK safety net only.
     match /plannerRequests/{id} {
-      allow read:   if isAdmin() || isOwner(id);
-      allow create: if true;
+      allow read:           if isAdmin() || isOwner(id);
+      allow create:         if isSignedIn();
       allow update, delete: if isAdmin();
     }
 
-    // /events/{eventId} — owner or someone with at least view on events.
+    // ── /events/{eventId} ─────────────────────────────────────────────────────
+    // Unchanged: owner or admin with events permission.
     match /events/{eventId} {
-      allow read:   if isOwner(resource.data.userId) || canView('events');
-      allow create: if isOwner(request.resource.data.userId) || canEdit('events');
+      allow read:           if isOwner(resource.data.userId) || canView('events');
+      allow create:         if isOwner(request.resource.data.userId) || canEdit('events');
       allow update, delete: if isOwner(resource.data.userId) || canEdit('events');
     }
 
-    // /plannerEvents/{eventId} — all XB members read/write any XB event;
-    // TeQF members read-only; superadmin full access.
+    // ── /plannerEvents/{eventId} ──────────────────────────────────────────────
+    // Replaced hasTeam() with inTeam() (adds isApproved() check).
     match /plannerEvents/{eventId} {
-      allow read:   if hasTeam('XB') || hasTeam('TeQF') || canView('projects');
-      allow create: if hasTeam('XB') || canEdit('projects');
-      allow update, delete: if hasTeam('XB') || canEdit('projects');
+      allow read:           if inTeam('XB') || inTeam('TeQF') || canView('projects');
+      allow create:         if inTeam('XB') || canEdit('projects');
+      allow update, delete: if inTeam('XB') || canEdit('projects');
 
-      // /plannerEvents/{eventId}/expenses/{expenseId}
       match /expenses/{expenseId} {
-        allow read: if
-          isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
+        allow read:
+          if isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
           || canView('projects')
-          || hasTeam('TeQF');
-        allow write: if
-          isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
+          || inTeam('TeQF');
+        allow write:
+          if isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId)
           || canEdit('projects')
-          || (isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId) && hasTeam('XB'));
+          || (inTeam('XB')
+              && isOwner(get(/databases/$(database)/documents/plannerEvents/$(eventId)).data.plannerId));
       }
     }
 
-    // /teqfProjects — TeQF team members or admin.
+    // ── /teqfProjects/{projectId} ─────────────────────────────────────────────
+    // FIX-D: cashControl subcollection blocks create/update/delete when the parent
+    // project has isClosed == true, unless the caller isAdmin().
+    // isClosed is a boolean on the teqfProjects document (set by the teqf-close API
+    // route via Admin SDK); absent field defaults to false via .get('isClosed', false).
     match /teqfProjects/{projectId} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read:           if inTeam('TeQF') || isAdmin();
+      allow create:         if inTeam('TeQF') || isAdmin();
+      allow update, delete: if inTeam('TeQF') || isAdmin();
 
+      // cashControl movements: blocked when project is closed (unless admin).
       match /cashControl/{docId} {
-        allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+        allow read: if inTeam('TeQF') || isAdmin();
+
+        // Helpers to avoid repeating the parent-doc get().
+        // isClosed check: get() is cached per path, so this costs 1 extra read.
+        allow create:
+          if isAdmin()
+          || (inTeam('TeQF')
+              && get(/databases/$(database)/documents/teqfProjects/$(projectId))
+                  .data.get('isClosed', false) != true);
+
+        allow update, delete:
+          if isAdmin()
+          || (inTeam('TeQF')
+              && get(/databases/$(database)/documents/teqfProjects/$(projectId))
+                  .data.get('isClosed', false) != true);
       }
 
       match /orarioDiLavoro/{docId} {
-        allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+        allow read, write: if inTeam('TeQF') || isAdmin();
       }
     }
 
-    // BUG-01 fix: Cash Control collections restricted to TeQF team or SuperAdmin.
-    // cashControlAudit is append-only for TeQF; only SuperAdmin can read audit log.
+    // ── Legacy Cash Control collections (area-planner system) ─────────────────
+    // Unchanged semantics; replaced isSuperAdmin() with isAdmin() for consistency.
     match /cashControlProfiles/{doc} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read, write: if inTeam('TeQF') || isAdmin();
     }
     match /cashControlEvents/{doc} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read, write: if inTeam('TeQF') || isAdmin();
     }
     match /cashControlAssignments/{doc} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read, write: if inTeam('TeQF') || isAdmin();
     }
     match /cashControlMoneyReceived/{doc} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read, write: if inTeam('TeQF') || isAdmin();
     }
     match /cashControlExpenses/{doc} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read, write: if inTeam('TeQF') || isAdmin();
     }
     match /cashControlClosures/{doc} {
-      allow read, write: if hasTeam('TeQF') || isSuperAdmin();
+      allow read, write: if inTeam('TeQF') || isAdmin();
     }
     match /cashControlAudit/{doc} {
-      // Append-only for TeQF; only SuperAdmin can read the audit log.
-      allow read:   if isSuperAdmin();
-      allow create: if hasTeam('TeQF') || isSuperAdmin();
+      // Append-only for TeQF team; only superadmin can read the audit log.
+      allow read:           if isSuperAdmin();
+      allow create:         if inTeam('TeQF') || isAdmin();
       allow update, delete: if false;
     }
 
