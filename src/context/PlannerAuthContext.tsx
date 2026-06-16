@@ -84,38 +84,40 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
         return;
       }
 
+      // FIX: getDoc(admins/uid) is non-fatal — if Firestore denies the read (e.g. token not
+      // yet propagated right after sign-in), we log a warning and fall through to the planner
+      // check instead of crashing the whole auth flow.
+      let admin: AdminUser | null = null;
       try {
-        // BUG-12 fix: parallelise admin fetch and last-login update (don't block render on
-        // last-login write which is fire-and-forget).
-        const adminPromise = getDoc(doc(db, 'admins', firebaseUser.uid));
-        // BUG-05 fix: REMOVED updateDoc(admins, lastLogin) — rules reject it. The server
-        // action updatePlannerLastLogin runs with Admin SDK and is the only valid path.
-        const lastLoginPromise = firebaseUser.email
-          ? updatePlannerLastLogin(firebaseUser.email).catch(console.error)
-          : Promise.resolve();
-
-        const adminSnap = await adminPromise;
-        // Fire-and-forget — we don't await lastLoginPromise here.
-        void lastLoginPromise;
-
+        const adminSnap = await getDoc(doc(db, 'admins', firebaseUser.uid));
         if (myReq !== requestId) return;
-
-        const admin: AdminUser | null =
+        admin =
           adminSnap.exists() && adminSnap.data()?.active === true
             ? ({ id: adminSnap.id, ...adminSnap.data() } as AdminUser)
             : null;
+      } catch (adminErr) {
+        if (myReq !== requestId) return;
+        console.warn('[PlannerAuth] admins read failed (non-fatal):', adminErr);
+        // Continue — user is likely not an admin; planner check below handles their state.
+      }
 
-        setAdminUser(admin);
+      setAdminUser(admin);
 
-        // Superadmin has no planner record — skip and finish loading
-        if (admin?.role === 'superadmin') {
-          setPlannerUser(null);
-          setMustChangePassword(false);
-          clearSafety();
-          setIsLoading(false);
-          return;
-        }
+      // Fire-and-forget last-login update (Admin SDK, never blocks render).
+      if (firebaseUser.email) {
+        updatePlannerLastLogin(firebaseUser.email).catch(console.error);
+      }
 
+      // Superadmin has no planner record — finish loading immediately.
+      if (admin?.role === 'superadmin') {
+        setPlannerUser(null);
+        setMustChangePassword(false);
+        clearSafety();
+        setIsLoading(false);
+        return;
+      }
+
+      try {
         // Real-time listener keyed by uid (direct doc — no compound index needed).
         // Falls back to email query for legacy users who predate uid-keyed docs.
         const uidDocRef = doc(db, 'planners', firebaseUser.uid);
@@ -133,6 +135,12 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
               if (data?.status === 'rejected') {
                 setPlannerUser(null);
                 setMustChangePassword(false);
+                signOut(auth).catch(console.error);
+              } else if (data?.status === 'pending') {
+                // Pending users authenticated via Firebase Auth but are not yet approved.
+                setPlannerUser(null);
+                setMustChangePassword(false);
+                setAuthError('La tua registrazione è in attesa di approvazione. Ti contatteremo presto.');
                 signOut(auth).catch(console.error);
               } else {
                 setPlannerUser({ id: uidSnap.id, ...data } as PlannerUser);
@@ -198,32 +206,22 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
   const loginWithEmail = async (email: string, password: string) => {
     setAuthError(null);
     try {
-      try {
-        const credential = await signInWithEmailAndPassword(auth, email, password);
-
-        // Block users whose registration is pending, rejected, or account inactive
-        const plannerSnap = await getDoc(doc(db, 'planners', credential.user.uid));
-        if (plannerSnap.exists()) {
-          const data = plannerSnap.data();
-          if (data?.status === 'pending') {
-            await signOut(auth);
-            setAuthError('La tua registrazione è in attesa di approvazione. Ti contatteremo presto.');
-            return;
-          }
-          if (data?.status === 'rejected') {
-            await signOut(auth);
-            setAuthError('La tua registrazione è stata rifiutata. Contatta l\'amministratore.');
-            return;
-          }
-          if (data?.active === false) {
-            await signOut(auth);
-            setAuthError('Account disattivato. Contatta l\'amministratore.');
-            return;
-          }
-        }
-      } catch (signInErr: any) {
-        if (signInErr.code === 'auth/user-not-found' || signInErr.code === 'auth/invalid-credential') {
-          // Check for pending/rejected requests to show a helpful error
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged fires next and handles all Firestore reads + status checks
+      // (pending/rejected/inactive are now checked inside the onSnapshot callback).
+      // Reading planners/{uid} here caused a race-condition: the Firestore SDK may not
+      // yet have the auth token at the moment right after signInWithEmailAndPassword
+      // resolves, producing a spurious "Missing or insufficient permissions" error that
+      // blocked the login flow even when credentials were correct.
+    } catch (err: any) {
+      if (
+        err.code === 'auth/user-not-found' ||
+        err.code === 'auth/invalid-credential' ||
+        err.code === 'auth/wrong-password'
+      ) {
+        // Firebase Auth failed — check for a pending/rejected registration request so we
+        // can show a more helpful message than "wrong password".
+        try {
           const request = await getPlannerRequestByEmail(email);
           if (request?.status === 'pending') {
             setAuthError('La tua richiesta è in attesa di approvazione. Ti contatteremo presto.');
@@ -233,21 +231,15 @@ export function PlannerAuthContextProvider({ children }: { children: React.React
             setAuthError("La tua richiesta è stata rifiutata. Contatta l'amministratore.");
             return;
           }
-          setAuthError('Email o password errata.');
-        } else {
-          throw signInErr;
+        } catch {
+          // getPlannerRequestByEmail is best-effort; swallow errors
         }
+        setAuthError('Email o password errata.');
+      } else if (err.code === 'auth/invalid-email') {
+        setAuthError('Email non valida.');
+      } else {
+        setAuthError('Errore durante il login. Riprova.');
       }
-    } catch (err: any) {
-      const msg =
-        err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential'
-          ? 'Email o password errata.'
-          : err.code === 'auth/invalid-email'
-          ? 'Email non valida.'
-          : err.code === 'auth/user-not-found'
-          ? "Non sei autorizzata. Contatta l'amministratore."
-          : 'Errore durante il login. Riprova.';
-      setAuthError(msg);
     }
   };
 
