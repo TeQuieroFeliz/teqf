@@ -83,24 +83,17 @@ export type CashMovement = {
 
 // ── Furniture ─────────────────────────────────────────────────────────────────
 
+// Category keys stored in Firestore. Use getCategoryLabel() from furniture-categories.ts
+// to get the translated display label.
 export type FurnitureCategory =
-  | 'sedie'
-  | 'tavoli'
-  | 'tovaglie'
+  | 'bar_back_bar'
   | 'cocktail_table'
-  | 'divani'
-  | 'sala_lounge';
+  | 'sala_lounge'
+  | 'chairs'
+  | 'tables'
+  | string; // allows custom categories added by Super Admin
 
 export type City = 'cdmx' | 'cancun';
-
-export const FURNITURE_CATEGORIES: { value: FurnitureCategory; label: string }[] = [
-  { value: 'sedie', label: 'Sedie' },
-  { value: 'tavoli', label: 'Tavoli' },
-  { value: 'tovaglie', label: 'Tovaglie' },
-  { value: 'cocktail_table', label: 'Cocktail Table' },
-  { value: 'divani', label: 'Divani' },
-  { value: 'sala_lounge', label: 'Sala Lounge' },
-];
 
 export const CITIES: { value: City; label: string }[] = [
   { value: 'cdmx', label: 'Ciudad de México' },

@@ -1,6 +1,7 @@
 'use client';
 
 import { getPublishedFurnitureItems } from '@/actions/furniture/furniture-crud';
+import { getCategoryLabel } from '@/lib/furniture-categories';
 import { getPublishedFlowerItems } from '@/actions/flowers/flowers-crud';
 import { savePlannerEvent } from '@/actions/planner/planner-event-crud';
 import { sendPlannerEventEmail } from '@/actions/planner/send-planner-email';
@@ -131,12 +132,13 @@ type DayCardProps = {
   onRemove: () => void;
   onAddSameDay: () => void;
   t: Translations;
+  lang: Lang;
   furnitureItems: FurnitureItem[];
   flowerItems: FlowerItem[];
   catalogLoading: boolean;
 };
 
-function DayCard({ day, dayIndex, eventId, isExpanded, onToggle, onChange, onRemove, onAddSameDay, t, furnitureItems, flowerItems, catalogLoading }: DayCardProps) {
+function DayCard({ day, dayIndex, eventId, isExpanded, onToggle, onChange, onRemove, onAddSameDay, t, lang, furnitureItems, flowerItems, catalogLoading }: DayCardProps) {
   const regRef    = useRef<HTMLInputElement>(null);
   const layoutRef = useRef<HTMLInputElement>(null);
   const [uploadingReg,    setUploadingReg]    = useState(false);
@@ -402,7 +404,7 @@ function DayCard({ day, dayIndex, eventId, isExpanded, onToggle, onChange, onRem
 
             {furnitureCategories.length > 0 && (
               <div className="flex gap-2 flex-wrap mb-4">
-                {[{ value: 'all', label: t.all }, ...furnitureCategories.map(c => ({ value: c, label: c }))].map(cat => (
+                {[{ value: 'all', label: t.all }, ...furnitureCategories.map(c => ({ value: c, label: getCategoryLabel(c, lang) }))].map(cat => (
                   <button key={cat.value} type="button" onClick={() => setFurnitureCatFilter(cat.value)}
                     className="text-xs px-2.5 py-1 rounded-full transition-all"
                     style={furnitureCatFilter === cat.value
@@ -1026,7 +1028,7 @@ export default function PlannerEventEditor({ initialEvent, eventId, isNew }: Pro
                     const dayIndex = sameDateDays.findIndex(d => d.id === day.id);
                     return (
                       <DayCard
-                        key={day.id} day={day} dayIndex={dayIndex} eventId={eventId} t={t}
+                        key={day.id} day={day} dayIndex={dayIndex} eventId={eventId} t={t} lang={lang}
                         isExpanded={expandedDay === day.id}
                         onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
                         onChange={updated => updateDay(day.id, updated)}

@@ -7,6 +7,7 @@ import {
   saveFurnitureMeta,
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
+import { getCategoryLabel, CustomFurnitureCategory, Lang } from '@/lib/furniture-categories';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import { LanguageSelector } from '@/components/LanguageSelector';
@@ -97,7 +98,7 @@ const labelStyle: React.CSSProperties = {
 
 export default function FurnitureEditorPage() {
   const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const params = useParams();
   const router = useRouter();
   const rawId = params?.id as string;
@@ -116,11 +117,7 @@ export default function FurnitureEditorPage() {
   // Meta: available categories and cities
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [availableCities, setAvailableCities] = useState<string[]>([]);
-
-  // Category "add new" state
-  const [showNewCategory, setShowNewCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [savingCategory, setSavingCategory] = useState(false);
+  const [customCategories, setCustomCategories] = useState<CustomFurnitureCategory[]>([]);
 
   // City "add new" state
   const [showNewCity, setShowNewCity] = useState(false);
@@ -136,6 +133,7 @@ export default function FurnitureEditorPage() {
 
       setAvailableCategories(meta.categories);
       setAvailableCities(meta.cities);
+      setCustomCategories(meta.customCategories);
 
       if (!isNew && item) {
         const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = item;
@@ -169,26 +167,6 @@ export default function FurnitureEditorPage() {
         ? prev.cities.filter((c) => c !== city)
         : [...prev.cities, city],
     }));
-
-  async function handleAddCategory() {
-    const name = newCategoryName.trim();
-    if (!name) return;
-    if (availableCategories.includes(name)) {
-      set('category', name);
-      setShowNewCategory(false);
-      setNewCategoryName('');
-      return;
-    }
-    setSavingCategory(true);
-    const updated = [...availableCategories, name];
-    await saveFurnitureMeta(updated, availableCities);
-    setAvailableCategories(updated);
-    set('category', name);
-    setShowNewCategory(false);
-    setNewCategoryName('');
-    setSavingCategory(false);
-    toast.success(t('furniture_categoryAdded', { name }));
-  }
 
   async function handleAddCity() {
     const name = newCityName.trim();
@@ -464,56 +442,14 @@ export default function FurnitureEditorPage() {
               <div>
                 <label style={labelStyle}>{t('furniture_categoryRequired')}</label>
                 <select
-                  value={showNewCategory ? '__new__' : form.category}
-                  onChange={(e) => {
-                    if (e.target.value === '__new__') {
-                      setShowNewCategory(true);
-                    } else {
-                      set('category', e.target.value);
-                      setShowNewCategory(false);
-                    }
-                  }}
+                  value={form.category}
+                  onChange={(e) => set('category', e.target.value)}
                   style={inputStyle}
                 >
                   {availableCategories.map((c) => (
-                    <option key={c} value={c}>{c}</option>
+                    <option key={c} value={c}>{getCategoryLabel(c, lang as Lang, customCategories)}</option>
                   ))}
-                  <option value="__new__">{t('furniture_addCategoryOption')}</option>
                 </select>
-
-                {showNewCategory && (
-                  <div className="flex gap-2 mt-2">
-                    <input
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                      placeholder={t('furniture_categoryNewPlaceholder')}
-                      autoFocus
-                      style={{ ...inputStyle, flex: 1 }}
-                      onFocus={(e) => (e.target.style.borderColor = 'var(--tqf-bordeaux)')}
-                      onBlur={(e) => (e.target.style.borderColor = 'var(--tqf-beige-border)')}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddCategory}
-                      disabled={savingCategory || !newCategoryName.trim()}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-opacity hover:opacity-80 disabled:opacity-40"
-                      style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
-                    >
-                      {savingCategory ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                      {t('furniture_addCategory')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewCategory(false); setNewCategoryName(''); }}
-                      className="size-9 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70 flex-shrink-0"
-                      style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)' }}
-                    >
-                      <X className="size-4" />
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Price + Currency */}

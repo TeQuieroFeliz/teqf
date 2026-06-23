@@ -2,10 +2,20 @@
 
 import {
   deleteFurnitureItem,
+  executeFurnitureMigration,
+  getMigrationDryRun,
+  MigrationDryRunResult,
+  saveCustomCategories,
   saveFurnitureItem,
   saveFurnitureMeta,
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
+import {
+  CustomFurnitureCategory,
+  getCategoryLabel,
+  Lang,
+  PREDEFINED_FURNITURE_CATEGORIES,
+} from '@/lib/furniture-categories';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import ReadOnlyBanner from '@/components/planner/ReadOnlyBanner';
@@ -44,8 +54,13 @@ function categoryColor(cat: string, all: string[]) {
 }
 
 function categoryIcon(cat: string) {
+  // Keys first
+  if (cat === 'chairs')                            return <Armchair className="size-10" />;
+  if (cat === 'tables' || cat === 'cocktail_table') return <Square className="size-10" strokeWidth={1} />;
+  if (cat === 'sala_lounge')                        return <Sofa className="size-10" />;
+  // Legacy label fallback
   const l = cat.toLowerCase();
-  if (l.includes('sedi') || l.includes('chair'))  return <Armchair className="size-10" />;
+  if (l.includes('sedi') || l.includes('chair'))   return <Armchair className="size-10" />;
   if (l.includes('divano') || l.includes('sofa'))  return <Sofa className="size-10" />;
   if (l.includes('flore') || l.includes('flower')) return <Flower2 className="size-10" />;
   if (l.includes('tavol') || l.includes('table'))  return <Square className="size-10" strokeWidth={1} />;
@@ -132,20 +147,20 @@ const CHECKERBOARD: React.CSSProperties = {
 };
 
 function StandbyCard({
-  item, categories, cities,
+  item, categories, cities, lang, customCategories,
   onUpdate, onSave, onRemove, onAddCity,
 }: {
   item: StandbyItem;
   categories: string[];
   cities: string[];
+  lang: Lang;
+  customCategories: CustomFurnitureCategory[];
   onUpdate: (patch: Partial<StandbyItem>) => void;
   onSave: () => void;
   onRemove: () => void;
   onAddCity: (city: string) => void;
 }) {
   const { t } = useI18n();
-  const [showNewCat,  setShowNewCat]  = useState(false);
-  const [newCat,      setNewCat]      = useState('');
   const [showNewCity, setShowNewCity] = useState(false);
   const [newCity,     setNewCity]     = useState('');
   const [lightbox,    setLightbox]    = useState(false);
@@ -386,30 +401,12 @@ function StandbyCard({
           <label className="block mb-1" style={{ fontSize: '0.6rem', letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
             {t('furniture_categoryRequired')}
           </label>
-          {!showNewCat ? (
-            <select value={item.category} onChange={e => e.target.value === '__new__' ? setShowNewCat(true) : onUpdate({ category: e.target.value })} style={inp}>
-              <option value="">{t('furniture_selectPlaceholder')}</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="__new__">{t('furniture_addCategoryOption')}</option>
-            </select>
-          ) : (
-            <div className="flex gap-1.5">
-              <input type="text" value={newCat} autoFocus placeholder={t('furniture_categoryNewPlaceholder')}
-                onChange={e => setNewCat(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && newCat.trim()) { onUpdate({ category: newCat.trim() }); setShowNewCat(false); setNewCat(''); } }}
-                style={{ ...inp, flex: 1 }} />
-              <button type="button" onClick={() => { if (newCat.trim()) { onUpdate({ category: newCat.trim() }); setShowNewCat(false); setNewCat(''); } }}
-                className="size-8 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80"
-                style={{ background: 'var(--tqf-bordeaux)', color: 'white', border: 'none', flexShrink: 0 }}>
-                <Check className="size-3.5" />
-              </button>
-              <button type="button" onClick={() => { setShowNewCat(false); setNewCat(''); }}
-                className="size-8 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70"
-                style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', flexShrink: 0 }}>
-                <X className="size-3.5" />
-              </button>
-            </div>
-          )}
+          <select value={item.category} onChange={e => onUpdate({ category: e.target.value })} style={inp}>
+            <option value="">{t('furniture_selectPlaceholder')}</option>
+            {categories.map(c => (
+              <option key={c} value={c}>{getCategoryLabel(c, lang, customCategories)}</option>
+            ))}
+          </select>
         </div>
 
         {/* Price + currency */}
@@ -495,9 +492,11 @@ function StandbyCard({
 
 // ── ItemCard ──────────────────────────────────────────────────────────────────
 
-function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
+function ItemCard({ item, allCategories, lang, customCategories, onDelete, deleting, canEdit }: {
   item: FurnitureItem;
   allCategories: string[];
+  lang: Lang;
+  customCategories: CustomFurnitureCategory[];
   onDelete: () => void;
   deleting: boolean;
   canEdit: boolean;
@@ -571,7 +570,7 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
       {/* Body */}
       <div className="p-4 flex flex-col gap-2.5 flex-1">
         <p style={{ fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', lineHeight: 1.4 }}>
-          {item.category}{item.description ? ` · ${item.description}` : ''}
+          {getCategoryLabel(item.category, lang, customCategories)}{item.description ? ` · ${item.description}` : ''}
         </p>
         <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontSize: '1.15rem', fontWeight: 400, lineHeight: 1.2 }}>
           {item.name || <span style={{ opacity: 0.35 }}>{t('furniture_untitled')}</span>}
@@ -603,8 +602,8 @@ function ItemCard({ item, allCategories, onDelete, deleting, canEdit }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminFurniturePage() {
-  const { adminUser, logout, canManageCatalogs, permissions, isLoading } = usePlannerAuth();
-  const { t } = useI18n();
+  const { adminUser, logout, canManageCatalogs, permissions, isSuperAdmin, isLoading } = usePlannerAuth();
+  const { t, lang } = useI18n();
 
   const [items, setItems]           = useState<FurnitureItem[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -613,9 +612,21 @@ export default function AdminFurniturePage() {
 
   const [standby, setStandby]   = useState<StandbyItem[]>([]);
   const [uploads, setUploads]   = useState<UploadState[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [cities, setCities]         = useState<string[]>([]);
-  const [metaLoaded, setMetaLoaded] = useState(false);
+  const [categories, setCategories]       = useState<string[]>([]);
+  const [cities, setCities]               = useState<string[]>([]);
+  const [customCategories, setCustomCategories] = useState<CustomFurnitureCategory[]>([]);
+  const [metaLoaded, setMetaLoaded]       = useState(false);
+
+  // Super Admin: custom category editor
+  const [newCatKey, setNewCatKey] = useState('');
+  const [newCatEn,  setNewCatEn]  = useState('');
+  const [newCatEs,  setNewCatEs]  = useState('');
+  const [savingCustomCats, setSavingCustomCats] = useState(false);
+
+  // Super Admin: migration
+  const [migrationReport,   setMigrationReport]   = useState<MigrationDryRunResult | null>(null);
+  const [migrationRunning,  setMigrationRunning]  = useState(false);
+  const [migrationExecuting, setMigrationExecuting] = useState(false);
 
   const bulkRef = useRef<HTMLInputElement>(null);
   // BUG-16 fix: track pending timeouts so we can clear them on unmount.
@@ -625,7 +636,6 @@ export default function AdminFurniturePage() {
 
   // Load items + meta + standby from localStorage
   useEffect(() => {
-    const DEFAULT_CATEGORIES = ['Sedie', 'Tavoli', 'Tovaglie', 'Cocktail Table', 'Divani', 'Sala Lounge'];
     const DEFAULT_CITIES = ['Ciudad de México', 'Cancún'];
 
     Promise.all([
@@ -650,8 +660,11 @@ export default function AdminFurniturePage() {
         } as FurnitureItem;
       }));
       const meta = metaSnap.exists() ? metaSnap.data() : {};
-      setCategories(meta.categories ?? DEFAULT_CATEGORIES);
+      const custom: CustomFurnitureCategory[] = meta.customCategories ?? [];
+      const predefinedKeys = PREDEFINED_FURNITURE_CATEGORIES.map(c => c.key);
+      setCategories(meta.categories ?? predefinedKeys);
       setCities(meta.cities ?? DEFAULT_CITIES);
+      setCustomCategories(custom);
       setMetaLoaded(true);
       setLoading(false);
     });
@@ -905,6 +918,7 @@ export default function AdminFurniturePage() {
                 <StandbyCard
                   key={s.id} item={s}
                   categories={categories} cities={cities}
+                  lang={lang as Lang} customCategories={customCategories}
                   onUpdate={patch => updateStandby(s.id, patch)}
                   onSave={() => saveStandbyItem(s.id)}
                   onRemove={() => removeStandby(s.id)}
@@ -922,7 +936,9 @@ export default function AdminFurniturePage() {
             <div className="flex gap-2 flex-wrap mb-6">
               <button onClick={() => setCatFilter('all')} style={pill(catFilter === 'all')}>{t('furniture_all')}</button>
               {allCategories.map(cat => (
-                <button key={cat} onClick={() => setCatFilter(cat)} style={pill(catFilter === cat)}>{cat}</button>
+                <button key={cat} onClick={() => setCatFilter(cat)} style={pill(catFilter === cat)}>
+                  {getCategoryLabel(cat, lang as Lang, customCategories)}
+                </button>
               ))}
             </div>
           )}
@@ -969,6 +985,7 @@ export default function AdminFurniturePage() {
                 <ItemCard
                   key={item.id} item={item}
                   allCategories={allCategories}
+                  lang={lang as Lang} customCategories={customCategories}
                   onDelete={() => handleDelete(item)}
                   deleting={deletingId === item.id}
                   canEdit={canEdit}
@@ -977,6 +994,202 @@ export default function AdminFurniturePage() {
             </div>
           )}
         </div>
+
+        {/* ── Super Admin panel ───────────────────────────────────────────── */}
+        {isSuperAdmin && (
+          <div className="rounded-2xl p-6 space-y-6" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              Super Admin — Categorie
+            </h2>
+
+            {/* ── Predefined categories (read-only) ─────────────────────── */}
+            <div>
+              <p className="text-xs mb-2" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Predefinite (chiavi stabili)
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {PREDEFINED_FURNITURE_CATEGORIES.map(c => (
+                  <span key={c.key} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full"
+                    style={{ background: 'var(--tqf-beige)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                    <code style={{ fontSize: '0.6rem', color: 'var(--tqf-muted)' }}>{c.key}</code>
+                    <span>·</span>
+                    <span>{c.en}</span>
+                    <span style={{ color: 'var(--tqf-muted)' }}>/</span>
+                    <span>{c.es}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Custom categories ─────────────────────────────────────── */}
+            <div>
+              <p className="text-xs mb-2" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Categorie custom
+              </p>
+              {customCategories.length === 0 && (
+                <p className="text-sm" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                  Nessuna categoria custom.
+                </p>
+              )}
+              {customCategories.map((c, idx) => (
+                <div key={c.key} className="flex items-center gap-2 mb-2">
+                  <span className="text-xs px-2 py-1 rounded" style={{ background: 'var(--tqf-beige)', fontFamily: 'monospace', color: 'var(--tqf-muted)', minWidth: 120 }}>{c.key}</span>
+                  <span className="text-sm flex-1" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>{c.en} / {c.es}</span>
+                  <button type="button"
+                    onClick={async () => {
+                      const updated = customCategories.filter((_, i) => i !== idx);
+                      setSavingCustomCats(true);
+                      const res = await saveCustomCategories(updated);
+                      if (res.success) {
+                        setCustomCategories(updated);
+                        const allKeys = [...PREDEFINED_FURNITURE_CATEGORIES.map(p => p.key), ...updated.map(u => u.key)];
+                        setCategories(allKeys);
+                      }
+                      setSavingCustomCats(false);
+                    }}
+                    className="size-6 flex items-center justify-center rounded-full transition-opacity hover:opacity-70"
+                    style={{ background: 'var(--tqf-beige)', color: '#991b1b', border: 'none' }}>
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add custom category form */}
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <input type="text" placeholder="chiave_stabile" value={newCatKey}
+                  onChange={e => setNewCatKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                  style={{ padding: '0.4rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--tqf-beige-border)', fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none' }}
+                />
+                <input type="text" placeholder="Label EN" value={newCatEn}
+                  onChange={e => setNewCatEn(e.target.value)}
+                  style={{ padding: '0.4rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none' }}
+                />
+                <input type="text" placeholder="Label ES" value={newCatEs}
+                  onChange={e => setNewCatEs(e.target.value)}
+                  style={{ padding: '0.4rem 0.6rem', borderRadius: '0.5rem', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none' }}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={savingCustomCats || !newCatKey.trim() || !newCatEn.trim() || !newCatEs.trim()}
+                onClick={async () => {
+                  const entry: CustomFurnitureCategory = { key: newCatKey.trim(), en: newCatEn.trim(), es: newCatEs.trim() };
+                  if (customCategories.some(c => c.key === entry.key)) { toast.error('Chiave già esistente.'); return; }
+                  setSavingCustomCats(true);
+                  const updated = [...customCategories, entry];
+                  const res = await saveCustomCategories(updated);
+                  if (res.success) {
+                    setCustomCategories(updated);
+                    const allKeys = [...PREDEFINED_FURNITURE_CATEGORIES.map(p => p.key), ...updated.map(u => u.key)];
+                    setCategories(allKeys);
+                    setNewCatKey(''); setNewCatEn(''); setNewCatEs('');
+                    toast.success('Categoria aggiunta.');
+                  } else {
+                    toast.error(res.error ?? 'Errore.');
+                  }
+                  setSavingCustomCats(false);
+                }}
+                className="mt-2 flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}>
+                {savingCustomCats ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+                Aggiungi categoria custom
+              </button>
+            </div>
+
+            {/* ── Migration section ─────────────────────────────────────── */}
+            <div style={{ borderTop: '1px solid var(--tqf-beige-border)', paddingTop: '1.5rem' }}>
+              <p className="text-xs mb-1" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Migrazione one-time (label → chiavi)
+              </p>
+              <p className="text-xs mb-4" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                Converte le vecchie etichette in italiano nelle chiavi stabili. Esegui prima Dry Run per verificare.
+              </p>
+
+              <div className="flex gap-2 mb-4">
+                <button type="button"
+                  disabled={migrationRunning || migrationExecuting}
+                  onClick={async () => {
+                    setMigrationRunning(true);
+                    const report = await getMigrationDryRun();
+                    setMigrationReport(report);
+                    setMigrationRunning(false);
+                  }}
+                  className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ border: '1px solid var(--tqf-bordeaux)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', background: 'white' }}>
+                  {migrationRunning ? <Loader2 className="size-3 animate-spin" /> : null}
+                  Dry Run
+                </button>
+
+                {migrationReport && migrationReport.totalToUpdate > 0 && (
+                  <button type="button"
+                    disabled={migrationExecuting || migrationRunning}
+                    onClick={async () => {
+                      if (!confirm(`Aggiornare ${migrationReport.totalToUpdate} documenti su Firestore? L'operazione è irreversibile.`)) return;
+                      setMigrationExecuting(true);
+                      const res = await executeFurnitureMigration();
+                      if (res.success) {
+                        toast.success(`Migrazione completata: ${res.updated} documenti aggiornati.`);
+                        setMigrationReport(null);
+                        // Reload items with new keys
+                        const snap = await getDocs(query(collection(db, 'furnitureItems'), orderBy('createdAt', 'desc')));
+                        const toStr = (v: any) => (v && typeof v.toDate === 'function' ? v.toDate().toISOString() : (v ?? ''));
+                        setItems(snap.docs.map(d => {
+                          const data = d.data();
+                          return { id: d.id, name: data.name ?? '', category: data.category ?? '', price: data.price ?? 0, currency: data.currency ?? 'MXN', cities: data.cities ?? [], images: data.images ?? [], description: data.description ?? '', published: data.published ?? false, createdAt: toStr(data.createdAt), updatedAt: toStr(data.updatedAt) } as FurnitureItem;
+                        }));
+                        const predefinedKeys = PREDEFINED_FURNITURE_CATEGORIES.map(c => c.key);
+                        setCategories(predefinedKeys);
+                        setCustomCategories([]);
+                      } else {
+                        toast.error(res.error ?? 'Errore durante la migrazione.');
+                      }
+                      setMigrationExecuting(false);
+                    }}
+                    className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ background: '#991b1b', color: 'white', fontFamily: 'var(--font-body)', border: 'none' }}>
+                    {migrationExecuting ? <Loader2 className="size-3 animate-spin" /> : null}
+                    Esegui migrazione ({migrationReport.totalToUpdate} doc)
+                  </button>
+                )}
+              </div>
+
+              {migrationReport && (
+                <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--tqf-beige-border)' }}>
+                  <div className="px-4 py-2" style={{ background: 'var(--tqf-beige)', borderBottom: '1px solid var(--tqf-beige-border)' }}>
+                    <p className="text-xs" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                      Totale doc: <strong>{migrationReport.totalDocs}</strong> · Da aggiornare: <strong>{migrationReport.totalToUpdate}</strong> · Skip: <strong>{migrationReport.totalToSkip}</strong>
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)' }}>
+                      Meta attuale: [{migrationReport.metaCurrent.join(', ')}]
+                    </p>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', fontFamily: 'var(--font-body)' }}>
+                    <thead>
+                      <tr style={{ background: '#f9f8f5' }}>
+                        <th style={{ textAlign: 'left', padding: '0.5rem 1rem', color: 'var(--tqf-muted)', fontWeight: 500, borderBottom: '1px solid var(--tqf-beige-border)' }}>Label attuale</th>
+                        <th style={{ textAlign: 'left', padding: '0.5rem 1rem', color: 'var(--tqf-muted)', fontWeight: 500, borderBottom: '1px solid var(--tqf-beige-border)' }}>→ Nuova chiave</th>
+                        <th style={{ textAlign: 'right', padding: '0.5rem 1rem', color: 'var(--tqf-muted)', fontWeight: 500, borderBottom: '1px solid var(--tqf-beige-border)' }}>Doc</th>
+                        <th style={{ textAlign: 'left', padding: '0.5rem 1rem', color: 'var(--tqf-muted)', fontWeight: 500, borderBottom: '1px solid var(--tqf-beige-border)' }}>Azione</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {migrationReport.groups.map((g, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--tqf-beige-border)', background: g.action === 'update' ? '#fefce8' : 'white' }}>
+                          <td style={{ padding: '0.5rem 1rem', color: 'var(--tqf-dark)' }}><code>{g.oldLabel || '(vuoto)'}</code></td>
+                          <td style={{ padding: '0.5rem 1rem', color: g.action === 'update' ? 'var(--tqf-bordeaux)' : 'var(--tqf-muted)' }}><code>{g.newKey ?? '—'}</code></td>
+                          <td style={{ padding: '0.5rem 1rem', textAlign: 'right', color: 'var(--tqf-dark)' }}>{g.count}</td>
+                          <td style={{ padding: '0.5rem 1rem', color: g.action === 'update' ? 'var(--tqf-bordeaux)' : g.action === 'alreadyKey' ? '#15803d' : '#6b7280' }}>
+                            {g.action === 'update' ? 'UPDATE' : g.action === 'alreadyKey' ? 'già OK' : '⚠️ senza mapping'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
       </main>
     </div>
