@@ -139,6 +139,58 @@ export async function deleteFurnitureItem(id: string): Promise<{ success: boolea
   }
 }
 
+// ── Category management ───────────────────────────────────────────────────────
+
+export async function mergeFurnitureCategory(
+  fromKey: string,
+  toKey: string,
+): Promise<{ success: boolean; moved: number; error?: string }> {
+  if (!firestore) return { success: false, moved: 0, error: 'Database non disponibile.' };
+  try {
+    const snap = await col().where('category', '==', fromKey).get();
+    if (snap.empty) return { success: true, moved: 0 };
+    const BATCH = 400;
+    let batch = firestore.batch();
+    let count = 0;
+    let batchCount = 0;
+    const now = new Date().toISOString();
+    for (const d of snap.docs) {
+      batch.update(col().doc(d.id), { category: toKey, updatedAt: now });
+      count++;
+      batchCount++;
+      if (batchCount >= BATCH) {
+        await batch.commit();
+        batch = firestore.batch();
+        batchCount = 0;
+      }
+    }
+    if (batchCount > 0) await batch.commit();
+    revalidatePath('/planner/furniture');
+    return { success: true, moved: count };
+  } catch (e: any) {
+    return { success: false, moved: 0, error: e.message };
+  }
+}
+
+export async function deleteFurnitureCategoryFromMeta(
+  key: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!firestore) return { success: false, error: 'Database non disponibile.' };
+  try {
+    const snap = await metaDoc().get();
+    const data = snap.exists ? snap.data()! : {};
+    const categories: string[] = (data.categories ?? []).filter((k: string) => k !== key);
+    const customCategories: CustomFurnitureCategory[] = (data.customCategories ?? []).filter(
+      (c: CustomFurnitureCategory) => c.key !== key,
+    );
+    await metaDoc().set({ categories, customCategories }, { merge: true });
+    revalidatePath('/planner/furniture');
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 // ── One-time category migration ───────────────────────────────────────────────
 
 const LABEL_TO_KEY: Record<string, string> = {

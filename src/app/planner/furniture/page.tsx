@@ -2,8 +2,10 @@
 
 import {
   deleteFurnitureItem,
+  deleteFurnitureCategoryFromMeta,
   executeFurnitureMigration,
   getMigrationDryRun,
+  mergeFurnitureCategory,
   MigrationDryRunResult,
   saveCustomCategories,
   saveFurnitureItem,
@@ -32,7 +34,7 @@ import {
   Trash2, Upload, X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 
@@ -599,6 +601,244 @@ function ItemCard({ item, allCategories, lang, customCategories, onDelete, delet
   );
 }
 
+// ── CategoryManagerModal ──────────────────────────────────────────────────────
+
+type CatMgrView =
+  | { v: 'list' }
+  | { v: 'merge'; fromKey: string; toKey: string }
+  | { v: 'delete'; key: string; toKey: string }
+  | { v: 'working' };
+
+function CategoryManagerModal({
+  categories, items, customCategories, lang, onClose, onMergeComplete, onDeleteComplete,
+}: {
+  categories: string[];
+  items: FurnitureItem[];
+  customCategories: CustomFurnitureCategory[];
+  lang: Lang;
+  onClose: () => void;
+  onMergeComplete: (from: string, to: string, moved: number) => void;
+  onDeleteComplete: (key: string) => void;
+}) {
+  const allKeys = useMemo(() => {
+    const fromItems = Array.from(new Set(items.map(i => i.category))).filter(Boolean);
+    return Array.from(new Set([...categories, ...fromItems])).sort();
+  }, [categories, items]);
+
+  const countFor = (key: string) => items.filter(i => i.category === key).length;
+  const label    = (key: string) => getCategoryLabel(key, lang, customCategories);
+  const others   = (excludeKey: string) => allKeys.filter(k => k !== excludeKey);
+
+  const [view, setView] = useState<CatMgrView>({ v: 'list' });
+
+  const startMerge = (fromKey: string) => {
+    const opts = others(fromKey);
+    if (!opts.length) { toast.error('No other categories to merge into.'); return; }
+    setView({ v: 'merge', fromKey, toKey: opts[0] });
+  };
+
+  const startDelete = (key: string) => {
+    setView({ v: 'delete', key, toKey: others(key)[0] ?? '' });
+  };
+
+  const confirmMerge = async (fromKey: string, toKey: string) => {
+    setView({ v: 'working' });
+    const res = await mergeFurnitureCategory(fromKey, toKey);
+    if (res.success) {
+      onMergeComplete(fromKey, toKey, res.moved);
+      toast.success(`Moved ${res.moved} item${res.moved !== 1 ? 's' : ''} — "${label(fromKey)}" → "${label(toKey)}"`);
+    } else {
+      toast.error(res.error ?? 'Merge failed.');
+    }
+    setView({ v: 'list' });
+  };
+
+  const confirmDelete = async (key: string, toKey: string) => {
+    setView({ v: 'working' });
+    const count = countFor(key);
+    if (count > 0 && toKey) {
+      const mergeRes = await mergeFurnitureCategory(key, toKey);
+      if (!mergeRes.success) { toast.error(mergeRes.error ?? 'Merge failed.'); setView({ v: 'list' }); return; }
+      onMergeComplete(key, toKey, mergeRes.moved);
+    }
+    const delRes = await deleteFurnitureCategoryFromMeta(key);
+    if (delRes.success) {
+      onDeleteComplete(key);
+      toast.success(
+        count > 0
+          ? `Moved ${count} item${count !== 1 ? 's' : ''} to "${label(toKey)}" · "${label(key)}" deleted.`
+          : `Category "${label(key)}" deleted.`
+      );
+    } else {
+      toast.error(delRes.error ?? 'Delete failed.');
+    }
+    setView({ v: 'list' });
+  };
+
+  const selStyle: React.CSSProperties = {
+    width: '100%', padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
+    border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)',
+    fontSize: '0.875rem', color: 'var(--tqf-dark)', background: 'white', outline: 'none',
+  };
+  const btnSecondary: React.CSSProperties = {
+    border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)',
+    fontFamily: 'var(--font-body)', background: 'white',
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 9999 }}
+      onClick={view.v !== 'working' ? onClose : undefined}>
+      <div className="rounded-2xl overflow-hidden w-full max-w-lg"
+        style={{ background: 'white', boxShadow: '0 24px 60px rgba(0,0,0,0.2)' }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1px solid var(--tqf-beige-border)' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400, fontSize: '1.15rem' }}>
+            {view.v === 'merge' ? 'Merge Category' : view.v === 'delete' ? 'Delete Category' : 'Manage Categories'}
+          </h3>
+          {view.v !== 'working' && (
+            <button onClick={view.v === 'list' ? onClose : () => setView({ v: 'list' })}
+              className="size-8 flex items-center justify-center rounded-full transition-opacity hover:opacity-70"
+              style={{ background: 'var(--tqf-beige)', border: 'none', color: 'var(--tqf-muted)', cursor: 'pointer' }}>
+              {view.v === 'list' ? <X className="size-4" /> : <ArrowLeft className="size-4" />}
+            </button>
+          )}
+        </div>
+
+        {/* List view */}
+        {view.v === 'list' && (
+          <div className="overflow-y-auto" style={{ maxHeight: '60vh' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-body)', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ background: '#f9f8f5' }}>
+                  {(['Category', 'Items', ''] as const).map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 1 ? 'center' : i === 2 ? 'right' : 'left', padding: '0.55rem ' + (i === 1 ? '1rem' : '1.5rem'), color: 'var(--tqf-muted)', fontWeight: 500, fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', borderBottom: '1px solid var(--tqf-beige-border)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {allKeys.map((key, idx) => {
+                  const count = countFor(key);
+                  return (
+                    <tr key={key} style={{ borderBottom: idx < allKeys.length - 1 ? '1px solid var(--tqf-beige-border)' : 'none' }}>
+                      <td style={{ padding: '0.7rem 1.5rem', color: 'var(--tqf-dark)' }}>
+                        <div style={{ fontWeight: 500 }}>{label(key)}</div>
+                        <div style={{ fontSize: '0.6rem', color: 'var(--tqf-muted)', fontFamily: 'monospace', marginTop: '1px' }}>{key}</div>
+                      </td>
+                      <td style={{ padding: '0.7rem 1rem', textAlign: 'center', color: count > 0 ? 'var(--tqf-dark)' : 'var(--tqf-muted)' }}>
+                        {count}
+                      </td>
+                      <td style={{ padding: '0.7rem 1.5rem', textAlign: 'right' }}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button type="button" onClick={() => startMerge(key)}
+                            className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                            style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+                            Merge →
+                          </button>
+                          <button type="button" onClick={() => startDelete(key)}
+                            className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                            style={{ border: '1px solid #fca5a5', color: '#991b1b', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Merge confirm */}
+        {view.v === 'merge' && (
+          <div className="p-6 space-y-5">
+            <div>
+              <p className="text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>From</p>
+              <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                <strong>{label(view.fromKey)}</strong>
+                <span style={{ color: 'var(--tqf-muted)', marginLeft: '0.5rem' }}>{countFor(view.fromKey)} items</span>
+              </p>
+            </div>
+            <div>
+              <p className="text-xs mb-1.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Move into</p>
+              <select value={view.toKey} onChange={e => setView({ ...view, toKey: e.target.value })} style={selStyle}>
+                {others(view.fromKey).map(k => <option key={k} value={k}>{label(k)}</option>)}
+              </select>
+            </div>
+            <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              Moves <strong>{countFor(view.fromKey)}</strong> item{countFor(view.fromKey) !== 1 ? 's' : ''} to <strong>{label(view.toKey)}</strong>. The source category stays in the list.
+            </p>
+            <div className="flex gap-3 justify-end pt-1">
+              <button type="button" onClick={() => setView({ v: 'list' })}
+                className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-70" style={btnSecondary}>
+                Cancel
+              </button>
+              <button type="button" onClick={() => confirmMerge(view.fromKey, view.toKey)}
+                className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
+                Confirm Merge
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Delete confirm */}
+        {view.v === 'delete' && (() => {
+          const count = countFor(view.key);
+          return (
+            <div className="p-6 space-y-5">
+              {count > 0 ? (
+                <>
+                  <p className="text-sm" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                    <strong>&ldquo;{label(view.key)}&rdquo;</strong> has <strong>{count} item{count !== 1 ? 's' : ''}</strong>. Select a category to move them into before deleting:
+                  </p>
+                  <select value={view.toKey} onChange={e => setView({ ...view, toKey: e.target.value })} style={selStyle}>
+                    {others(view.key).map(k => <option key={k} value={k}>{label(k)}</option>)}
+                  </select>
+                  <p className="text-xs" style={{ color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                    This will move {count} item{count !== 1 ? 's' : ''} to &ldquo;{label(view.toKey)}&rdquo; and permanently delete &ldquo;{label(view.key)}&rdquo;.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm" style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                  Delete <strong>&ldquo;{label(view.key)}&rdquo;</strong>? This removes it from the category list. No items will be affected.
+                </p>
+              )}
+              <div className="flex gap-3 justify-end pt-1">
+                <button type="button" onClick={() => setView({ v: 'list' })}
+                  className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-70" style={btnSecondary}>
+                  Cancel
+                </button>
+                <button type="button"
+                  disabled={count > 0 && !view.toKey}
+                  onClick={() => confirmDelete(view.key, view.toKey)}
+                  className="text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ background: '#991b1b', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
+                  {count > 0 ? 'Move & Delete' : 'Delete Category'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Working */}
+        {view.v === 'working' && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16">
+            <Loader2 className="size-8 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
+            <p className="text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>Working…</p>
+          </div>
+        )}
+
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdminFurniturePage() {
@@ -622,6 +862,9 @@ export default function AdminFurniturePage() {
   const [newCatEn,  setNewCatEn]  = useState('');
   const [newCatEs,  setNewCatEs]  = useState('');
   const [savingCustomCats, setSavingCustomCats] = useState(false);
+
+  // Super Admin: category manager modal
+  const [showCatManager, setShowCatManager] = useState(false);
 
   // Super Admin: migration
   const [migrationReport,   setMigrationReport]   = useState<MigrationDryRunResult | null>(null);
@@ -794,6 +1037,16 @@ export default function AdminFurniturePage() {
     }
     setDeletingId(null);
   };
+
+  // ── Category manager callbacks ──────────────────────────────────────────────
+  const handleMergeComplete = useCallback((fromKey: string, toKey: string) => {
+    setItems(prev => prev.map(item => item.category === fromKey ? { ...item, category: toKey } : item));
+  }, []);
+
+  const handleDeleteComplete = useCallback((key: string) => {
+    setCategories(prev => prev.filter(k => k !== key));
+    setItems(prev => prev.filter(item => item.category !== key));
+  }, []);
 
   // BUG-09 fix: replaced `return null` with proper access control.
   if (isLoading) return (
@@ -998,9 +1251,18 @@ export default function AdminFurniturePage() {
         {/* ── Super Admin panel ───────────────────────────────────────────── */}
         {isSuperAdmin && (
           <div className="rounded-2xl p-6 space-y-6" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              Super Admin — Categorie
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+                Super Admin — Categorie
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCatManager(true)}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
+                <Edit2 className="size-3.5" /> Manage Categories
+              </button>
+            </div>
 
             {/* ── Predefined categories (read-only) ─────────────────────── */}
             <div>
@@ -1192,6 +1454,18 @@ export default function AdminFurniturePage() {
         )}
 
       </main>
+
+      {showCatManager && isSuperAdmin && (
+        <CategoryManagerModal
+          categories={categories}
+          items={items}
+          customCategories={customCategories}
+          lang={lang as Lang}
+          onClose={() => setShowCatManager(false)}
+          onMergeComplete={handleMergeComplete}
+          onDeleteComplete={handleDeleteComplete}
+        />
+      )}
     </div>
   );
 }
