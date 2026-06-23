@@ -16,6 +16,9 @@ export const PREDEFINED_FURNITURE_CATEGORIES: readonly CustomFurnitureCategory[]
 
 export const PREDEFINED_CATEGORY_KEYS = PREDEFINED_FURNITURE_CATEGORIES.map(c => c.key);
 
+// User-edited translation overrides stored in furnitureMeta/config.categoryTranslations
+export type CategoryTranslations = Record<string, { en: string; es: string }>;
+
 // Maps legacy Italian Firestore labels (any case) to predefined keys.
 // Used by getCategoryLabel() so items translate correctly before migration runs.
 const ITALIAN_TO_KEY: Record<string, string> = {
@@ -30,21 +33,25 @@ const ITALIAN_TO_KEY: Record<string, string> = {
 
 // Returns the translated label for a category key or legacy Italian label.
 // Resolution order:
-//   1. Predefined key (already migrated)
-//   2. Custom category key
-//   3. Italian legacy label → resolved to predefined key → translated
-//   4. Raw value (never crashes)
+//   1. User translation overrides (categoryTranslations from Firestore meta)
+//   2. Predefined built-in translations
+//   3. Custom category translations
+//   4. Italian legacy label → resolved to key → check overrides + predefined
+//   5. Raw value (never crashes)
 export function getCategoryLabel(
   key: string,
   lang: Lang,
-  custom: CustomFurnitureCategory[] = []
+  custom: CustomFurnitureCategory[] = [],
+  translations: CategoryTranslations = {}
 ): string {
+  if (translations[key]) return translations[key][lang] || translations[key].en || key;
   const pre = PREDEFINED_FURNITURE_CATEGORIES.find(c => c.key === key);
   if (pre) return pre[lang];
   const cust = custom.find(c => c.key === key);
   if (cust) return cust[lang] || cust.en || key;
   const resolved = ITALIAN_TO_KEY[key.toLowerCase()];
   if (resolved) {
+    if (translations[resolved]) return translations[resolved][lang] || translations[resolved].en || key;
     const mappedPre = PREDEFINED_FURNITURE_CATEGORIES.find(c => c.key === resolved);
     if (mappedPre) return mappedPre[lang];
   }

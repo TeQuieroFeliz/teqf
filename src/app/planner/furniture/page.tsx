@@ -11,9 +11,11 @@ import {
   saveCustomCategories,
   saveFurnitureItem,
   saveFurnitureMeta,
+  updateCategoryTranslations,
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
 import {
+  CategoryTranslations,
   CustomFurnitureCategory,
   getCategoryLabel,
   Lang,
@@ -495,11 +497,12 @@ function StandbyCard({
 
 // ── ItemCard ──────────────────────────────────────────────────────────────────
 
-function ItemCard({ item, allCategories, lang, customCategories, onDelete, deleting, canEdit }: {
+function ItemCard({ item, allCategories, lang, customCategories, categoryTranslations, onDelete, deleting, canEdit }: {
   item: FurnitureItem;
   allCategories: string[];
   lang: Lang;
   customCategories: CustomFurnitureCategory[];
+  categoryTranslations: CategoryTranslations;
   onDelete: () => void;
   deleting: boolean;
   canEdit: boolean;
@@ -573,7 +576,7 @@ function ItemCard({ item, allCategories, lang, customCategories, onDelete, delet
       {/* Body */}
       <div className="p-4 flex flex-col gap-2.5 flex-1">
         <p style={{ fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', lineHeight: 1.4 }}>
-          {getCategoryLabel(item.category, lang, customCategories)}{item.description ? ` · ${item.description}` : ''}
+          {getCategoryLabel(item.category, lang, customCategories, categoryTranslations)}{item.description ? ` · ${item.description}` : ''}
         </p>
         <h3 style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontSize: '1.15rem', fontWeight: 400, lineHeight: 1.2 }}>
           {item.name || <span style={{ opacity: 0.35 }}>{t('furniture_untitled')}</span>}
@@ -611,17 +614,18 @@ type CatMgrView =
   | { v: 'working' };
 
 function CategoryManagerModal({
-  categories, items, customCategories, lang, onClose,
-  onMergeComplete, onDeleteComplete, onRenameComplete,
+  categories, items, customCategories, categoryTranslations, lang, onClose,
+  onMergeComplete, onDeleteComplete, onTranslationUpdate,
 }: {
   categories: string[];
   items: FurnitureItem[];
   customCategories: CustomFurnitureCategory[];
+  categoryTranslations: CategoryTranslations;
   lang: Lang;
   onClose: () => void;
   onMergeComplete: (from: string, to: string, moved: number) => void;
   onDeleteComplete: (key: string) => void;
-  onRenameComplete: (oldKey: string, newKey: string) => void;
+  onTranslationUpdate: (key: string, en: string, es: string) => void;
 }) {
   const allKeys = useMemo(() => {
     const fromItems = Array.from(new Set(items.map(i => i.category))).filter(Boolean);
@@ -629,38 +633,47 @@ function CategoryManagerModal({
   }, [categories, items]);
 
   const countFor = (key: string) => items.filter(i => i.category === key).length;
-  const label    = (key: string) => getCategoryLabel(key, lang, customCategories);
+  const label    = (key: string) => getCategoryLabel(key, lang, customCategories, categoryTranslations);
   const others   = (excludeKey: string) => allKeys.filter(k => k !== excludeKey);
 
   const [view, setView] = useState<CatMgrView>({ v: 'list' });
 
-  // Inline edit state
+  // Inline EN+ES edit state
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editValue,  setEditValue]  = useState('');
+  const [editEn,     setEditEn]     = useState('');
+  const [editEs,     setEditEs]     = useState('');
   const [editError,  setEditError]  = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
   const startEdit = (key: string) => {
     setEditingKey(key);
-    setEditValue(key);
+    setEditEn(getCategoryLabel(key, 'en', customCategories, categoryTranslations));
+    setEditEs(getCategoryLabel(key, 'es', customCategories, categoryTranslations));
     setEditError('');
   };
 
   const cancelEdit = () => { setEditingKey(null); setEditError(''); };
 
-  const confirmRename = async () => {
-    const newKey = editValue.trim();
-    if (!newKey) { setEditError('Name cannot be empty.'); return; }
-    if (newKey !== editingKey && allKeys.includes(newKey)) { setEditError('Category already exists.'); return; }
-    if (newKey === editingKey) { cancelEdit(); return; }
+  const confirmTranslation = async () => {
+    const en = editEn.trim();
+    const es = editEs.trim();
+    if (!en) { setEditError('EN name cannot be empty.'); return; }
+    if (!es) { setEditError('ES name cannot be empty.'); return; }
+    const otherKeys = allKeys.filter(k => k !== editingKey);
+    if (otherKeys.some(k => getCategoryLabel(k, 'en', customCategories, categoryTranslations) === en)) {
+      setEditError('EN name already used by another category.'); return;
+    }
+    if (otherKeys.some(k => getCategoryLabel(k, 'es', customCategories, categoryTranslations) === es)) {
+      setEditError('ES name already used by another category.'); return;
+    }
     setEditSaving(true);
-    const res = await renameFurnitureCategory(editingKey!, newKey);
+    const res = await updateCategoryTranslations(editingKey!, en, es);
     if (res.success) {
-      onRenameComplete(editingKey!, newKey);
-      toast.success(`Renamed "${label(editingKey!)}" → "${newKey}" (${res.moved} items updated)`);
+      onTranslationUpdate(editingKey!, en, es);
+      toast.success(`Updated translations for "${editingKey}"`);
       setEditingKey(null);
     } else {
-      setEditError(res.error ?? 'Rename failed.');
+      setEditError(res.error ?? 'Update failed.');
     }
     setEditSaving(false);
   };
@@ -759,74 +772,82 @@ function CategoryManagerModal({
                 {allKeys.map((key, idx) => {
                   const count = countFor(key);
                   const isEditing = editingKey === key;
+                  const rowBorder = idx < allKeys.length - 1 ? '1px solid var(--tqf-beige-border)' : 'none';
                   return (
-                    <tr key={key} style={{ borderBottom: idx < allKeys.length - 1 ? '1px solid var(--tqf-beige-border)' : 'none' }}>
-                      {/* Category cell — shows input when editing */}
-                      <td style={{ padding: isEditing ? '0.5rem 1.5rem' : '0.7rem 1.5rem', color: 'var(--tqf-dark)' }}>
-                        {isEditing ? (
-                          <div>
-                            <input
-                              value={editValue}
-                              autoFocus
-                              onChange={e => { setEditValue(e.target.value); setEditError(''); }}
-                              onKeyDown={e => { if (e.key === 'Enter') confirmRename(); if (e.key === 'Escape') cancelEdit(); }}
-                              style={{ ...inp, fontSize: '0.82rem', padding: '0.35rem 0.55rem' }}
-                            />
-                            {editError && (
-                              <p style={{ color: '#991b1b', fontSize: '0.68rem', fontFamily: 'var(--font-body)', marginTop: '3px' }}>
-                                {editError}
-                              </p>
-                            )}
+                    <tr key={key} style={{ borderBottom: rowBorder }}>
+                      {isEditing ? (
+                        /* ── Edit row: EN + ES fields spanning all columns ── */
+                        <td colSpan={3} style={{ padding: '0.65rem 1.5rem' }}>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 flex-1">
+                              <span style={{ fontSize: '0.6rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', minWidth: '1.5rem' }}>EN</span>
+                              <input
+                                value={editEn} autoFocus
+                                onChange={e => { setEditEn(e.target.value); setEditError(''); }}
+                                onKeyDown={e => { if (e.key === 'Enter') confirmTranslation(); if (e.key === 'Escape') cancelEdit(); }}
+                                style={{ ...inp, flex: 1, fontSize: '0.82rem', padding: '0.35rem 0.55rem' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-1">
+                              <span style={{ fontSize: '0.6rem', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', minWidth: '1.5rem' }}>ES</span>
+                              <input
+                                value={editEs}
+                                onChange={e => { setEditEs(e.target.value); setEditError(''); }}
+                                onKeyDown={e => { if (e.key === 'Enter') confirmTranslation(); if (e.key === 'Escape') cancelEdit(); }}
+                                style={{ ...inp, flex: 1, fontSize: '0.82rem', padding: '0.35rem 0.55rem' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <button type="button" onClick={confirmTranslation} disabled={editSaving}
+                                className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                                style={{ background: 'var(--tqf-bordeaux)', border: 'none', color: 'white', cursor: 'pointer' }}>
+                                {editSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                              </button>
+                              <button type="button" onClick={cancelEdit}
+                                className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70"
+                                style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', cursor: 'pointer' }}>
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
                           </div>
-                        ) : (
-                          <>
+                          {editError && (
+                            <p style={{ color: '#991b1b', fontSize: '0.68rem', fontFamily: 'var(--font-body)', marginTop: '4px' }}>
+                              {editError}
+                            </p>
+                          )}
+                        </td>
+                      ) : (
+                        /* ── Normal row ── */
+                        <>
+                          <td style={{ padding: '0.7rem 1.5rem', color: 'var(--tqf-dark)' }}>
                             <div style={{ fontWeight: 500 }}>{label(key)}</div>
                             <div style={{ fontSize: '0.6rem', color: 'var(--tqf-muted)', fontFamily: 'monospace', marginTop: '1px' }}>{key}</div>
-                          </>
-                        )}
-                      </td>
-
-                      {/* Items count — hidden when editing */}
-                      <td style={{ padding: '0.7rem 1rem', textAlign: 'center', color: count > 0 ? 'var(--tqf-dark)' : 'var(--tqf-muted)' }}>
-                        {!isEditing && count}
-                      </td>
-
-                      {/* Actions */}
-                      <td style={{ padding: '0.7rem 1.5rem', textAlign: 'right' }}>
-                        {isEditing ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button type="button" onClick={confirmRename} disabled={editSaving}
-                              className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
-                              style={{ background: 'var(--tqf-bordeaux)', border: 'none', color: 'white', cursor: 'pointer' }}>
-                              {editSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                            </button>
-                            <button type="button" onClick={cancelEdit}
-                              className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70"
-                              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', cursor: 'pointer' }}>
-                              <X className="size-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <button type="button" onClick={() => startEdit(key)}
-                              className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80"
-                              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', cursor: 'pointer' }}
-                              title="Rename">
-                              <Edit2 className="size-3.5" />
-                            </button>
-                            <button type="button" onClick={() => startMerge(key)}
-                              className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-                              style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
-                              Merge →
-                            </button>
-                            <button type="button" onClick={() => startDelete(key)}
-                              className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-                              style={{ border: '1px solid #fca5a5', color: '#991b1b', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </td>
+                          </td>
+                          <td style={{ padding: '0.7rem 1rem', textAlign: 'center', color: count > 0 ? 'var(--tqf-dark)' : 'var(--tqf-muted)' }}>
+                            {count}
+                          </td>
+                          <td style={{ padding: '0.7rem 1.5rem', textAlign: 'right' }}>
+                            <div className="flex items-center justify-end gap-2">
+                              <button type="button" onClick={() => startEdit(key)}
+                                className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80"
+                                style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', cursor: 'pointer' }}
+                                title="Edit translations">
+                                <Edit2 className="size-3.5" />
+                              </button>
+                              <button type="button" onClick={() => startMerge(key)}
+                                className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                                style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+                                Merge →
+                              </button>
+                              <button type="button" onClick={() => startDelete(key)}
+                                className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                                style={{ border: '1px solid #fca5a5', color: '#991b1b', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
@@ -934,10 +955,11 @@ export default function AdminFurniturePage() {
 
   const [standby, setStandby]   = useState<StandbyItem[]>([]);
   const [uploads, setUploads]   = useState<UploadState[]>([]);
-  const [categories, setCategories]       = useState<string[]>([]);
-  const [cities, setCities]               = useState<string[]>([]);
+  const [categories, setCategories]             = useState<string[]>([]);
+  const [cities, setCities]                     = useState<string[]>([]);
   const [customCategories, setCustomCategories] = useState<CustomFurnitureCategory[]>([]);
-  const [metaLoaded, setMetaLoaded]       = useState(false);
+  const [categoryTranslations, setCategoryTranslations] = useState<CategoryTranslations>({});
+  const [metaLoaded, setMetaLoaded]             = useState(false);
 
   // Super Admin: custom category editor
   const [newCatKey, setNewCatKey] = useState('');
@@ -990,6 +1012,7 @@ export default function AdminFurniturePage() {
       setCategories(meta.categories ?? predefinedKeys);
       setCities(meta.cities ?? DEFAULT_CITIES);
       setCustomCategories(custom);
+      setCategoryTranslations(meta.categoryTranslations ?? {});
       setMetaLoaded(true);
       setLoading(false);
     });
@@ -1130,10 +1153,8 @@ export default function AdminFurniturePage() {
     setItems(prev => prev.filter(item => item.category !== key));
   }, []);
 
-  const handleRenameComplete = useCallback((oldKey: string, newKey: string) => {
-    setItems(prev => prev.map(item => item.category === oldKey ? { ...item, category: newKey } : item));
-    setCategories(prev => prev.map(k => k === oldKey ? newKey : k));
-    setCustomCategories(prev => prev.map(c => c.key === oldKey ? { ...c, key: newKey } : c));
+  const handleTranslationUpdate = useCallback((key: string, en: string, es: string) => {
+    setCategoryTranslations(prev => ({ ...prev, [key]: { en, es } }));
   }, []);
 
   // BUG-09 fix: replaced `return null` with proper access control.
@@ -1288,7 +1309,7 @@ export default function AdminFurniturePage() {
               <button onClick={() => setCatFilter('all')} style={pill(catFilter === 'all')}>{t('furniture_all')}</button>
               {allCategories.map(cat => (
                 <button key={cat} onClick={() => setCatFilter(cat)} style={pill(catFilter === cat)}>
-                  {getCategoryLabel(cat, lang as Lang, customCategories)}
+                  {getCategoryLabel(cat, lang as Lang, customCategories, categoryTranslations)}
                 </button>
               ))}
             </div>
@@ -1337,6 +1358,7 @@ export default function AdminFurniturePage() {
                   key={item.id} item={item}
                   allCategories={allCategories}
                   lang={lang as Lang} customCategories={customCategories}
+                  categoryTranslations={categoryTranslations}
                   onDelete={() => handleDelete(item)}
                   deleting={deletingId === item.id}
                   canEdit={canEdit}
@@ -1550,10 +1572,11 @@ export default function AdminFurniturePage() {
           items={items}
           customCategories={customCategories}
           lang={lang as Lang}
+          categoryTranslations={categoryTranslations}
           onClose={() => setShowCatManager(false)}
           onMergeComplete={handleMergeComplete}
           onDeleteComplete={handleDeleteComplete}
-          onRenameComplete={handleRenameComplete}
+          onTranslationUpdate={handleTranslationUpdate}
         />
       )}
     </div>

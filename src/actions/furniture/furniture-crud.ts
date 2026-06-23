@@ -3,6 +3,7 @@
 import { firestore } from '@/firebase/server';
 import { FurnitureItem } from '@/lib/planner-types';
 import {
+  CategoryTranslations,
   CustomFurnitureCategory,
   PREDEFINED_CATEGORY_KEYS,
 } from '@/lib/furniture-categories';
@@ -35,11 +36,12 @@ export async function getFurnitureMeta(): Promise<{
   categories: string[];
   cities: string[];
   customCategories: CustomFurnitureCategory[];
+  categoryTranslations: CategoryTranslations;
 }> {
-  if (!firestore) return { categories: PREDEFINED_CATEGORY_KEYS, cities: DEFAULT_CITIES, customCategories: [] };
+  if (!firestore) return { categories: PREDEFINED_CATEGORY_KEYS, cities: DEFAULT_CITIES, customCategories: [], categoryTranslations: {} };
   const doc = await metaDoc().get();
   if (!doc.exists) {
-    const defaults = { categories: PREDEFINED_CATEGORY_KEYS, cities: DEFAULT_CITIES, customCategories: [] };
+    const defaults = { categories: PREDEFINED_CATEGORY_KEYS, cities: DEFAULT_CITIES, customCategories: [], categoryTranslations: {} };
     await metaDoc().set(defaults);
     return defaults;
   }
@@ -48,7 +50,23 @@ export async function getFurnitureMeta(): Promise<{
     categories: data.categories ?? PREDEFINED_CATEGORY_KEYS,
     cities: data.cities ?? DEFAULT_CITIES,
     customCategories: data.customCategories ?? [],
+    categoryTranslations: data.categoryTranslations ?? {},
   };
+}
+
+export async function updateCategoryTranslations(
+  key: string,
+  en: string,
+  es: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!firestore) return { success: false, error: 'Database non disponibile.' };
+  try {
+    await metaDoc().set({ categoryTranslations: { [key]: { en, es } } }, { merge: true });
+    revalidatePath('/planner/furniture');
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
 }
 
 export async function saveFurnitureMeta(
