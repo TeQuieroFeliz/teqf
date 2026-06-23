@@ -76,14 +76,18 @@ service cloud.firestore {
     }
 
     // ── /users/{uid} ───────────────────────────────────────────────────────────
-    // FIX-A: owner can update innocuous profile fields only — role/status/approved
-    // are write-protected for the owner; only isAdmin() can touch those.
-    // All legitimate user creates/deletes go through Admin SDK (server actions),
-    // so client create/delete is admin-only.
+    // FIX-A: owner non può toccare role/status/approved tramite update.
+    // create: admin-only OPPURE owner che si auto-registra con status='pending' e role='user'
+    //   (il flusso /planner/register crea il doc via client SDK subito dopo createUserWithEmailAndPassword).
+    //   Senza questa eccezione, Fix A bloccava il passo 1 della registrazione.
     match /users/{uid} {
       allow read:   if isOwner(uid) || isAdmin();
-      allow create: if isAdmin();
       allow delete: if isAdmin();
+      allow create:
+        if isAdmin()
+        || (isOwner(uid)
+            && request.resource.data.get('status', '') == 'pending'
+            && request.resource.data.get('role', 'user') == 'user');
       allow update:
         if isAdmin()
         || (isOwner(uid)
@@ -125,27 +129,45 @@ service cloud.firestore {
     }
 
     // ── /planners/{docId} ─────────────────────────────────────────────────────
-    // READ: the planner (isOwner) OR any active admin OR same-email match
-    //       (the email check covers the legacy getDocs-by-email path in
-    //       PlannerAuthContext when the uid-keyed doc is absent).
-    // FIX-B: WRITE is now admin-only.
-    //   Confirmed: ALL client-side planner writes (team, active, teamRole,
-    //   lastLogin, avatarUrl, mustChangePassword) go through server actions with
-    //   Admin SDK, which bypass these rules. No legitimate client write exists.
-    //   This closes the self-escalation vector (a user writing team/active themselves).
+    // FIX-B: update/delete sono solo isAdmin().
+    // create: admin-only OPPURE owner che si auto-registra con status='pending' e active=false.
+    //   Il flusso /planner/register scrive questo doc via client SDK come secondo passo.
+    //   Senza questa eccezione, Fix B bloccava la registrazione al passo 2.
+    // READ invariata: isOwner || isAdmin || email-fallback (legacy).
     match /planners/{docId} {
-      allow read:  if isOwner(docId) || isAdmin()
-        || (isSignedIn() && resource.data.email == request.auth.token.email);
-      allow write: if isAdmin();
+      allow read:   if isOwner(docId) || isAdmin()
+        || (isAuth() && resource.data.email == request.auth.token.email);
+      allow create:
+        if isAdmin()
+        || (isOwner(docId)
+            && request.resource.data.get('status', '') == 'pending'
+            && request.resource.data.active == false
+            // team deve essere assente o vuoto — l'assegnazione avviene solo via Admin SDK in approvazione
+            && (!request.resource.data.keys().hasAny(['team'])
+                || request.resource.data.team == [])
+            // teamRole deve essere assente o stringa vuota
+            && (!request.resource.data.keys().hasAny(['teamRole'])
+                || request.resource.data.teamRole == ''));
+      allow update, delete: if isAdmin();
     }
 
     // ── /plannerRequests/{id} ─────────────────────────────────────────────────
-    // FIX-C: create now requires authentication (was `if true`).
-    // Note: the registration server action uses Admin SDK, so this rule
-    // is a client-SDK safety net only.
+    // create: pubblico (nessun auth richiesto) ma con validazione dei campi obbligatori.
+    //   - email e name presenti e validi
+    //   - status deve essere 'pending' — non può auto-approvarsi
+    //   Questo copre sia /sign-up (Admin SDK, bypassa le regole) sia /planner/register
+    //   (client SDK, utente autenticato ma la validazione si applica ugualmente).
+    // Tornato a create pubblico (era 'if isSignedIn()' in Tappa 1) perché:
+    //   /planner/register crea l'account Auth prima, ma /sign-up no — e la validazione
+    //   dei campi è sufficiente a prevenire abusi senza richiedere autenticazione.
     match /plannerRequests/{id} {
       allow read:           if isAdmin() || isOwner(id);
-      allow create:         if isSignedIn();
+      allow create:
+        if request.resource.data.keys().hasAll(['email', 'name', 'status'])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.name is string
+        && request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
     }
 
