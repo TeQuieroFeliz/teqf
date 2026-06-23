@@ -4,6 +4,7 @@ import {
   createTeqfCalendarEvent,
   deleteTeqfCalendarEvent,
   getXbEventsForDropdown,
+  migrateTeqfEventsToDateRange,
   TeqfCalendarEvent,
   updateTeqfCalendarEvent,
   XbEventOption,
@@ -18,6 +19,7 @@ import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   Edit2,
   ExternalLink,
@@ -45,7 +47,8 @@ const TR = {
     pageSubtitle: 'TeQF wedding event calendar',
     addEvent: '+ Add Event',
     noEvents: 'No events yet. Add your first wedding event.',
-    eventDate: 'Event Date',
+    eventStartDate: 'Event Start Date',
+    eventEndDate: 'Event End Date',
     eventName: 'Wedding Name',
     location: 'Location',
     notes: 'Notes (optional)',
@@ -69,8 +72,13 @@ const TR = {
     deleteMsg: (name: string) => `"${name}" will be permanently deleted.`,
     confirmDelete: 'Yes, delete',
     cancelDelete: 'Cancel',
-    errDateRequired: 'Event date is required.',
-    errDatePast: 'Event date cannot be in the past.',
+    startDateLabel: 'Start Date',
+    endDateLabel: 'End Date',
+    duration: (n: number) => n === 1 ? '1 day' : `${n} days`,
+    errStartRequired: 'Start date is required.',
+    errEndRequired: 'End date is required.',
+    errDatePast: 'Start date cannot be in the past.',
+    errEndBeforeStart: 'End date cannot be before start date.',
     errNameRequired: 'Wedding name is required.',
     errLocationRequired: 'Location is required.',
     created: 'Event created.',
@@ -79,7 +87,10 @@ const TR = {
     errorCreate: 'Failed to create event.',
     errorUpdate: 'Failed to update event.',
     errorDelete: 'Failed to delete event.',
-    formatDate: (d: string) =>
+    migrationBtn: 'Run date migration',
+    migrating: 'Migrating…',
+    migrationDone: (n: number) => `Migration complete: ${n} event(s) updated.`,
+    formatLong: (d: string) =>
       new Date(d + 'T00:00:00').toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       }),
@@ -89,7 +100,8 @@ const TR = {
     pageSubtitle: 'Calendario de eventos de bodas TeQF',
     addEvent: '+ Agregar Evento',
     noEvents: 'Sin eventos aún. Agrega tu primer evento de boda.',
-    eventDate: 'Fecha del Evento',
+    eventStartDate: 'Fecha de inicio',
+    eventEndDate: 'Fecha de fin',
     eventName: 'Nombre de la Boda',
     location: 'Ubicación',
     notes: 'Notas (opcional)',
@@ -113,8 +125,13 @@ const TR = {
     deleteMsg: (name: string) => `"${name}" se eliminará permanentemente.`,
     confirmDelete: 'Sí, eliminar',
     cancelDelete: 'Cancelar',
-    errDateRequired: 'La fecha del evento es obligatoria.',
-    errDatePast: 'La fecha del evento no puede ser en el pasado.',
+    startDateLabel: 'Fecha de inicio',
+    endDateLabel: 'Fecha de fin',
+    duration: (n: number) => n === 1 ? '1 día' : `${n} días`,
+    errStartRequired: 'La fecha de inicio es obligatoria.',
+    errEndRequired: 'La fecha de fin es obligatoria.',
+    errDatePast: 'La fecha de inicio no puede ser en el pasado.',
+    errEndBeforeStart: 'La fecha de fin no puede ser anterior a la de inicio.',
     errNameRequired: 'El nombre de la boda es obligatorio.',
     errLocationRequired: 'La ubicación es obligatoria.',
     created: 'Evento creado.',
@@ -123,7 +140,10 @@ const TR = {
     errorCreate: 'Error al crear el evento.',
     errorUpdate: 'Error al actualizar el evento.',
     errorDelete: 'Error al eliminar el evento.',
-    formatDate: (d: string) =>
+    migrationBtn: 'Ejecutar migración de fechas',
+    migrating: 'Migrando…',
+    migrationDone: (n: number) => `Migración completada: ${n} evento(s) actualizado(s).`,
+    formatLong: (d: string) =>
       new Date(d + 'T00:00:00').toLocaleDateString('es-MX', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       }),
@@ -131,6 +151,59 @@ const TR = {
 } as const;
 
 type Tr = typeof TR[keyof typeof TR];
+type LangKey = 'en' | 'es';
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+function getStart(ev: TeqfCalendarEvent): string {
+  return ev.eventStartDate || (ev as any).eventDate || '';
+}
+function getEnd(ev: TeqfCalendarEvent): string {
+  return ev.eventEndDate || getStart(ev);
+}
+function dayCount(start: string, end: string): number {
+  const s = new Date(start + 'T00:00:00');
+  const e = new Date(end + 'T00:00:00');
+  return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+}
+function isMultiDay(ev: TeqfCalendarEvent): boolean {
+  const s = getStart(ev);
+  const e = getEnd(ev);
+  return !!s && !!e && s !== e;
+}
+
+function monthAbbr(d: Date, lang: LangKey): string {
+  return d.toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { month: 'short' })
+    .replace('.', '').toUpperCase();
+}
+
+function formatRange(start: string, end: string, lang: LangKey): string {
+  if (!start) return '';
+  if (!end || start === end) {
+    const d = new Date(start + 'T00:00:00');
+    return d.toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+    });
+  }
+  const s = new Date(start + 'T00:00:00');
+  const e = new Date(end + 'T00:00:00');
+  const locale = lang === 'es' ? 'es-MX' : 'en-US';
+  const sMonth = monthAbbr(s, lang);
+  const eMonth = monthAbbr(e, lang);
+  const sDay = s.getDate();
+  const eDay = e.getDate();
+  const year = e.getFullYear();
+  if (sMonth === eMonth && s.getFullYear() === e.getFullYear()) {
+    return lang === 'es'
+      ? `${sDay}–${eDay} ${sMonth[0] + sMonth.slice(1).toLowerCase()} ${year}`
+      : `${sMonth} ${sDay}–${eDay}, ${year}`;
+  }
+  const sMon = sMonth[0] + sMonth.slice(1).toLowerCase();
+  const eMon = eMonth[0] + eMonth.slice(1).toLowerCase();
+  return lang === 'es'
+    ? `${sDay} ${sMon} – ${eDay} ${eMon} ${year}`
+    : `${sMonth} ${sDay} – ${eMonth} ${eDay}, ${year}`;
+}
 
 // ── View state ────────────────────────────────────────────────────────────────
 
@@ -139,44 +212,72 @@ type View =
   | { mode: 'detail'; event: TeqfCalendarEvent }
   | { mode: 'form'; editing?: TeqfCalendarEvent };
 
+// ── Shared styles ─────────────────────────────────────────────────────────────
+
+const INPUT_STYLE: React.CSSProperties = {
+  width: '100%', padding: '0.55rem 0.75rem',
+  border: '1px solid var(--tqf-beige-border)', borderRadius: '0.5rem',
+  fontFamily: 'var(--font-body)', fontSize: '0.875rem',
+  color: 'var(--tqf-dark)', background: 'white', outline: 'none',
+};
+const ERR_STYLE: React.CSSProperties = {
+  fontSize: '0.75rem', color: '#991b1b', fontFamily: 'var(--font-body)', marginTop: '0.25rem',
+};
+const LBL_STYLE: React.CSSProperties = {
+  display: 'block', fontSize: '0.75rem', fontWeight: 500, marginBottom: '0.35rem',
+  color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', letterSpacing: '0.04em',
+};
+
 // ── Form ──────────────────────────────────────────────────────────────────────
 
 function EventForm({
-  t,
-  lang,
-  editing,
-  xbEvents,
-  xbLoading,
-  onSave,
-  onCancel,
+  t, lang, editing, xbEvents, xbLoading, onSave, onCancel,
 }: {
-  t: Tr;
-  lang: 'en' | 'es';
-  editing?: TeqfCalendarEvent;
-  xbEvents: XbEventOption[];
-  xbLoading: boolean;
+  t: Tr; lang: LangKey; editing?: TeqfCalendarEvent;
+  xbEvents: XbEventOption[]; xbLoading: boolean;
   onSave: (data: {
-    eventDate: string; eventName: string; location: string;
-    notes: string; xbEventId: string | null;
+    eventStartDate: string; eventEndDate: string;
+    eventName: string; location: string; notes: string; xbEventId: string | null;
   }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [date, setDate]       = useState(editing?.eventDate ?? '');
-  const [name, setName]       = useState(editing?.eventName ?? '');
-  const [loc, setLoc]         = useState(editing?.location ?? '');
-  const [notes, setNotes]     = useState(editing?.notes ?? '');
-  const [xbId, setXbId]       = useState<string>(editing?.xbEventId ?? '');
-  const [errors, setErrors]   = useState<Record<string, string>>({});
-  const [saving, setSaving]   = useState(false);
+  const [startDate, setStartDate] = useState(editing ? getStart(editing) : '');
+  const [endDate, setEndDate]     = useState(editing ? getEnd(editing) : '');
+  const [name, setName]           = useState(editing?.eventName ?? '');
+  const [loc, setLoc]             = useState(editing?.location ?? '');
+  const [notes, setNotes]         = useState(editing?.notes ?? '');
+  const [xbId, setXbId]           = useState<string>(editing?.xbEventId ?? '');
+  const [errors, setErrors]       = useState<Record<string, string>>({});
+  const [saving, setSaving]       = useState(false);
+
+  function handleStartChange(v: string) {
+    setStartDate(v);
+    setErrors(p => ({ ...p, startDate: '' }));
+    // Auto-advance end date if it would go before start
+    if (!endDate || endDate < v) {
+      setEndDate(v);
+      setErrors(p => ({ ...p, endDate: '' }));
+    }
+  }
+
+  function handleEndChange(v: string) {
+    setEndDate(v);
+    setErrors(p => ({ ...p, endDate: '' }));
+  }
 
   function validate() {
     const errs: Record<string, string> = {};
-    if (!date) {
-      errs.date = t.errDateRequired;
-    } else {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (new Date(date + 'T00:00:00') < today) errs.date = t.errDatePast;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!startDate) {
+      errs.startDate = t.errStartRequired;
+    } else if (new Date(startDate + 'T00:00:00') < today) {
+      errs.startDate = t.errDatePast;
+    }
+    if (!endDate) {
+      errs.endDate = t.errEndRequired;
+    } else if (startDate && endDate < startDate) {
+      errs.endDate = t.errEndBeforeStart;
     }
     if (!name.trim()) errs.name = t.errNameRequired;
     if (!loc.trim())  errs.loc  = t.errLocationRequired;
@@ -189,77 +290,92 @@ function EventForm({
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true);
     await onSave({
-      eventDate: date, eventName: name.trim(),
-      location: loc.trim(), notes: notes.trim(),
-      xbEventId: xbId || null,
+      eventStartDate: startDate, eventEndDate: endDate,
+      eventName: name.trim(), location: loc.trim(),
+      notes: notes.trim(), xbEventId: xbId || null,
     });
     setSaving(false);
   }
 
-  const input: React.CSSProperties = {
-    width: '100%', padding: '0.55rem 0.75rem',
-    border: '1px solid var(--tqf-beige-border)', borderRadius: '0.5rem',
-    fontFamily: 'var(--font-body)', fontSize: '0.875rem',
-    color: 'var(--tqf-dark)', background: 'white', outline: 'none',
-  };
-  const err: React.CSSProperties = {
-    fontSize: '0.75rem', color: '#991b1b', fontFamily: 'var(--font-body)', marginTop: '0.25rem',
-  };
-  const lbl: React.CSSProperties = {
-    display: 'block', fontSize: '0.75rem', fontWeight: 500, marginBottom: '0.35rem',
-    color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', letterSpacing: '0.04em',
-  };
+  const nights = startDate && endDate && endDate > startDate
+    ? dayCount(startDate, endDate)
+    : null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+
+      {/* Start Date */}
       <div>
-        <label style={lbl}>{t.eventDate} *</label>
+        <label style={LBL_STYLE}>{t.eventStartDate} *</label>
         <TeqfDatePicker
-          value={date}
-          onChange={v => { setDate(v); setErrors(p => ({ ...p, date: '' })); }}
+          value={startDate}
+          onChange={handleStartChange}
           lang={lang}
-          hasError={!!errors.date}
+          hasError={!!errors.startDate}
         />
-        {errors.date && <p style={err}>{errors.date}</p>}
+        {errors.startDate && <p style={ERR_STYLE}>{errors.startDate}</p>}
       </div>
 
+      {/* End Date */}
       <div>
-        <label style={lbl}>{t.eventName} *</label>
+        <label style={LBL_STYLE}>
+          {t.eventEndDate} *
+          {nights && nights > 1 && (
+            <span style={{ marginLeft: '8px', color: 'var(--tqf-bordeaux)', fontWeight: 400, fontSize: '0.7rem' }}>
+              · {t.duration(nights)}
+            </span>
+          )}
+        </label>
+        <TeqfDatePicker
+          value={endDate}
+          onChange={handleEndChange}
+          lang={lang}
+          hasError={!!errors.endDate}
+        />
+        {errors.endDate && <p style={ERR_STYLE}>{errors.endDate}</p>}
+      </div>
+
+      {/* Wedding Name */}
+      <div>
+        <label style={LBL_STYLE}>{t.eventName} *</label>
         <input
           type="text" value={name} placeholder="e.g. López Wedding"
           onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: '' })); }}
-          style={{ ...input, borderColor: errors.name ? '#fca5a5' : 'var(--tqf-beige-border)' }}
+          style={{ ...INPUT_STYLE, borderColor: errors.name ? '#fca5a5' : 'var(--tqf-beige-border)' }}
         />
-        {errors.name && <p style={err}>{errors.name}</p>}
+        {errors.name && <p style={ERR_STYLE}>{errors.name}</p>}
       </div>
 
+      {/* Location */}
       <div>
-        <label style={lbl}>{t.location} *</label>
+        <label style={LBL_STYLE}>{t.location} *</label>
         <input
           type="text" value={loc} placeholder="e.g. Hacienda Santa Fe, CDMX"
           onChange={e => { setLoc(e.target.value); setErrors(p => ({ ...p, loc: '' })); }}
-          style={{ ...input, borderColor: errors.loc ? '#fca5a5' : 'var(--tqf-beige-border)' }}
+          style={{ ...INPUT_STYLE, borderColor: errors.loc ? '#fca5a5' : 'var(--tqf-beige-border)' }}
         />
-        {errors.loc && <p style={err}>{errors.loc}</p>}
+        {errors.loc && <p style={ERR_STYLE}>{errors.loc}</p>}
       </div>
 
+      {/* Notes */}
       <div>
-        <label style={lbl}>{t.notes}</label>
+        <label style={LBL_STYLE}>{t.notes}</label>
         <textarea
           value={notes} rows={3}
           onChange={e => setNotes(e.target.value)}
-          style={{ ...input, resize: 'vertical' }}
+          style={{ ...INPUT_STYLE, resize: 'vertical' }}
         />
       </div>
 
+      {/* XB Event link */}
       <div>
-        <label style={lbl}>{t.linkXbEvent}</label>
+        <label style={LBL_STYLE}>{t.linkXbEvent}</label>
         {xbLoading ? (
           <div className="flex items-center gap-2 py-2">
             <Loader2 className="size-4 animate-spin" style={{ color: 'var(--tqf-muted)' }} />
           </div>
         ) : (
-          <select value={xbId} onChange={e => setXbId(e.target.value)} style={{ ...input }}>
+          <select value={xbId} onChange={e => setXbId(e.target.value)} style={{ ...INPUT_STYLE }}>
             <option value="">{t.selectXbPlaceholder}</option>
             {xbEvents.length === 0
               ? <option disabled>{t.noXbEvents}</option>
@@ -273,6 +389,7 @@ function EventForm({
         )}
       </div>
 
+      {/* Buttons */}
       <div className="flex gap-2 pt-1">
         <button
           type="submit" disabled={saving}
@@ -295,7 +412,7 @@ function EventForm({
   );
 }
 
-// ── Delete confirmation modal ─────────────────────────────────────────────────
+// ── Delete modal ──────────────────────────────────────────────────────────────
 
 function DeleteModal({ t, eventName, onConfirm, onCancel, deleting }: {
   t: Tr; eventName: string;
@@ -387,23 +504,24 @@ export default function TeqfCalendarPage() {
   const { isSuperAdmin, canManageCashControl, plannerUser, adminUser, isLoading: authLoading, logout } =
     usePlannerAuth();
   const { lang } = useLangContext();
-  const t = TR[lang as keyof typeof TR] ?? TR.en;
+  const t = TR[lang as LangKey] ?? TR.en;
 
-  const [events, setEvents]           = useState<TeqfCalendarEvent[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [view, setView]               = useState<View>({ mode: 'list' });
-  const [xbEvents, setXbEvents]       = useState<XbEventOption[]>([]);
-  const [xbLoading, setXbLoading]     = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<TeqfCalendarEvent | null>(null);
-  const [deleting, setDeleting]       = useState(false);
+  const [events, setEvents]               = useState<TeqfCalendarEvent[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [view, setView]                   = useState<View>({ mode: 'list' });
+  const [xbEvents, setXbEvents]           = useState<XbEventOption[]>([]);
+  const [xbLoading, setXbLoading]         = useState(true);
+  const [deleteTarget, setDeleteTarget]   = useState<TeqfCalendarEvent | null>(null);
+  const [deleting, setDeleting]           = useState(false);
+  const [migrating, setMigrating]         = useState(false);
 
   const isTeQFOrAdmin = isSuperAdmin || canManageCashControl;
   const creatorId     = plannerUser?.id ?? adminUser?.id ?? '';
 
-  // Real-time listener on teqf_events
+  // Real-time listener — order by eventStartDate
   useEffect(() => {
     if (authLoading || !isTeQFOrAdmin) return;
-    const q = query(collection(db, 'teqf_events'), orderBy('eventDate', 'asc'));
+    const q = query(collection(db, 'teqf_events'), orderBy('eventStartDate', 'asc'));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -448,29 +566,21 @@ export default function TeqfCalendarPage() {
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   async function handleCreate(data: {
-    eventDate: string; eventName: string; location: string;
-    notes: string; xbEventId: string | null;
+    eventStartDate: string; eventEndDate: string;
+    eventName: string; location: string; notes: string; xbEventId: string | null;
   }) {
     const res = await createTeqfCalendarEvent({ ...data, createdBy: creatorId });
-    if (res.success) {
-      toast.success(t.created);
-      setView({ mode: 'list' });
-    } else {
-      toast.error(res.error ?? t.errorCreate);
-    }
+    if (res.success) { toast.success(t.created); setView({ mode: 'list' }); }
+    else toast.error(res.error ?? t.errorCreate);
   }
 
-  async function handleUpdate(
-    id: string,
-    data: { eventDate: string; eventName: string; location: string; notes: string; xbEventId: string | null },
-  ) {
+  async function handleUpdate(id: string, data: {
+    eventStartDate: string; eventEndDate: string;
+    eventName: string; location: string; notes: string; xbEventId: string | null;
+  }) {
     const res = await updateTeqfCalendarEvent(id, data);
-    if (res.success) {
-      toast.success(t.updated);
-      setView({ mode: 'list' });
-    } else {
-      toast.error(res.error ?? t.errorUpdate);
-    }
+    if (res.success) { toast.success(t.updated); setView({ mode: 'list' }); }
+    else toast.error(res.error ?? t.errorUpdate);
   }
 
   async function handleDelete() {
@@ -487,14 +597,22 @@ export default function TeqfCalendarPage() {
     setDeleting(false);
   }
 
-  // Quick unlink (called from detail view directly)
   async function handleUnlink(ev: TeqfCalendarEvent) {
     const res = await updateTeqfCalendarEvent(ev.id, {
-      eventDate: ev.eventDate, eventName: ev.eventName,
-      location: ev.location, notes: ev.notes, xbEventId: null,
+      eventStartDate: getStart(ev), eventEndDate: getEnd(ev),
+      eventName: ev.eventName, location: ev.location,
+      notes: ev.notes, xbEventId: null,
     });
     if (res.success) toast.success(t.updated);
     else toast.error(res.error ?? t.errorUpdate);
+  }
+
+  async function handleMigrate() {
+    setMigrating(true);
+    const res = await migrateTeqfEventsToDateRange();
+    if (res.success) toast.success(t.migrationDone(res.updated));
+    else toast.error(res.error ?? 'Migration failed.');
+    setMigrating(false);
   }
 
   // ── XB link section ─────────────────────────────────────────────────────────
@@ -565,6 +683,8 @@ export default function TeqfCalendarPage() {
       <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
         <PageHeader title={t.pageTitle} logout={logout} />
         <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+
+          {/* Title + add */}
           <div className="flex items-start justify-between mb-6 gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl"
@@ -586,6 +706,27 @@ export default function TeqfCalendarPage() {
             </button>
           </div>
 
+          {/* SuperAdmin migration banner */}
+          {isSuperAdmin && (
+            <div className="mb-4 flex items-center justify-between rounded-xl px-4 py-3"
+              style={{ background: '#fefce8', border: '1px solid #fde047' }}>
+              <p className="text-xs" style={{ color: '#854d0e', fontFamily: 'var(--font-body)' }}>
+                {lang === 'es'
+                  ? 'Si hay eventos con fecha antigua (eventDate), ejecuta la migración para convertirlos al nuevo formato.'
+                  : 'If there are legacy events (eventDate field), run the migration to convert them to the new format.'}
+              </p>
+              <button
+                onClick={handleMigrate} disabled={migrating}
+                className="flex-shrink-0 ml-3 flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
+                style={{ background: '#854d0e', color: 'white', fontFamily: 'var(--font-body)' }}
+              >
+                {migrating ? <Loader2 className="size-3 animate-spin" /> : null}
+                {migrating ? t.migrating : t.migrationBtn}
+              </button>
+            </div>
+          )}
+
+          {/* Event list */}
           {loading ? (
             <div className="flex justify-center py-24">
               <Loader2 className="size-6 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
@@ -611,57 +752,82 @@ export default function TeqfCalendarPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {events.map(ev => (
-                <button
-                  key={ev.id}
-                  onClick={() => setView({ mode: 'detail', event: ev })}
-                  className="w-full text-left rounded-2xl px-4 py-4 flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.99]"
-                  style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
-                >
-                  {/* Date badge */}
-                  <div className="flex-shrink-0 rounded-xl p-2.5 text-center min-w-[52px]"
-                    style={{ background: 'var(--tqf-cipria-light)' }}>
-                    <p className="text-xs font-medium uppercase"
-                      style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', letterSpacing: '0.06em', lineHeight: 1 }}>
-                      {ev.eventDate
-                        ? new Date(ev.eventDate + 'T00:00:00').toLocaleDateString(
-                            lang === 'es' ? 'es-MX' : 'en-US', { month: 'short' },
-                          ).toUpperCase()
-                        : '—'}
-                    </p>
-                    <p className="text-2xl"
-                      style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-display)', fontWeight: 300, lineHeight: 1.1, marginTop: '2px' }}>
-                      {ev.eventDate ? new Date(ev.eventDate + 'T00:00:00').getDate() : '—'}
-                    </p>
-                    <p className="text-xs"
-                      style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', lineHeight: 1, marginTop: '2px' }}>
-                      {ev.eventDate ? new Date(ev.eventDate + 'T00:00:00').getFullYear() : ''}
-                    </p>
-                  </div>
+              {events.map(ev => {
+                const start   = getStart(ev);
+                const end     = getEnd(ev);
+                const multi   = isMultiDay(ev);
+                const count   = multi ? dayCount(start, end) : 1;
+                const startDt = start ? new Date(start + 'T00:00:00') : null;
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate"
-                      style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
-                      {ev.eventName}
-                    </p>
-                    <p className="flex items-center gap-1 text-xs mt-0.5 truncate"
-                      style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                      <MapPin className="size-3 flex-shrink-0" />
-                      {ev.location}
-                    </p>
-                    {ev.xbEventId && (
-                      <span className="inline-flex items-center gap-1 text-xs mt-1.5 px-2 py-0.5 rounded-full"
-                        style={{ background: '#f0fdf4', color: '#16a34a', fontFamily: 'var(--font-body)' }}>
-                        <Link2 className="size-2.5" />
-                        {t.linkedXb}
-                      </span>
-                    )}
-                  </div>
+                return (
+                  <button
+                    key={ev.id}
+                    onClick={() => setView({ mode: 'detail', event: ev })}
+                    className="w-full text-left rounded-2xl px-4 py-4 flex items-center gap-4 transition-all hover:shadow-md active:scale-[0.99]"
+                    style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
+                  >
+                    {/* Date badge */}
+                    <div
+                      className="flex-shrink-0 rounded-xl p-2.5 text-center min-w-[52px]"
+                      style={{ background: multi ? 'var(--tqf-cipria)' : 'var(--tqf-cipria-light)' }}
+                    >
+                      {multi ? (
+                        <>
+                          <CalendarRange className="size-4 mx-auto mb-0.5" style={{ color: 'var(--tqf-bordeaux)' }} />
+                          <p className="text-xs font-medium"
+                            style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', lineHeight: 1 }}>
+                            {t.duration(count)}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs font-medium uppercase"
+                            style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', letterSpacing: '0.06em', lineHeight: 1 }}>
+                            {startDt ? monthAbbr(startDt, lang as LangKey) : '—'}
+                          </p>
+                          <p className="text-2xl"
+                            style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-display)', fontWeight: 300, lineHeight: 1.1, marginTop: '2px' }}>
+                            {startDt ? startDt.getDate() : '—'}
+                          </p>
+                          <p className="text-xs"
+                            style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', lineHeight: 1, marginTop: '2px' }}>
+                            {startDt ? startDt.getFullYear() : ''}
+                          </p>
+                        </>
+                      )}
+                    </div>
 
-                  <ChevronRight className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
-                </button>
-              ))}
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate"
+                        style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                        {ev.eventName}
+                      </p>
+                      <p className="flex items-center gap-1 text-xs mt-0.5 truncate"
+                        style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        <MapPin className="size-3 flex-shrink-0" />
+                        {ev.location}
+                      </p>
+                      {/* Date range text for multi-day */}
+                      {multi && start && (
+                        <p className="text-xs mt-0.5"
+                          style={{ color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)', opacity: 0.8 }}>
+                          {formatRange(start, end, lang as LangKey)}
+                        </p>
+                      )}
+                      {ev.xbEventId && (
+                        <span className="inline-flex items-center gap-1 text-xs mt-1.5 px-2 py-0.5 rounded-full"
+                          style={{ background: '#f0fdf4', color: '#16a34a', fontFamily: 'var(--font-body)' }}>
+                          <Link2 className="size-2.5" />
+                          {t.linkedXb}
+                        </span>
+                      )}
+                    </div>
+
+                    <ChevronRight className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+                  </button>
+                );
+              })}
             </div>
           )}
         </main>
@@ -677,7 +843,12 @@ export default function TeqfCalendarPage() {
   // ── DETAIL VIEW ─────────────────────────────────────────────────────────────
 
   if (view.mode === 'detail') {
-    const ev = view.event;
+    const ev    = view.event;
+    const start = getStart(ev);
+    const end   = getEnd(ev);
+    const multi = isMultiDay(ev);
+    const days  = multi ? dayCount(start, end) : 1;
+
     return (
       <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
         <PageHeader title={t.pageTitle} logout={logout} />
@@ -691,28 +862,69 @@ export default function TeqfCalendarPage() {
             {t.backToList}
           </button>
 
-          {/* Event card */}
+          {/* Main card */}
           <div className="rounded-2xl p-5 mb-4"
             style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="size-9 rounded-lg flex items-center justify-center flex-shrink-0"
+
+            {/* Date section */}
+            <div className="flex items-start gap-3 mb-4 pb-4"
+              style={{ borderBottom: '1px solid var(--tqf-beige-border)' }}>
+              <div className="size-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
                 style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-                <CalendarDays className="size-4" />
+                {multi ? <CalendarRange className="size-4" /> : <CalendarDays className="size-4" />}
               </div>
-              <p className="text-sm font-medium capitalize"
-                style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
-                {ev.eventDate ? t.formatDate(ev.eventDate) : '—'}
-              </p>
+              {multi ? (
+                <div>
+                  <div className="flex items-center gap-2 text-sm mb-1">
+                    <span style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', minWidth: '80px' }}>
+                      {t.startDateLabel}
+                    </span>
+                    <span className="font-medium capitalize" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                      {start ? t.formatLong(start) : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm mb-2">
+                    <span style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)', minWidth: '80px' }}>
+                      {t.endDateLabel}
+                    </span>
+                    <span className="font-medium capitalize" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                      {end ? t.formatLong(end) : '—'}
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
+                    style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', fontFamily: 'var(--font-body)' }}>
+                    <CalendarRange className="size-3" />
+                    {t.duration(days)}
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-medium capitalize"
+                    style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)' }}>
+                    {start ? t.formatLong(start) : '—'}
+                  </p>
+                  <p className="text-xs mt-0.5"
+                    style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                    {t.duration(1)}
+                  </p>
+                </div>
+              )}
             </div>
+
+            {/* Name */}
             <h2 className="text-2xl mb-3"
               style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
               {ev.eventName}
             </h2>
+
+            {/* Location */}
             <div className="flex items-center gap-2 text-sm"
               style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
               <MapPin className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-bordeaux)' }} />
               {ev.location}
             </div>
+
+            {/* Notes */}
             {ev.notes && (
               <div className="mt-4 pt-4 flex items-start gap-2"
                 style={{ borderTop: '1px solid var(--tqf-beige-border)' }}>
@@ -784,7 +996,7 @@ export default function TeqfCalendarPage() {
           style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
           <EventForm
             t={t}
-            lang={lang as 'en' | 'es'}
+            lang={lang as LangKey}
             editing={editing}
             xbEvents={xbEvents}
             xbLoading={xbLoading}
