@@ -1118,6 +1118,16 @@ export default function AdminFurniturePage() {
             </>
           )}
 
+          {(isSuperAdmin || canManageCatalogs) && (
+            <button
+              type="button"
+              onClick={() => setShowCatManager(true)}
+              className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+              style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+              <Edit2 className="size-3.5" /> Manage Categories
+            </button>
+          )}
+
           <LanguageSelector />
           <button onClick={logout}
             className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
@@ -1251,18 +1261,9 @@ export default function AdminFurniturePage() {
         {/* ── Super Admin panel ───────────────────────────────────────────── */}
         {isSuperAdmin && (
           <div className="rounded-2xl p-6 space-y-6" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                Super Admin — Categorie
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowCatManager(true)}
-                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
-                style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', border: 'none', cursor: 'pointer' }}>
-                <Edit2 className="size-3.5" /> Manage Categories
-              </button>
-            </div>
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              Super Admin — Categorie
+            </h2>
 
             {/* ── Predefined categories (read-only) ─────────────────────── */}
             <div>
@@ -1455,7 +1456,7 @@ export default function AdminFurniturePage() {
 
       </main>
 
-      {showCatManager && isSuperAdmin && (
+      {showCatManager && (isSuperAdmin || canManageCatalogs) && (
         <CategoryManagerModal
           categories={categories}
           items={items}

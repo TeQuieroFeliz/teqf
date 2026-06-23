@@ -16,9 +16,24 @@ export const PREDEFINED_FURNITURE_CATEGORIES: readonly CustomFurnitureCategory[]
 
 export const PREDEFINED_CATEGORY_KEYS = PREDEFINED_FURNITURE_CATEGORIES.map(c => c.key);
 
-// Returns the translated label for a category key.
-// Checks predefined list first, then caller-supplied custom categories, then falls
-// back to the raw string (handles legacy unmigrated values — never crashes).
+// Maps legacy Italian Firestore labels (any case) to predefined keys.
+// Used by getCategoryLabel() so items translate correctly before migration runs.
+const ITALIAN_TO_KEY: Record<string, string> = {
+  'tavoli':          'tables',
+  'sedie':           'chairs',
+  'sedie cocktail':  'cocktail_chairs',
+  'sala lounge':     'sala_lounge',
+  'bar & back bar':  'bar_back_bar',
+  'cocktail table':  'cocktail_table',
+  'tovaglie':        'linens',
+};
+
+// Returns the translated label for a category key or legacy Italian label.
+// Resolution order:
+//   1. Predefined key (already migrated)
+//   2. Custom category key
+//   3. Italian legacy label → resolved to predefined key → translated
+//   4. Raw value (never crashes)
 export function getCategoryLabel(
   key: string,
   lang: Lang,
@@ -28,5 +43,10 @@ export function getCategoryLabel(
   if (pre) return pre[lang];
   const cust = custom.find(c => c.key === key);
   if (cust) return cust[lang] || cust.en || key;
+  const resolved = ITALIAN_TO_KEY[key.toLowerCase()];
+  if (resolved) {
+    const mappedPre = PREDEFINED_FURNITURE_CATEGORIES.find(c => c.key === resolved);
+    if (mappedPre) return mappedPre[lang];
+  }
   return key;
 }
