@@ -13,6 +13,7 @@ import { useLangContext } from '@/context/LangContext';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import { LanguageSelector } from '@/components/LanguageSelector';
 import AccessDenied from '@/components/planner/AccessDenied';
+import { TeqfDatePicker } from '@/components/ui/TeqfDatePicker';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
   ArrowLeft,
@@ -33,7 +34,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 // ── Translations ──────────────────────────────────────────────────────────────
@@ -142,6 +143,7 @@ type View =
 
 function EventForm({
   t,
+  lang,
   editing,
   xbEvents,
   xbLoading,
@@ -149,6 +151,7 @@ function EventForm({
   onCancel,
 }: {
   t: Tr;
+  lang: 'en' | 'es';
   editing?: TeqfCalendarEvent;
   xbEvents: XbEventOption[];
   xbLoading: boolean;
@@ -165,9 +168,6 @@ function EventForm({
   const [xbId, setXbId]       = useState<string>(editing?.xbEventId ?? '');
   const [errors, setErrors]   = useState<Record<string, string>>({});
   const [saving, setSaving]   = useState(false);
-  const firstRef              = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { firstRef.current?.focus(); }, []);
 
   function validate() {
     const errs: Record<string, string> = {};
@@ -214,10 +214,11 @@ function EventForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label style={lbl}>{t.eventDate} *</label>
-        <input
-          ref={firstRef} type="date" value={date}
-          onChange={e => { setDate(e.target.value); setErrors(p => ({ ...p, date: '' })); }}
-          style={{ ...input, borderColor: errors.date ? '#fca5a5' : 'var(--tqf-beige-border)' }}
+        <TeqfDatePicker
+          value={date}
+          onChange={v => { setDate(v); setErrors(p => ({ ...p, date: '' })); }}
+          lang={lang}
+          hasError={!!errors.date}
         />
         {errors.date && <p style={err}>{errors.date}</p>}
       </div>
@@ -783,6 +784,7 @@ export default function TeqfCalendarPage() {
           style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
           <EventForm
             t={t}
+            lang={lang as 'en' | 'es'}
             editing={editing}
             xbEvents={xbEvents}
             xbLoading={xbLoading}
