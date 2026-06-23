@@ -7,6 +7,7 @@ import {
   getMigrationDryRun,
   mergeFurnitureCategory,
   MigrationDryRunResult,
+  renameFurnitureCategory,
   saveCustomCategories,
   saveFurnitureItem,
   saveFurnitureMeta,
@@ -610,7 +611,8 @@ type CatMgrView =
   | { v: 'working' };
 
 function CategoryManagerModal({
-  categories, items, customCategories, lang, onClose, onMergeComplete, onDeleteComplete,
+  categories, items, customCategories, lang, onClose,
+  onMergeComplete, onDeleteComplete, onRenameComplete,
 }: {
   categories: string[];
   items: FurnitureItem[];
@@ -619,6 +621,7 @@ function CategoryManagerModal({
   onClose: () => void;
   onMergeComplete: (from: string, to: string, moved: number) => void;
   onDeleteComplete: (key: string) => void;
+  onRenameComplete: (oldKey: string, newKey: string) => void;
 }) {
   const allKeys = useMemo(() => {
     const fromItems = Array.from(new Set(items.map(i => i.category))).filter(Boolean);
@@ -631,13 +634,46 @@ function CategoryManagerModal({
 
   const [view, setView] = useState<CatMgrView>({ v: 'list' });
 
+  // Inline edit state
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue,  setEditValue]  = useState('');
+  const [editError,  setEditError]  = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  const startEdit = (key: string) => {
+    setEditingKey(key);
+    setEditValue(key);
+    setEditError('');
+  };
+
+  const cancelEdit = () => { setEditingKey(null); setEditError(''); };
+
+  const confirmRename = async () => {
+    const newKey = editValue.trim();
+    if (!newKey) { setEditError('Name cannot be empty.'); return; }
+    if (newKey !== editingKey && allKeys.includes(newKey)) { setEditError('Category already exists.'); return; }
+    if (newKey === editingKey) { cancelEdit(); return; }
+    setEditSaving(true);
+    const res = await renameFurnitureCategory(editingKey!, newKey);
+    if (res.success) {
+      onRenameComplete(editingKey!, newKey);
+      toast.success(`Renamed "${label(editingKey!)}" → "${newKey}" (${res.moved} items updated)`);
+      setEditingKey(null);
+    } else {
+      setEditError(res.error ?? 'Rename failed.');
+    }
+    setEditSaving(false);
+  };
+
   const startMerge = (fromKey: string) => {
+    cancelEdit();
     const opts = others(fromKey);
     if (!opts.length) { toast.error('No other categories to merge into.'); return; }
     setView({ v: 'merge', fromKey, toKey: opts[0] });
   };
 
   const startDelete = (key: string) => {
+    cancelEdit();
     setView({ v: 'delete', key, toKey: others(key)[0] ?? '' });
   };
 
@@ -722,28 +758,74 @@ function CategoryManagerModal({
               <tbody>
                 {allKeys.map((key, idx) => {
                   const count = countFor(key);
+                  const isEditing = editingKey === key;
                   return (
                     <tr key={key} style={{ borderBottom: idx < allKeys.length - 1 ? '1px solid var(--tqf-beige-border)' : 'none' }}>
-                      <td style={{ padding: '0.7rem 1.5rem', color: 'var(--tqf-dark)' }}>
-                        <div style={{ fontWeight: 500 }}>{label(key)}</div>
-                        <div style={{ fontSize: '0.6rem', color: 'var(--tqf-muted)', fontFamily: 'monospace', marginTop: '1px' }}>{key}</div>
+                      {/* Category cell — shows input when editing */}
+                      <td style={{ padding: isEditing ? '0.5rem 1.5rem' : '0.7rem 1.5rem', color: 'var(--tqf-dark)' }}>
+                        {isEditing ? (
+                          <div>
+                            <input
+                              value={editValue}
+                              autoFocus
+                              onChange={e => { setEditValue(e.target.value); setEditError(''); }}
+                              onKeyDown={e => { if (e.key === 'Enter') confirmRename(); if (e.key === 'Escape') cancelEdit(); }}
+                              style={{ ...inp, fontSize: '0.82rem', padding: '0.35rem 0.55rem' }}
+                            />
+                            {editError && (
+                              <p style={{ color: '#991b1b', fontSize: '0.68rem', fontFamily: 'var(--font-body)', marginTop: '3px' }}>
+                                {editError}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontWeight: 500 }}>{label(key)}</div>
+                            <div style={{ fontSize: '0.6rem', color: 'var(--tqf-muted)', fontFamily: 'monospace', marginTop: '1px' }}>{key}</div>
+                          </>
+                        )}
                       </td>
+
+                      {/* Items count — hidden when editing */}
                       <td style={{ padding: '0.7rem 1rem', textAlign: 'center', color: count > 0 ? 'var(--tqf-dark)' : 'var(--tqf-muted)' }}>
-                        {count}
+                        {!isEditing && count}
                       </td>
+
+                      {/* Actions */}
                       <td style={{ padding: '0.7rem 1.5rem', textAlign: 'right' }}>
-                        <div className="flex items-center justify-end gap-2">
-                          <button type="button" onClick={() => startMerge(key)}
-                            className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-                            style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
-                            Merge →
-                          </button>
-                          <button type="button" onClick={() => startDelete(key)}
-                            className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-                            style={{ border: '1px solid #fca5a5', color: '#991b1b', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
-                            Delete
-                          </button>
-                        </div>
+                        {isEditing ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button type="button" onClick={confirmRename} disabled={editSaving}
+                              className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                              style={{ background: 'var(--tqf-bordeaux)', border: 'none', color: 'white', cursor: 'pointer' }}>
+                              {editSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                            </button>
+                            <button type="button" onClick={cancelEdit}
+                              className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70"
+                              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', cursor: 'pointer' }}>
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2">
+                            <button type="button" onClick={() => startEdit(key)}
+                              className="size-7 flex items-center justify-center rounded-lg transition-opacity hover:opacity-80"
+                              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', cursor: 'pointer' }}
+                              title="Rename">
+                              <Edit2 className="size-3.5" />
+                            </button>
+                            <button type="button" onClick={() => startMerge(key)}
+                              className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                              style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+                              Merge →
+                            </button>
+                            <button type="button" onClick={() => startDelete(key)}
+                              className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                              style={{ border: '1px solid #fca5a5', color: '#991b1b', background: 'white', fontFamily: 'var(--font-body)', cursor: 'pointer' }}>
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1046,6 +1128,12 @@ export default function AdminFurniturePage() {
   const handleDeleteComplete = useCallback((key: string) => {
     setCategories(prev => prev.filter(k => k !== key));
     setItems(prev => prev.filter(item => item.category !== key));
+  }, []);
+
+  const handleRenameComplete = useCallback((oldKey: string, newKey: string) => {
+    setItems(prev => prev.map(item => item.category === oldKey ? { ...item, category: newKey } : item));
+    setCategories(prev => prev.map(k => k === oldKey ? newKey : k));
+    setCustomCategories(prev => prev.map(c => c.key === oldKey ? { ...c, key: newKey } : c));
   }, []);
 
   // BUG-09 fix: replaced `return null` with proper access control.
@@ -1465,6 +1553,7 @@ export default function AdminFurniturePage() {
           onClose={() => setShowCatManager(false)}
           onMergeComplete={handleMergeComplete}
           onDeleteComplete={handleDeleteComplete}
+          onRenameComplete={handleRenameComplete}
         />
       )}
     </div>

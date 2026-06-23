@@ -172,6 +172,45 @@ export async function mergeFurnitureCategory(
   }
 }
 
+export async function renameFurnitureCategory(
+  oldKey: string,
+  newKey: string,
+): Promise<{ success: boolean; moved: number; error?: string }> {
+  if (!firestore) return { success: false, moved: 0, error: 'Database non disponibile.' };
+  try {
+    const now = new Date().toISOString();
+    const snap = await col().where('category', '==', oldKey).get();
+    if (!snap.empty) {
+      const BATCH = 400;
+      let batch = firestore.batch();
+      let count = 0;
+      let batchCount = 0;
+      for (const d of snap.docs) {
+        batch.update(col().doc(d.id), { category: newKey, updatedAt: now });
+        count++;
+        batchCount++;
+        if (batchCount >= BATCH) {
+          await batch.commit();
+          batch = firestore.batch();
+          batchCount = 0;
+        }
+      }
+      if (batchCount > 0) await batch.commit();
+    }
+    const metaSnap = await metaDoc().get();
+    const data = metaSnap.exists ? metaSnap.data()! : {};
+    const categories: string[] = (data.categories ?? []).map((k: string) => k === oldKey ? newKey : k);
+    const customCategories: CustomFurnitureCategory[] = (data.customCategories ?? []).map(
+      (c: CustomFurnitureCategory) => c.key === oldKey ? { ...c, key: newKey } : c,
+    );
+    await metaDoc().set({ categories, customCategories }, { merge: true });
+    revalidatePath('/planner/furniture');
+    return { success: true, moved: snap.size };
+  } catch (e: any) {
+    return { success: false, moved: 0, error: e.message };
+  }
+}
+
 export async function deleteFurnitureCategoryFromMeta(
   key: string,
 ): Promise<{ success: boolean; error?: string }> {
