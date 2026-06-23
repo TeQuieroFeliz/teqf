@@ -142,11 +142,13 @@ export async function deleteFurnitureItem(id: string): Promise<{ success: boolea
 // ── One-time category migration ───────────────────────────────────────────────
 
 const LABEL_TO_KEY: Record<string, string> = {
-  'sedie':          'chairs',
-  'tovaglie':       'tables',        // ⚠️  mislabelled — they contained tables
-  'cocktail table': 'cocktail_table',
-  'bar & back bar': 'bar_back_bar',
-  'sala lounge':    'sala_lounge',
+  'sedie':           'chairs',
+  'sedie cocktail':  'cocktail_chairs',
+  'tavoli':          'tables',
+  'tovaglie':        'linens',
+  'cocktail table':  'cocktail_table',
+  'bar & back bar':  'bar_back_bar',
+  'sala lounge':     'sala_lounge',
 };
 
 export type MigrationGroup = {

@@ -55,15 +55,15 @@ function categoryColor(cat: string, all: string[]) {
 
 function categoryIcon(cat: string) {
   // Keys first
-  if (cat === 'chairs')                            return <Armchair className="size-10" />;
-  if (cat === 'tables' || cat === 'cocktail_table') return <Square className="size-10" strokeWidth={1} />;
-  if (cat === 'sala_lounge')                        return <Sofa className="size-10" />;
+  if (cat === 'chairs' || cat === 'cocktail_chairs') return <Armchair className="size-10" />;
+  if (cat === 'tables' || cat === 'cocktail_table')  return <Square className="size-10" strokeWidth={1} />;
+  if (cat === 'sala_lounge')                          return <Sofa className="size-10" />;
   // Legacy label fallback
   const l = cat.toLowerCase();
-  if (l.includes('sedi') || l.includes('chair'))   return <Armchair className="size-10" />;
-  if (l.includes('divano') || l.includes('sofa'))  return <Sofa className="size-10" />;
-  if (l.includes('flore') || l.includes('flower')) return <Flower2 className="size-10" />;
-  if (l.includes('tavol') || l.includes('table'))  return <Square className="size-10" strokeWidth={1} />;
+  if (l.includes('sedi') || l.includes('chair'))    return <Armchair className="size-10" />;
+  if (l.includes('divano') || l.includes('sofa'))   return <Sofa className="size-10" />;
+  if (l.includes('flore') || l.includes('flower'))  return <Flower2 className="size-10" />;
+  if (l.includes('tavol') || l.includes('table'))   return <Square className="size-10" strokeWidth={1} />;
   return <Sparkles className="size-10" />;
 }
 
