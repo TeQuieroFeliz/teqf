@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { getPublishedArticles } from "@/actions/blog/get-published-articles";
 import type { Article } from "@/actions/blog/get-articles";
+import { useLangContext } from "@/context/LangContext";
 
 const content = {
   en: {
@@ -108,65 +109,13 @@ const content = {
       copy: "© 2025 Te Quiero Feliz · Est. 2023",
     },
   },
-  it: {
-    nav: {
-      tagline: "DESIGN FLOREALE DI LUSSO & PRODUZIONE EVENTI",
-      planner: "Area Planner",
-      links: [
-        { href: "/portfolio", label: "Portfolio" },
-        { href: "/flowers", label: "Ispirazione Floreale" },
-        { href: "#about", label: "Chi Siamo" },
-      ],
-    },
-    hero: {
-      headline: "Fiori che raccontano due mondi",
-      tagline: "Pensato in Italia · Fatto in Messico",
-      description:
-        "Design floreale di lusso e produzione eventi per matrimoni indiani, ebraici e persiani in Messico e Italia. Dove la raffinatezza italiana incontra l'anima dell'artigianato messicano.",
-      cta1: "Scopri il Nostro Lavoro",
-      cta2: "Contattaci",
-      stats: [
-        { value: "100+", label: "Matrimoni" },
-        { value: "5", label: "Città" },
-        { value: "10 anni", label: "Esperienza" },
-        { value: "2023", label: "Fondazione" },
-      ],
-    },
-    blog: {
-      label: "Dallo Studio",
-    },
-    cities: {
-      label: "Lavoriamo a",
-      list: ["Ciudad de México", "Cancún · Riviera Maya", "Oaxaca", "Los Cabos", "Roma · Italia"],
-    },
-    about: {
-      label: "La Nostra Storia",
-      headline: "Due culture, un solo linguaggio floreale",
-      tagline: "Pensato in Italia · Fatto in Messico",
-      description:
-        "Luigi porta la precisione italiana e un profondo rispetto per la forma botanica. Xanath Bañuelos — una delle principali wedding planner del Messico — porta profondità culturale e un occhio incomparabile per la cerimonia. Insieme hanno costruito uno studio che parla fluentemente le tradizioni indiana, ebraica e persiana.",
-      stats: [
-        { value: "10+", label: "Anni — Xanath Bañuelos" },
-        { value: "2023", label: "Fondazione TQF" },
-        { value: "100+", label: "Matrimoni di Destinazione" },
-        { value: "5", label: "Città · 2 Paesi" },
-      ],
-    },
-    footer: {
-      tagline: "Design Floreale di Lusso e Produzione Eventi",
-      cities: ["Ciudad de México", "Cancún", "Oaxaca", "Los Cabos", "Roma"],
-      copy: "© 2025 Te Quiero Feliz · Est. 2023",
-    },
-  },
 } as const;
 
-type Lang = keyof typeof content;
-
 export default function HomePage() {
-  const [lang, setLang] = useState<Lang>("en");
+  const { lang, setLang } = useLangContext();
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const t = content[lang];
+  const t = content[lang] ?? content.en;
 
   useEffect(() => {
     getPublishedArticles(4).then(setArticles);
@@ -257,7 +206,7 @@ export default function HomePage() {
                 border: "1px solid var(--tqf-beige-border)",
               }}
             >
-              {(["en", "es", "it"] as Lang[]).map((l) => (
+              {(["en", "es"] as const).map((l) => (
                 <button
                   key={l}
                   onClick={() => setLang(l)}

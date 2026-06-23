@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { sendContactEmail } from "@/actions/send-contact-email";
+import { useLangContext } from "@/context/LangContext";
 
 const content = {
   en: {
@@ -78,45 +79,7 @@ const content = {
       copy: "© 2025 Te Quiero Feliz · Est. 2023",
     },
   },
-  it: {
-    nav: {
-      tagline: "DESIGN FLOREALE DI LUSSO & PRODUZIONE EVENTI",
-      planner: "Area Planner",
-      links: [
-        { href: "/catalog", label: "Catalogo" },
-        { href: "/portfolio", label: "Portfolio" },
-        { href: "/#about", label: "Chi Siamo" },
-      ],
-    },
-    hero: {
-      headline1: "Creiamo Qualcosa di",
-      headline2: "Bellissimo",
-      tagline: "Pensato in Italia · Fatto in Messico",
-    },
-    form: {
-      label: "Contattaci",
-      note: "Il nostro team risponderà entro 24 ore.",
-      submit: "Invia Messaggio",
-      namePlaceholder: "Nome Completo",
-      emailPlaceholder: "Indirizzo Email",
-      phonePlaceholder: "Telefono (opzionale)",
-      eventTypeLabel: "Tipo di Evento",
-      eventCityLabel: "Città dell'Evento",
-      eventDateLabel: "Data dell'Evento (opzionale)",
-      messagePlaceholder: "Raccontaci la tua visione, la data e il numero di ospiti…",
-      eventTypes: ["Matrimonio Indiano", "Matrimonio Ebraico", "Matrimonio Persiano", "Altro"],
-      successMessage: "Messaggio inviato! Ti risponderemo entro 24 ore.",
-      errorMessage: "Qualcosa è andato storto. Riprova.",
-    },
-    footer: {
-      tagline: "Design Floreale di Lusso e Produzione Eventi",
-      cities: ["Ciudad de México", "Cancún", "Oaxaca", "Los Cabos", "Roma"],
-      copy: "© 2025 Te Quiero Feliz · Est. 2023",
-    },
-  },
 } as const;
-
-type Lang = keyof typeof content;
 
 const inputStyle: React.CSSProperties = {
   backgroundColor: "var(--tqf-beige-dark)",
@@ -131,7 +94,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 export default function GetInTouchPage() {
-  const [lang, setLang] = useState<Lang>("en");
+  const { lang, setLang } = useLangContext();
   const t = content[lang];
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", eventType: "", eventCity: "", eventDate: "", message: "" });
@@ -231,7 +194,7 @@ export default function GetInTouchPage() {
                 border: "1px solid var(--tqf-beige-border)",
               }}
             >
-              {(["en", "es", "it"] as Lang[]).map((l) => (
+              {(["en", "es"] as const).map((l) => (
                 <button
                   key={l}
                   onClick={() => setLang(l)}

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { getPortfolioProjects, type PortfolioProject } from "@/actions/portfolio/portfolio-crud";
+import { useLangContext } from "@/context/LangContext";
 
 const content = {
   en: {
@@ -80,60 +81,22 @@ const content = {
       copy: "© 2025 Te Quiero Feliz · Est. 2023",
     },
   },
-  it: {
-    nav: {
-      tagline: "DESIGN FLOREALE DI LUSSO & PRODUZIONE EVENTI",
-      planner: "Area Planner",
-      links: [
-        { href: "/portfolio", label: "Portfolio" },
-        { href: "/#about", label: "Chi Siamo" },
-      ],
-    },
-    hero: {
-      label: "Il Nostro Lavoro",
-      headline: "Ogni Cerimonia, un Mondo a Sé",
-      tagline: "Pensato in Italia · Fatto in Messico",
-      description:
-        "Una selezione curata dei nostri eventi più significativi — matrimoni indiani, ebraici e persiani in Messico e Italia, progettati con precisione e dedizione.",
-    },
-    filters: {
-      all: "Tutti",
-      indian: "Matrimonio Indiano",
-      jewish: "Matrimonio Ebraico",
-      persian: "Matrimonio Persiano",
-      corporate: "Corporate & Altro",
-    },
-    empty: "Nessun progetto in questa categoria.",
-    cta: {
-      label: "Inizia il Tuo Percorso",
-      headline: "Creiamo Qualcosa di Indimenticabile",
-      description:
-        "Ogni evento che progettiamo inizia con una conversazione. Raccontaci la tua visione — noi la daremo vita.",
-      button: "Contattaci",
-    },
-    footer: {
-      tagline: "Design Floreale di Lusso e Produzione Eventi",
-      cities: ["Ciudad de México", "Cancún", "Oaxaca", "Los Cabos", "Roma"],
-      copy: "© 2025 Te Quiero Feliz · Est. 2023",
-    },
-  },
 } as const;
 
-type Lang = keyof typeof content;
 type FilterKey = "all" | "indian" | "jewish" | "persian" | "corporate";
 
-const CATEGORY_LABELS: Record<string, Record<Lang, string>> = {
-  indian:    { en: "Indian Wedding",    es: "Boda India",    it: "Matrimonio Indiano"  },
-  jewish:    { en: "Jewish Wedding",    es: "Boda Judía",    it: "Matrimonio Ebraico"  },
-  persian:   { en: "Persian Wedding",   es: "Boda Persa",    it: "Matrimonio Persiano" },
-  corporate: { en: "Corporate & Other", es: "Corporativo",   it: "Corporate & Altro"   },
+const CATEGORY_LABELS: Record<string, Record<"en" | "es", string>> = {
+  indian:    { en: "Indian Wedding",    es: "Boda India"    },
+  jewish:    { en: "Jewish Wedding",    es: "Boda Judía"    },
+  persian:   { en: "Persian Wedding",   es: "Boda Persa"    },
+  corporate: { en: "Corporate & Other", es: "Corporativo"   },
 };
 
 export default function PortfolioPage() {
-  const [lang, setLang] = useState<Lang>("en");
+  const { lang, setLang } = useLangContext();
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [projects, setProjects] = useState<PortfolioProject[] | null>(null);
-  const t = content[lang];
+  const t = content[lang] ?? content.en;
 
   useEffect(() => {
     getPortfolioProjects().then((all) =>
@@ -208,7 +171,7 @@ export default function PortfolioPage() {
 
           <div className="flex items-center gap-3 shrink-0">
             <div className="flex items-center gap-0.5 rounded-full px-1 py-1" style={{ backgroundColor: "var(--tqf-beige-dark)", border: "1px solid var(--tqf-beige-border)" }}>
-              {(["en", "es", "it"] as Lang[]).map((l) => (
+              {(["en", "es"] as const).map((l) => (
                 <button
                   key={l}
                   onClick={() => setLang(l)}

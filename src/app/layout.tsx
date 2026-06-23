@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthContextProvider } from '@/context/AuthContext';
+import { LangProvider } from '@/context/LangContext';
 import Providers from '@/lib/Providers';
 
 const geistSans = Geist({
@@ -36,13 +37,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthContextProvider>
-          <Providers>
-            <div className="overflow-x-hidden">
-              <main>{children}</main>
-            </div>
-          </Providers>
-        </AuthContextProvider>
+        <LangProvider>
+          <AuthContextProvider>
+            <Providers>
+              <div className="overflow-x-hidden">
+                <main>{children}</main>
+              </div>
+            </Providers>
+          </AuthContextProvider>
+        </LangProvider>
         <Toaster richColors theme="light" />
       </body>
     </html>

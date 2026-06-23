@@ -1,6 +1,7 @@
 'use client';
 
 import { getPublishedInspirationItems, type InspirationItem } from '@/actions/flowers/inspiration-crud';
+import { useLangContext } from '@/context/LangContext';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -23,17 +24,7 @@ const content = {
     empty: 'Aún no hay imágenes en esta categoría.',
     footer: '© 2025 Te Quiero Feliz',
   },
-  it: {
-    nav: { back: 'Home', label: 'ISPIRAZIONE FLOREALE' },
-    headline: 'Ispirazione Floreale',
-    tagline: 'Una guida visiva ai nostri stili di allestimento',
-    all: 'Tutte',
-    empty: 'Nessuna immagine in questa categoria.',
-    footer: '© 2025 Te Quiero Feliz',
-  },
 } as const;
-
-type Lang = keyof typeof content;
 
 function Lightbox({ item, onClose, onPrev, onNext, hasPrev, hasNext }: {
   item: InspirationItem; onClose: () => void;
@@ -95,7 +86,7 @@ function Lightbox({ item, onClose, onPrev, onNext, hasPrev, hasNext }: {
 }
 
 export default function FlowersPage() {
-  const [lang, setLang] = useState<Lang>('it');
+  const { lang, setLang } = useLangContext();
   const [items, setItems] = useState<InspirationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -146,7 +137,7 @@ export default function FlowersPage() {
           {/* Lang switcher */}
           <div className="flex items-center gap-0.5 rounded-full px-1 py-1"
             style={{ background: 'var(--tqf-beige-dark)', border: '1px solid var(--tqf-beige-border)' }}>
-            {(['en', 'es', 'it'] as Lang[]).map(l => (
+            {(['en', 'es'] as const).map(l => (
               <button key={l} onClick={() => setLang(l)}
                 className="rounded-full px-2.5 py-1 text-xs font-medium transition-all uppercase"
                 style={{
