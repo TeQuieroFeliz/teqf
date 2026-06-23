@@ -233,6 +233,15 @@ service cloud.firestore {
       }
     }
 
+    // ── /teqf_events/{id} ────────────────────────────────────────────────────
+    // TeQF team shared wedding calendar. SuperAdmin has full access.
+    // Read access also allowed for client-side onSnapshot listener (inTeam uses client auth).
+    match /teqf_events/{id} {
+      allow read:              if inTeam('TeQF') || isAdmin();
+      allow create:            if inTeam('TeQF') || isAdmin();
+      allow update, delete:    if inTeam('TeQF') || isAdmin();
+    }
+
     // ── Legacy Cash Control collections (area-planner system) ─────────────────
     // Unchanged semantics; replaced isSuperAdmin() with isAdmin() for consistency.
     match /cashControlProfiles/{doc} {

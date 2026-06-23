@@ -54,6 +54,8 @@
   "tile_eventi_desc": "Manage events and planning",
   "tile_orario_lavoro_label": "Work Schedule",
   "tile_orario_lavoro_desc": "Hours, shifts and breakdown per event",
+  "tile_calendario_label": "Calendar",
+  "tile_calendario_desc": "TeQF wedding event calendar",
 
   "readOnlyBanner": "You are in read-only mode — your team cannot edit this section.",
 

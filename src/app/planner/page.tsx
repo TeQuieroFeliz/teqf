@@ -15,6 +15,7 @@ import {
   Bell,
   BookOpen,
   Calendar,
+  CalendarDays,
   ClipboardList,
   Clock,
   Edit2,
@@ -112,14 +113,21 @@ const DASHBOARD_TILES: Record<string, DashboardTile> = {
     icon: <Clock className="size-5" />,
     href: '/planner/orario-di-lavoro',
   },
+  calendario: {
+    key: 'calendario',
+    label: 'Calendar',
+    description: 'TeQF wedding event calendar',
+    icon: <CalendarDays className="size-5" />,
+    href: '/planner/calendar',
+  },
 };
 
 // Admin-only tiles — shown exclusively to superadmin
-const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'eventi', 'orario_lavoro'];
+const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'calendario'];
 const XB_TILE_KEYS          = ['eventi', 'mobili', 'fiori', 'portfolio'];
-const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'portfolio'];
+const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'portfolio', 'calendario'];
 // Union of XB + TeQF sections — never includes admin-only tiles (richieste, gestione_utenti, blog)
-const BOTH_TEAMS_TILE_KEYS  = ['eventi', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio'];
+const BOTH_TEAMS_TILE_KEYS  = ['eventi', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio', 'calendario'];
 
 // ─── TileGrid ─────────────────────────────────────────────────────────────────
 

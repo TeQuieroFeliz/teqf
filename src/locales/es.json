@@ -54,6 +54,8 @@
   "tile_eventi_desc": "Gestiona los eventos y planificaciones",
   "tile_orario_lavoro_label": "Horario de Trabajo",
   "tile_orario_lavoro_desc": "Horas, turnos y desmontaje por evento",
+  "tile_calendario_label": "Calendario",
+  "tile_calendario_desc": "Calendario de eventos de bodas TeQF",
 
   "readOnlyBanner": "Estás en modo de solo lectura — tu equipo no puede editar esta sección.",
 
