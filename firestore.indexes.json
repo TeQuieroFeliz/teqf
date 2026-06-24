@@ -89,13 +89,6 @@
         { "fieldPath": "date", "order": "ASCENDING" },
         { "fieldPath": "order", "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "versions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "versionNumber", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []
