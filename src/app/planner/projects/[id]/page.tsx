@@ -1017,12 +1017,6 @@ export default function ProjectPage() {
 
           <div className="flex items-center gap-1.5">
             <LanguageSelector />
-
-            <Link href={`/planner/events/${eventId}`}
-              className="text-xs px-2.5 py-1.5 rounded-lg"
-              style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
-              {t.modifica}
-            </Link>
           </div>
         </div>
 

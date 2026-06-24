@@ -634,7 +634,7 @@ export default function TeqfCalendarPage() {
           </p>
           <div className="flex gap-2 flex-wrap">
             <Link
-              href={`/planner/events/${ev.xbEventId}`}
+              href={`/planner/weddings/${ev.xbEventId}`}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
               style={{ background: '#16a34a', color: 'white', fontFamily: 'var(--font-body)' }}
             >

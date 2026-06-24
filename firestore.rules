@@ -172,11 +172,48 @@ service cloud.firestore {
     }
 
     // ── /events/{eventId} ─────────────────────────────────────────────────────
-    // Unchanged: owner or admin with events permission.
+    // Legacy user-dashboard collection — not the planner events section.
     match /events/{eventId} {
       allow read:           if isOwner(resource.data.userId) || canView('events');
       allow create:         if isOwner(request.resource.data.userId) || canEdit('events');
       allow update, delete: if isOwner(resource.data.userId) || canEdit('events');
+    }
+
+    // ── /weddings/{weddingId} ────────────────────────────────────────────────
+    // Helper: only the listed fields differ between old and new data.
+    function onlyUpdatingFields(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    match /weddings/{weddingId} {
+      // Read: XB Team, TeQF Team, SuperAdmin
+      allow read: if inTeam('XB') || inTeam('TeQF') || isAdmin();
+
+      // Create: only XB Planner + SuperAdmin; must own the doc
+      allow create: if (inTeam('XB') || isAdmin())
+        && request.resource.data.createdBy == request.auth.uid;
+
+      // Update: XB + Admin freely; TeQF only for status/assignment/quotes
+      allow update: if (inTeam('XB') || isAdmin())
+        || (inTeam('TeQF') && onlyUpdatingFields([
+          'status', 'assignedTeqfUser', 'assignedTeqfUserName',
+          'quoteFiles', 'updatedAt'
+        ]));
+
+      // Delete: SuperAdmin only
+      allow delete: if isAdmin();
+
+      // Functions sub-collection
+      match /functions/{functionId} {
+        allow read: if inTeam('XB') || inTeam('TeQF') || isAdmin();
+        allow create, update, delete: if inTeam('XB') || isAdmin();
+      }
+
+      // Versions sub-collection — writes only via Admin SDK (server actions)
+      match /versions/{versionId} {
+        allow read: if inTeam('XB') || inTeam('TeQF') || isAdmin();
+        allow create, update, delete: if false;
+      }
     }
 
     // ── /plannerEvents/{eventId} ──────────────────────────────────────────────

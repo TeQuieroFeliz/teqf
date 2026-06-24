@@ -1,25 +1,21 @@
 'use client';
 
-import { deletePlannerEvent, getAllPlannerEvents } from '@/actions/planner/planner-event-crud';
 import { db } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
-import { useLangContext } from '@/context/LangContext';
 import { useI18n } from '@/hooks/useI18n';
 import { LanguageSelector } from '@/components/LanguageSelector';
 import { deriveTeams } from '@/lib/user-permissions';
 import { CITIES, PlannerEvent } from '@/lib/planner-types';
-import { Lang, T } from '@/lib/planner-i18n';
 import AccessDenied from '@/components/planner/AccessDenied';
 import {
   Bell,
   BookOpen,
-  Calendar,
   CalendarDays,
   ClipboardList,
   Clock,
-  Edit2,
   Flower2,
+  Heart,
   Image as ImageIcon,
   Loader2,
   LogOut,
@@ -27,7 +23,6 @@ import {
   Plus,
   Shield,
   Sofa,
-  Trash2,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -99,12 +94,12 @@ const DASHBOARD_TILES: Record<string, DashboardTile> = {
     icon: <Flower2 className="size-5" />,
     href: '/planner/flowers',
   },
-  eventi: {
-    key: 'eventi',
-    label: 'Eventi',
-    description: 'Gestisci gli eventi e le pianificazioni',
-    icon: <Calendar className="size-5" />,
-    href: '/planner/events',
+  weddings: {
+    key: 'weddings',
+    label: 'Weddings',
+    description: 'Events with multiple functions',
+    icon: <Heart className="size-5" />,
+    href: '/planner/weddings',
   },
   orario_lavoro: {
     key: 'orario_lavoro',
@@ -123,11 +118,11 @@ const DASHBOARD_TILES: Record<string, DashboardTile> = {
 };
 
 // Admin-only tiles — shown exclusively to superadmin
-const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'calendario'];
-const XB_TILE_KEYS          = ['eventi', 'mobili', 'fiori', 'portfolio'];
-const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'eventi', 'orario_lavoro', 'portfolio', 'calendario'];
+const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'weddings', 'orario_lavoro', 'calendario'];
+const XB_TILE_KEYS          = ['weddings', 'mobili', 'fiori', 'portfolio'];
+const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'weddings', 'orario_lavoro', 'portfolio', 'calendario'];
 // Union of XB + TeQF sections — never includes admin-only tiles (richieste, gestione_utenti, blog)
-const BOTH_TEAMS_TILE_KEYS  = ['eventi', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio', 'calendario'];
+const BOTH_TEAMS_TILE_KEYS  = ['weddings', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio', 'calendario'];
 
 // ─── TileGrid ─────────────────────────────────────────────────────────────────
 
@@ -359,7 +354,7 @@ function SuperAdminDashboard() {
                           className="text-sm truncate"
                           style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-dark)', fontWeight: 500 }}
                         >
-                          {evt.eventCode || evt.eventName || t('tile_eventi_label')}
+                          {evt.eventCode || evt.eventName || t('events_unnamed')}
                         </p>
                         <div className="flex flex-wrap gap-x-3 mt-0.5">
                           {evt.plannerName && (
@@ -487,41 +482,12 @@ function TeQFUserDashboard() {
 
 function PlannerDashboard() {
   const { plannerUser, logout, canManageCashControl } = usePlannerAuth();
-  const { lang } = useLangContext();
-  const { t: tg } = useI18n();
-  const [events, setEvents] = useState<PlannerEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const t = T[lang as Lang] ?? T.en;
-
-  useEffect(() => {
-    if (!plannerUser) return;
-    getAllPlannerEvents()
-      .then(setEvents)
-      .finally(() => setLoading(false));
-  }, [plannerUser]);
+  const { t } = useI18n();
 
   if (!plannerUser) return null;
 
-  const cityLabel = (val: string) => CITIES.find((c) => c.value === val)?.label ?? val;
-
-  async function handleDelete(evt: PlannerEvent) {
-    if (!confirm(t.deleteEventConfirm(evt.eventCode || evt.eventName || t.eventNameless))) return;
-    setDeletingId(evt.id);
-    const result = await deletePlannerEvent(evt.id);
-    if (result.success) {
-      setEvents((prev) => prev.filter((e) => e.id !== evt.id));
-      toast.success(t.eventDeleted);
-    } else {
-      toast.error(result.error ?? t.deleteError);
-    }
-    setDeletingId(null);
-  }
-
   return (
     <div className="min-h-screen" style={{ background: 'var(--tqf-beige)' }}>
-      {/* Header */}
       <header
         className="border-b px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between"
         style={{ background: 'white', borderColor: 'var(--tqf-beige-border)' }}
@@ -540,7 +506,7 @@ function PlannerDashboard() {
               Te Quiero Feliz
             </p>
             <p style={{ fontFamily: 'var(--font-body)', color: 'var(--tqf-muted)', fontSize: '0.6rem', letterSpacing: '0.18em' }}>
-              {tg('plannerArea')}
+              {t('plannerArea')}
             </p>
           </div>
         </Link>
@@ -549,12 +515,12 @@ function PlannerDashboard() {
           <LanguageSelector />
 
           <Link
-            href="/planner/events/new"
+            href="/planner/weddings/new"
             className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg transition-opacity hover:opacity-80"
             style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
           >
             <Plus className="size-4" />
-            <span className="hidden sm:inline">{t.newEvent}</span>
+            <span className="hidden sm:inline">{t('weddings_new')}</span>
           </Link>
 
           {canManageCashControl && (
@@ -564,11 +530,10 @@ function PlannerDashboard() {
               style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
             >
               <Wallet className="size-4" />
-              <span className="hidden sm:inline">{tg('spending')}</span>
+              <span className="hidden sm:inline">{t('spending')}</span>
             </Link>
           )}
 
-          {/* Profile pill */}
           <Link
             href="/planner/profile"
             className="flex items-center gap-2 px-2 py-1.5 rounded-xl transition-opacity hover:opacity-75"
@@ -595,142 +560,13 @@ function PlannerDashboard() {
             style={{ color: 'var(--tqf-muted)', border: '1px solid var(--tqf-beige-border)', fontFamily: 'var(--font-body)' }}
           >
             <LogOut className="size-4" />
-            <span className="hidden sm:inline">{t.logout}</span>
+            <span className="hidden sm:inline">{t('logout')}</span>
           </button>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* XB section tiles */}
-        <div className="mb-8">
-          <TileGrid tileKeys={XB_TILE_KEYS} />
-        </div>
-
-        <div className="mb-6">
-          <h1 className="text-3xl" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 300 }}>
-            {tg('eventsSection')}
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            {loading ? '' : t.eventCount(events.length)}
-          </p>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="size-6 animate-spin" style={{ color: 'var(--tqf-bordeaux)' }} />
-          </div>
-        ) : events.length === 0 ? (
-          <div className="rounded-2xl p-12 text-center" style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
-            <div className="mx-auto mb-4 size-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-              <ClipboardList className="size-7" />
-            </div>
-            <h2 className="text-xl mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-              {t.noEventsYet}
-            </h2>
-            <p className="text-sm mb-6" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-              {t.noEventsHint}
-            </p>
-            <Link
-              href="/planner/events/new"
-              className="inline-flex items-center gap-2 text-sm px-5 py-2.5 rounded-lg transition-opacity hover:opacity-80"
-              style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}
-            >
-              <Plus className="size-4" />
-              {t.newEvent}
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {events.map((evt) => {
-              const furnitureCount = (evt.days?.flatMap((d) => d.selectedFurniture ?? []) ?? evt.selectedFurniture ?? []).reduce((s, i) => s + i.quantity, 0);
-              const flowerCount    = (evt.days?.flatMap((d) => d.selectedFlowers ?? [])   ?? evt.selectedFlowers   ?? []).reduce((s, i) => s + i.quantity, 0);
-              return (
-                <div
-                  key={evt.id}
-                  className="rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                  style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}
-                >
-                  <div className="flex items-start gap-4 min-w-0">
-                    <div className="p-2.5 rounded-xl flex-shrink-0" style={{ background: 'var(--tqf-cipria-light)', color: 'var(--tqf-bordeaux)' }}>
-                      <ClipboardList className="size-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-base truncate" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
-                        {evt.eventCode || evt.eventName || <span style={{ opacity: 0.4 }}>{t.eventNameless}</span>}
-                      </h3>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                        {evt.clientName && (
-                          <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            {t.clientLabel}: {evt.clientName}
-                          </span>
-                        )}
-                        {evt.days && evt.days.length > 0 ? (
-                          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            <Calendar className="size-3" />
-                            {evt.days.length === 1
-                              ? new Date(evt.days[0].date + 'T00:00:00').toLocaleDateString(
-                                  lang === 'es' ? 'es-MX' : 'en-US',
-                                  { day: 'numeric', month: 'long', year: 'numeric' }
-                                )
-                              : t.daysCount(evt.days.length)}
-                          </span>
-                        ) : evt.eventDate ? (
-                          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            <Calendar className="size-3" />
-                            {new Date(evt.eventDate).toLocaleDateString(
-                              lang === 'es' ? 'es-MX' : 'en-US',
-                              { day: 'numeric', month: 'long', year: 'numeric' }
-                            )}
-                          </span>
-                        ) : null}
-                        {evt.city && (
-                          <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            <MapPin className="size-3" />
-                            {cityLabel(evt.city)}
-                          </span>
-                        )}
-                        {(furnitureCount > 0 || flowerCount > 0) && (
-                          <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                            {furnitureCount > 0 && t.furnitureCount(furnitureCount)}
-                            {furnitureCount > 0 && flowerCount > 0 && ' · '}
-                            {flowerCount > 0 && t.flowersCount(flowerCount)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full"
-                      style={evt.status === 'submitted'
-                        ? { background: '#fef9ee', color: '#b45309', fontFamily: 'var(--font-body)' }
-                        : { background: '#f3f4f6', color: '#6b7280', fontFamily: 'var(--font-body)' }}
-                    >
-                      {evt.status === 'submitted' ? t.statusSubmitted : t.statusDraft}
-                    </span>
-                    <Link
-                      href={`/planner/events/${evt.id}`}
-                      className="flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-opacity hover:opacity-70"
-                      style={{ color: 'var(--tqf-bordeaux)', border: '1px solid var(--tqf-cipria)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}
-                    >
-                      <Edit2 className="size-3" />
-                      {t.edit}
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(evt)}
-                      disabled={deletingId === evt.id}
-                      className="size-8 flex items-center justify-center rounded-lg transition-opacity hover:opacity-70 disabled:opacity-40"
-                      style={{ color: '#991b1b', border: '1px solid #fecaca', background: '#fef2f2' }}
-                    >
-                      {deletingId === evt.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <TileGrid tileKeys={XB_TILE_KEYS} />
       </main>
     </div>
   );

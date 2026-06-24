@@ -75,5 +75,83 @@ service firebase.storage {
       allow write:  if request.auth != null;
       allow delete: if request.auth != null;
     }
+
+    // ── Weddings section ──────────────────────────────────────────────────────
+
+    // Read: any authenticated user
+    match /weddings/{weddingId}/{allPaths=**} {
+      allow read: if request.auth != null;
+    }
+
+    // Quotes (PDF only, max 20 MB) — TeQF + both + SuperAdmin
+    match /weddings/{weddingId}/quotes/{fileName} {
+      allow write: if request.auth != null
+        && (request.auth.token.team == 'TeQF'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin')
+        && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf');
+      allow delete: if request.auth != null
+        && (request.auth.token.team == 'TeQF'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin');
+    }
+
+    // Layouts + Moodboard (PDF + image, max 20 MB) — XB + both + SuperAdmin
+    match /weddings/{weddingId}/functions/{functionId}/layouts/{fileName} {
+      allow write: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin')
+        && request.resource.size < 20 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('image/.*'));
+      allow delete: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin');
+    }
+
+    match /weddings/{weddingId}/functions/{functionId}/moodboard/{fileName} {
+      allow write: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin')
+        && request.resource.size < 20 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('image/.*'));
+      allow delete: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin');
+    }
+
+    // Inspiration photos (image only, max 10 MB) — XB + both + SuperAdmin
+    match /weddings/{weddingId}/functions/{functionId}/inspiration/{fileName} {
+      allow write: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin')
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin');
+    }
+
+    // Custom item images (image only, max 10 MB) — XB + both + SuperAdmin
+    match /weddings/{weddingId}/functions/{functionId}/custom-items/{itemId}/{fileName} {
+      allow write: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin')
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin');
+    }
   }
 }
