@@ -86,7 +86,7 @@ const TR = {
     unlinkDone: 'Unlinked from calendar.',
     functionTypes: {
       haldi: 'Haldi', sangeet: 'Sangeet', ceremony: 'Ceremony',
-      reception: 'Reception', custom: 'Custom',
+      cocktail: 'Cocktail', reception: 'Reception', custom: 'Custom',
     } as Record<string, string>,
     duration: (n: number) => n === 1 ? '1 day' : `${n} days`,
   },
@@ -144,7 +144,7 @@ const TR = {
     unlinkDone: 'Desvinculado del calendario.',
     functionTypes: {
       haldi: 'Haldi', sangeet: 'Sangeet', ceremony: 'Ceremonia',
-      reception: 'Recepción', custom: 'Personalizado',
+      cocktail: 'Cocktail', reception: 'Recepción', custom: 'Personalizado',
     } as Record<string, string>,
     duration: (n: number) => n === 1 ? '1 día' : `${n} días`,
   },
@@ -622,20 +622,10 @@ export default function WeddingDetailPage() {
                           <Clock className="size-3" />{fn.eventStartTime}{fn.eventEndTime ? ` – ${fn.eventEndTime}` : ''}
                         </span>
                       )}
-                      {fn.venue && (
-                        <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-                          <MapPin className="size-3" />{fn.venue}
-                        </span>
-                      )}
+                      <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        <MapPin className="size-3" />{fn.venue || '—'}
+                      </span>
                     </div>
-                    {fn.colorPalette.length > 0 && (
-                      <div className="flex gap-1 mt-2">
-                        {fn.colorPalette.map((c, i) => (
-                          <div key={i} className="size-5 rounded-full border border-white"
-                            style={{ background: c, boxShadow: '0 0 0 1px rgba(0,0,0,0.1)' }} title={c} />
-                        ))}
-                      </div>
-                    )}
                   </div>
                   {canEdit && (
                     <div className="flex gap-2 flex-shrink-0">

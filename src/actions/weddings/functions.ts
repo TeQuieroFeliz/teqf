@@ -30,7 +30,6 @@ function serializeFunction(doc: FirebaseFirestore.DocumentSnapshot): WeddingFunc
     eventEndTime: d.eventEndTime ?? '',
     breakdownTime: d.breakdownTime ?? '',
     venue: d.venue ?? '',
-    colorPalette: d.colorPalette ?? [],
     layoutFiles: d.layoutFiles ?? [],
     moodboardFiles: d.moodboardFiles ?? [],
     inspirationPhotos: d.inspirationPhotos ?? [],
@@ -74,7 +73,7 @@ export async function createFunction(
     functionType: string; functionName: string; order: number;
     date: string; setupStartTime: string; venueEntryTime: string;
     eventStartTime: string; eventEndTime: string; breakdownTime: string;
-    venue: string; colorPalette: string[]; generalNotes: string;
+    venue: string; generalNotes: string;
   },
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   if (!firestore) return { success: false, error: 'DB unavailable.' };
@@ -101,7 +100,7 @@ export async function updateFunction(
     functionType: string; functionName: string; order: number;
     date: string; setupStartTime: string; venueEntryTime: string;
     eventStartTime: string; eventEndTime: string; breakdownTime: string;
-    venue: string; colorPalette: string[]; generalNotes: string;
+    venue: string; generalNotes: string;
   },
 ): Promise<{ success: boolean; error?: string }> {
   if (!firestore) return { success: false, error: 'DB unavailable.' };

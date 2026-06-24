@@ -49,7 +49,7 @@ export interface CustomItem {
 
 // ── Function ──────────────────────────────────────────────────────────────────
 
-export type FunctionType = 'haldi' | 'sangeet' | 'ceremony' | 'reception' | 'custom';
+export type FunctionType = 'haldi' | 'sangeet' | 'ceremony' | 'cocktail' | 'reception' | 'custom';
 
 export interface WeddingFunction {
   id: string;
@@ -63,7 +63,6 @@ export interface WeddingFunction {
   eventEndTime: string;
   breakdownTime: string;
   venue: string;
-  colorPalette: string[]; // HEX strings, max 5
   layoutFiles: FileRecord[];
   moodboardFiles: FileRecord[];
   inspirationPhotos: InspirationPhoto[];

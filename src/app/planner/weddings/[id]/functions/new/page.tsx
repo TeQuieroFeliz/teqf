@@ -62,7 +62,6 @@ export default function NewFunctionPage() {
       eventStartTime: data.eventStartTime,
       eventEndTime: data.eventEndTime,
       breakdownTime: data.breakdownTime,
-      colorPalette: data.colorPalette,
       generalNotes: data.generalNotes.trim(),
     });
     setSaving(false);

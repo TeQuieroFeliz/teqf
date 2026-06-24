@@ -31,7 +31,7 @@ const TR = {
     noFunctions: 'No functions in this version.',
     functionTypes: {
       haldi: 'Haldi', sangeet: 'Sangeet', ceremony: 'Ceremony',
-      reception: 'Reception', custom: 'Custom',
+      cocktail: 'Cocktail', reception: 'Reception', custom: 'Custom',
     } as Record<string, string>,
     isRestore: 'Restore',
   },
@@ -51,7 +51,7 @@ const TR = {
     noFunctions: 'Sin funciones en esta versión.',
     functionTypes: {
       haldi: 'Haldi', sangeet: 'Sangeet', ceremony: 'Ceremonia',
-      reception: 'Recepción', custom: 'Personalizado',
+      cocktail: 'Cocktail', reception: 'Recepción', custom: 'Personalizado',
     } as Record<string, string>,
     isRestore: 'Restauración',
   },
@@ -242,20 +242,12 @@ export default function VersionDetailPage() {
                           </span>
                         )}
                       </div>
-                      {fn.colorPalette.length > 0 && (
-                        <div className="flex gap-1 mt-2">
-                          {fn.colorPalette.map((c, ci) => (
-                            <div key={ci} className="size-5 rounded-full"
-                              style={{ background: c, border: '2px solid white', boxShadow: '0 0 0 1px rgba(0,0,0,0.1)' }} title={c} />
-                          ))}
-                        </div>
-                      )}
                       {fn.generalNotes && (
                         <p className="text-xs mt-2 italic" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                           {fn.generalNotes}
                         </p>
                       )}
-                      {fn.moodboardFiles.length > 0 && (
+                      {fn.moodboardFiles && fn.moodboardFiles.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {fn.moodboardFiles.map((f, fi) => (
                             <a key={fi} href={f.url} target="_blank" rel="noopener noreferrer"

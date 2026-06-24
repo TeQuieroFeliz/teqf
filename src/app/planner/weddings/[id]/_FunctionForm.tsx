@@ -2,7 +2,6 @@
 
 import { TeqfDatePicker } from '@/components/ui/TeqfDatePicker';
 import { FunctionType, WeddingFunction } from '@/lib/wedding-types';
-import { Minus, Plus, X } from 'lucide-react';
 
 // ── Translations ──────────────────────────────────────────────────────────────
 
@@ -16,21 +15,20 @@ export const FUNCTION_TR = {
     sectionDate: 'Date',
     date: 'Function Date *',
     sectionVenue: 'Venue',
-    venue: 'Venue Name / Address',
-    venuePh: 'e.g. Hacienda Los Reyes, Cuernavaca',
+    venue: 'Venue *',
+    venuePh: 'e.g. Sofitel CDMX - Salón Versalles',
+    errVenue: 'Venue is required for each function',
     sectionTimes: 'Schedule',
     setupStartTime: 'Setup Start',
     venueEntryTime: 'Venue Entry',
     eventStartTime: 'Event Start',
     eventEndTime: 'Event End',
     breakdownTime: 'Breakdown',
-    sectionColors: 'Color Palette',
-    addColor: '+ Color',
     sectionNotes: 'General Notes',
     notesPlaceholder: 'Notes, special requirements, vendor contacts…',
     functionTypes: {
       haldi: 'Haldi', sangeet: 'Sangeet', ceremony: 'Ceremony',
-      reception: 'Reception', custom: 'Custom',
+      cocktail: 'Cocktail', reception: 'Reception', custom: 'Custom',
     } as Record<FunctionType, string>,
     errType: 'Please select a function type.',
     errDate: 'Please select a date.',
@@ -45,21 +43,20 @@ export const FUNCTION_TR = {
     sectionDate: 'Fecha',
     date: 'Fecha de la Función *',
     sectionVenue: 'Sede',
-    venue: 'Nombre / Dirección de la Sede',
-    venuePh: 'Ej. Hacienda Los Reyes, Cuernavaca',
+    venue: 'Sede *',
+    venuePh: 'Ej. Sofitel CDMX - Salón Versalles',
+    errVenue: 'La sede es obligatoria para cada función',
     sectionTimes: 'Horario',
     setupStartTime: 'Inicio Montaje',
     venueEntryTime: 'Entrada a la Sede',
     eventStartTime: 'Inicio del Evento',
     eventEndTime: 'Fin del Evento',
     breakdownTime: 'Desmontaje',
-    sectionColors: 'Paleta de Color',
-    addColor: '+ Color',
     sectionNotes: 'Notas Generales',
     notesPlaceholder: 'Notas, requerimientos especiales, contactos de proveedores…',
     functionTypes: {
       haldi: 'Haldi', sangeet: 'Sangeet', ceremony: 'Ceremonia',
-      reception: 'Recepción', custom: 'Personalizado',
+      cocktail: 'Cocktail', reception: 'Recepción', custom: 'Personalizado',
     } as Record<FunctionType, string>,
     errType: 'Selecciona el tipo de función.',
     errDate: 'Selecciona una fecha.',
@@ -82,7 +79,6 @@ export interface FunctionFormData {
   eventStartTime: string;
   eventEndTime: string;
   breakdownTime: string;
-  colorPalette: string[];
   generalNotes: string;
 }
 
@@ -99,7 +95,6 @@ export function initialFormData(fn?: WeddingFunction): FunctionFormData {
       eventStartTime: fn.eventStartTime,
       eventEndTime: fn.eventEndTime,
       breakdownTime: fn.breakdownTime,
-      colorPalette: fn.colorPalette,
       generalNotes: fn.generalNotes,
     };
   }
@@ -114,15 +109,15 @@ export function initialFormData(fn?: WeddingFunction): FunctionFormData {
     eventStartTime: '',
     eventEndTime: '',
     breakdownTime: '',
-    colorPalette: [],
     generalNotes: '',
   };
 }
 
 export function validateForm(data: FunctionFormData, t: FnTr): Record<string, string> {
   const errs: Record<string, string> = {};
-  if (!data.functionType) errs.functionType = t.errType;
-  if (!data.date)         errs.date         = t.errDate;
+  if (!data.functionType)          errs.functionType = t.errType;
+  if (!data.date)                  errs.date         = t.errDate;
+  if (!data.venue.trim() || data.venue.trim().length < 3) errs.venue = t.errVenue;
   return errs;
 }
 
@@ -157,22 +152,7 @@ interface FunctionFormProps {
 }
 
 export function FunctionForm({ data, onChange, errors, lang, t }: FunctionFormProps) {
-  const TYPES: FunctionType[] = ['haldi', 'sangeet', 'ceremony', 'reception', 'custom'];
-
-  function addColor() {
-    if (data.colorPalette.length >= 5) return;
-    onChange({ colorPalette: [...data.colorPalette, '#c4a882'] });
-  }
-
-  function updateColor(i: number, hex: string) {
-    const next = [...data.colorPalette];
-    next[i] = hex;
-    onChange({ colorPalette: next });
-  }
-
-  function removeColor(i: number) {
-    onChange({ colorPalette: data.colorPalette.filter((_, idx) => idx !== i) });
-  }
+  const TYPES: FunctionType[] = ['haldi', 'sangeet', 'ceremony', 'cocktail', 'reception', 'custom'];
 
   return (
     <div className="space-y-4">
@@ -220,7 +200,8 @@ export function FunctionForm({ data, onChange, errors, lang, t }: FunctionFormPr
           <label style={LBL_STYLE}>{t.venue}</label>
           <input type="text" value={data.venue} placeholder={t.venuePh}
             onChange={e => onChange({ venue: e.target.value })}
-            style={INPUT_STYLE} />
+            style={{ ...INPUT_STYLE, borderColor: errors.venue ? '#fca5a5' : 'var(--tqf-beige-border)' }} />
+          {errors.venue && <p style={ERR_STYLE}>{errors.venue}</p>}
         </div>
       </SectionCard>
 
@@ -242,39 +223,6 @@ export function FunctionForm({ data, onChange, errors, lang, t }: FunctionFormPr
             </div>
           ))}
         </div>
-      </SectionCard>
-
-      {/* Color Palette */}
-      <SectionCard title={t.sectionColors}>
-        <div className="flex items-center gap-2 flex-wrap">
-          {data.colorPalette.map((c, i) => (
-            <div key={i} className="relative group">
-              <label className="block cursor-pointer">
-                <div className="size-9 rounded-full border-2 border-white"
-                  style={{ background: c, boxShadow: '0 0 0 1px rgba(0,0,0,0.15)', cursor: 'pointer' }} />
-                <input type="color" value={c} onChange={e => updateColor(i, e.target.value)}
-                  className="sr-only" />
-              </label>
-              <button onClick={() => removeColor(i)}
-                className="absolute -top-1 -right-1 size-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ background: '#991b1b', color: 'white' }}>
-                <X className="size-2.5" />
-              </button>
-            </div>
-          ))}
-          {data.colorPalette.length < 5 && (
-            <button type="button" onClick={addColor}
-              className="size-9 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
-              style={{ border: '2px dashed var(--tqf-bordeaux)', color: 'var(--tqf-bordeaux)' }}>
-              <Plus className="size-4" />
-            </button>
-          )}
-        </div>
-        {data.colorPalette.length > 0 && (
-          <p className="text-xs mt-2" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
-            {data.colorPalette.join(', ')}
-          </p>
-        )}
       </SectionCard>
 
       {/* General Notes */}
