@@ -1,16 +1,10 @@
 // Resend the email report for a closed TeQF project — any authenticated user
 import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, firestore } from '@/firebase/server';
-import { Resend } from 'resend';
+import { sendEmailWithRetry } from '@/lib/server/sendEmailWithRetry';
+import { ADMIN_NOTIFICATION_EMAIL } from '@/lib/notification-email';
 
-function getResend() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) throw new Error('Missing RESEND_API_KEY');
-  return new Resend(key);
-}
-
-const FROM = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
-const TO   = 'admin@tequierofeliz.mx';
+const TO   = ADMIN_NOTIFICATION_EMAIL;
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tequierofeliz.com';
 
 function fmtMXN(n: number) {
@@ -63,27 +57,32 @@ export async function POST(req: NextRequest) {
       .orderBy('date', 'asc').get();
 
     // Compute totals
-    let totalIncome  = 0;
-    let totalExpense = 0;
+    // SEZIONE 1.1: 'reimbursement' = TeQF money already paid back to the planner,
+    // reduces the negative balance the same way income does.
+    let totalIncome     = 0;
+    let totalExpense    = 0;
+    let totalReimbursed = 0;
     for (const d of movSnap.docs) {
       const mv = d.data();
       if (mv.type === 'income') totalIncome  += (mv.amount as number) ?? 0;
-      else                       totalExpense += (mv.amount as number) ?? 0;
+      else if (mv.type === 'expense') totalExpense += (mv.amount as number) ?? 0;
+      else if (mv.type === 'reimbursement') totalReimbursed += (mv.amount as number) ?? 0;
     }
-    const saldo = totalIncome - totalExpense;
+    const saldo = totalIncome - totalExpense + totalReimbursed;
     const balanceColor = saldo >= 0 ? '#166534' : '#991b1b';
 
     // Per-user breakdown
-    type UserEntry = { movements: FirebaseFirestore.DocumentData[]; income: number; expense: number };
+    type UserEntry = { movements: FirebaseFirestore.DocumentData[]; income: number; expense: number; reimbursed: number };
     const userMap = new Map<string, UserEntry>();
     for (const d of movSnap.docs) {
       const mv   = d.data();
       const name = (mv.assignedTo as string) || 'Sin asignar';
-      if (!userMap.has(name)) userMap.set(name, { movements: [], income: 0, expense: 0 });
+      if (!userMap.has(name)) userMap.set(name, { movements: [], income: 0, expense: 0, reimbursed: 0 });
       const entry = userMap.get(name)!;
       entry.movements.push(mv);
       if (mv.type === 'income') entry.income  += (mv.amount as number) ?? 0;
-      else                       entry.expense += (mv.amount as number) ?? 0;
+      else if (mv.type === 'expense') entry.expense += (mv.amount as number) ?? 0;
+      else if (mv.type === 'reimbursement') entry.reimbursed += (mv.amount as number) ?? 0;
     }
 
     // Per-category breakdown
@@ -117,17 +116,17 @@ export async function POST(req: NextRequest) {
 
     let userSections = '';
     for (const [name, entry] of userMap) {
-      const userBalance  = entry.income - entry.expense;
+      const userBalance  = entry.income - entry.expense + entry.reimbursed;
       const userBalColor = userBalance >= 0 ? '#166534' : '#991b1b';
 
       const movRows = entry.movements.map(mv => {
-        const isInc = mv.type === 'income';
+        const isOutflow = mv.type === 'expense';
         const amt   = (mv.amount as number) ?? 0;
         const tags  = (mv.tags as string[] ?? []).join(', ');
         return `<tr style="border-bottom:1px solid #f5ede8;">
           <td style="padding:5px 0;color:#777;font-size:12px;white-space:nowrap;">${fmtDate(mv.date as string)}</td>
           <td style="padding:5px 0;color:#555;font-size:12px;">${mv.description ?? ''}${tags ? ` <span style="color:#aaa;">(${tags})</span>` : ''}</td>
-          <td style="padding:5px 0;text-align:right;color:${isInc ? '#166534' : '#991b1b'};font-weight:500;font-size:12px;">${isInc ? '+' : '-'}${fmtMXN(amt)}</td>
+          <td style="padding:5px 0;text-align:right;color:${isOutflow ? '#991b1b' : '#166534'};font-weight:500;font-size:12px;">${isOutflow ? '-' : '+'}${fmtMXN(amt)}</td>
         </tr>`;
       }).join('');
 
@@ -191,12 +190,20 @@ export async function POST(req: NextRequest) {
         </div>
       </div>`;
 
-    await getResend().emails.send({
-      from:    FROM,
+    const sendResult = await sendEmailWithRetry({
       to:      [TO],
       subject: `[Reenvío] Cierre Cash Control: ${projectName}`,
       html,
+      logType: 'cash-control-resend',
+      projectId,
+      projectName,
+      sentBy: callerUid,
     });
+
+    if (!sendResult.success) {
+      await projectRef.update({ reportEmailFailed: true }).catch(console.error);
+      return NextResponse.json({ error: sendResult.error ?? 'Error al enviar el correo.' }, { status: 502 });
+    }
 
     await projectRef.update({
       reportSentAt:      new Date().toISOString(),

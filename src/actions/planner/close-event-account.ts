@@ -4,6 +4,7 @@ import { Resend } from 'resend';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getExpenses } from './get-expenses';
+import { ADMIN_NOTIFICATION_EMAIL } from '@/lib/notification-email';
 
 const BORDEAUX: [number, number, number] = [92, 26, 40];
 const DARK: [number, number, number] = [30, 20, 15];
@@ -222,7 +223,7 @@ export async function closeEventAccount(params: {
 
     await resend.emails.send({
       from: 'Te Quiero Feliz <onboarding@resend.dev>',
-      to: 'admin@tequierofeliz.mx',
+      to: ADMIN_NOTIFICATION_EMAIL,
       subject: `Cierre de cuenta: ${eventCode}${clientName ? ` — ${clientName}` : ''}`,
       html,
       attachments: [

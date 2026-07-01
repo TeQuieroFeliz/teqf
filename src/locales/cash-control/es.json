@@ -76,5 +76,19 @@
   "cashControlLink": "Cash Control →",
   "unauthorized": "Acceso no autorizado.",
   "backToCashControl": "← Cash Control",
-  "projectCreated": "Proyecto creado."
+  "projectCreated": "Proyecto creado.",
+  "otro": "Otro",
+  "reimbursement": "Reembolso",
+  "registerReimbursement": "Registrar reembolso",
+  "reimburseAmount": "Monto reembolsado",
+  "reimburseDate": "Fecha del reembolso",
+  "reimburseMethod": "Método de pago (opc.)",
+  "reimburseNote": "Nota (opc.)",
+  "reimburseReceipt": "Comprobante de pago *",
+  "reimbursePreview": "Nuevo saldo después del reembolso",
+  "reimburseConfirmBtn": "Registrar reembolso",
+  "reimburseExceedsWarning": "Este monto supera el saldo negativo actual. El nuevo saldo sería {amount}. ¿Continuar?",
+  "reimburseSuccess": "Reembolso registrado.",
+  "reimburseReceiptRequired": "El comprobante de pago es obligatorio.",
+  "reimburseDeleteConfirm": "¿Eliminar este reembolso? El saldo se recalculará."
 }

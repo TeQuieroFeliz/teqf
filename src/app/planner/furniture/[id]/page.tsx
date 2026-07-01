@@ -7,7 +7,7 @@ import {
   saveFurnitureMeta,
   updateFurnitureImages,
 } from '@/actions/furniture/furniture-crud';
-import { getCategoryLabel, CustomFurnitureCategory, Lang } from '@/lib/furniture-categories';
+import { getCategoryLabel, CustomFurnitureCategory, Lang, PREDEFINED_CATEGORY_KEYS } from '@/lib/furniture-categories';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
 import { LanguageSelector } from '@/components/LanguageSelector';
@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // Stable mutable ref for the current images list — avoids stale closure
 // when multiple pending uploads commit concurrently.
@@ -123,6 +123,46 @@ export default function FurnitureEditorPage() {
   const [showNewCity, setShowNewCity] = useState(false);
   const [newCityName, setNewCityName] = useState('');
   const [savingCity, setSavingCity] = useState(false);
+
+  // Category "add new" state
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+
+  // Sentinel select value that triggers the inline "create category" input.
+  const NEW_CATEGORY = '__new_category__';
+
+  // Full option list for the category dropdown. Built as a UNION so nothing is
+  // ever missing: predefined keys + custom category keys + saved meta categories
+  // + the item's own current category (in case it was saved with a legacy value
+  // that is no longer in the meta list). This is what lets an operator re-assign
+  // an item that ended up in the "wrong" or an orphaned category.
+  const categoryOptions = useMemo(() => {
+    const keys = new Set<string>([
+      ...PREDEFINED_CATEGORY_KEYS,
+      ...customCategories.map((c) => c.key),
+      ...availableCategories,
+    ]);
+    if (form.category) keys.add(form.category);
+    return Array.from(keys);
+  }, [availableCategories, customCategories, form.category]);
+
+  async function handleAddCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setSavingCategory(true);
+    let updated = availableCategories;
+    if (!availableCategories.includes(name)) {
+      updated = [...availableCategories, name];
+      await saveFurnitureMeta(updated, availableCities);
+      setAvailableCategories(updated);
+      toast.success(t('furniture_categoryAdded', { name }));
+    }
+    set('category', name);
+    setNewCategoryName('');
+    setShowNewCategory(false);
+    setSavingCategory(false);
+  }
 
   useEffect(() => {
     async function load() {
@@ -443,13 +483,56 @@ export default function FurnitureEditorPage() {
                 <label style={labelStyle}>{t('furniture_categoryRequired')}</label>
                 <select
                   value={form.category}
-                  onChange={(e) => set('category', e.target.value)}
+                  onChange={(e) => {
+                    if (e.target.value === NEW_CATEGORY) {
+                      setShowNewCategory(true);
+                    } else {
+                      set('category', e.target.value);
+                    }
+                  }}
                   style={inputStyle}
                 >
-                  {availableCategories.map((c) => (
+                  {!form.category && <option value="">{t('furniture_selectPlaceholder')}</option>}
+                  {categoryOptions.map((c) => (
                     <option key={c} value={c}>{getCategoryLabel(c, lang as Lang, customCategories)}</option>
                   ))}
+                  <option value={NEW_CATEGORY}>{t('furniture_addCategoryOption')}</option>
                 </select>
+
+                {/* Inline "create new category" input */}
+                {showNewCategory && (
+                  <div className="flex gap-2 mt-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                      placeholder={t('furniture_categoryNewPlaceholder')}
+                      autoFocus
+                      style={{ ...inputStyle, flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.8125rem' }}
+                      onFocus={(e) => (e.target.style.borderColor = 'var(--tqf-bordeaux)')}
+                      onBlur={(e) => (e.target.style.borderColor = 'var(--tqf-beige-border)')}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      disabled={savingCategory || !newCategoryName.trim()}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                      style={{ background: 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}
+                    >
+                      {savingCategory ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                      {t('furniture_addCategory')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCategory(false); setNewCategoryName(''); }}
+                      className="size-7 flex items-center justify-center rounded-lg flex-shrink-0"
+                      style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white' }}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Price + Currency */}

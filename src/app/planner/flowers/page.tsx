@@ -5,6 +5,10 @@ import {
   saveInspirationItem,
   type InspirationItem,
 } from '@/actions/flowers/inspiration-crud';
+import {
+  renameInspirationCategory,
+  deleteInspirationCategory,
+} from '@/actions/flowers/inspiration-categories';
 import type { PortfolioProject } from '@/actions/portfolio/portfolio-crud';
 import { usePlannerAuth } from '@/context/PlannerAuthContext';
 import AccessDenied from '@/components/planner/AccessDenied';
@@ -15,7 +19,7 @@ import { db, storage } from '@/firebase/client';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import {
-  ArrowLeft, Check, Flower2, ImagePlus, Loader2, LogOut,
+  ArrowLeft, Check, Flower2, FolderCog, ImagePlus, Loader2, LogOut,
   Pencil, Sparkles, Trash2, Upload, X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -306,6 +310,14 @@ export default function AdminFlowersPage() {
   const [editingItem, setEditingItem] = useState<InspirationItem | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [showCatManager, setShowCatManager] = useState(false);
+
+  // Reflect a category rename/merge/delete in local state so the board updates
+  // immediately without a full reload.
+  const applyCategoryReassign = (from: string, to: string) => {
+    setItems(prev => prev.map(i => (i.category === from ? { ...i, category: to } : i)));
+    setCatFilter(cur => (cur === from ? 'all' : cur));
+  };
 
   useEffect(() => {
     getDocs(query(collection(db, 'floralInspiration'), orderBy('createdAt', 'desc')))
@@ -487,6 +499,14 @@ export default function AdminFlowersPage() {
             ))}
           </div>
           <div className="flex items-center gap-2">
+            {canEdit && categories.length > 0 && (
+              <button type="button" onClick={() => setShowCatManager(true)}
+                className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+                style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', fontFamily: 'var(--font-body)' }}>
+                <FolderCog className="size-4" />
+                <span className="hidden sm:inline">{t('flowers_manageCategories')}</span>
+              </button>
+            )}
             <button type="button" onClick={() => uploadRef.current?.click()} disabled={uploading}
               className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-50"
               style={{ border: '1px solid var(--tqf-cipria)', color: 'var(--tqf-bordeaux)', background: 'var(--tqf-cipria-light)', fontFamily: 'var(--font-body)' }}>
@@ -606,6 +626,190 @@ export default function AdminFlowersPage() {
           title={t('flowers_editCategory')}
         />
       )}
+
+      {showCatManager && (
+        <CategoryManagerModal
+          categories={categories}
+          counts={grouped}
+          onReassign={applyCategoryReassign}
+          onClose={() => setShowCatManager(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Category Manager Modal ────────────────────────────────────────────────────
+// Rename / merge / delete inspiration categories. Adapted from furniture's
+// manager to the simpler string-based model (no bilingual labels).
+type CatAction = { type: 'rename' | 'merge' | 'delete'; cat: string };
+
+function CategoryManagerModal({
+  categories,
+  counts,
+  onReassign,
+  onClose,
+}: {
+  categories: string[];
+  counts: Record<string, InspirationItem[]>;
+  onReassign: (from: string, to: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const [action, setAction] = useState<CatAction | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [targetValue, setTargetValue] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const countFor = (cat: string) => counts[cat]?.length ?? 0;
+  const others = (cat: string) => categories.filter(c => c !== cat);
+
+  const startRename = (cat: string) => { setAction({ type: 'rename', cat }); setRenameValue(cat); };
+  const startMerge = (cat: string) => {
+    const opts = others(cat);
+    if (opts.length === 0) { toast.error(t('flowers_catNoOthers')); return; }
+    setAction({ type: 'merge', cat }); setTargetValue(opts[0]);
+  };
+  const startDelete = (cat: string) => {
+    const opts = others(cat);
+    if (opts.length === 0) { toast.error(t('flowers_catNoOthers')); return; }
+    setAction({ type: 'delete', cat }); setTargetValue(opts[0]);
+  };
+  const cancel = () => setAction(null);
+
+  const confirmRename = async () => {
+    if (!action) return;
+    const to = renameValue.trim();
+    if (!to || to === action.cat) { cancel(); return; }
+    if (categories.some(c => c !== action.cat && c.toLowerCase() === to.toLowerCase())) {
+      toast.error(t('flowers_catNameExists')); return;
+    }
+    setBusy(true);
+    const res = await renameInspirationCategory(action.cat, to);
+    setBusy(false);
+    if (res.success) {
+      onReassign(action.cat, to);
+      toast.success(t('flowers_catRenamed', { name: to, n: res.moved }));
+      cancel();
+    } else {
+      toast.error(res.error ?? t('flowers_catError'));
+    }
+  };
+
+  const confirmMerge = async () => {
+    if (!action) return;
+    const to = targetValue;
+    setBusy(true);
+    const res = await renameInspirationCategory(action.cat, to);
+    setBusy(false);
+    if (res.success) {
+      onReassign(action.cat, to);
+      toast.success(t('flowers_catMerged', { name: to, n: res.moved }));
+      cancel();
+    } else {
+      toast.error(res.error ?? t('flowers_catError'));
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!action) return;
+    const to = targetValue;
+    setBusy(true);
+    const res = await deleteInspirationCategory(action.cat, to);
+    setBusy(false);
+    if (res.success) {
+      onReassign(action.cat, to);
+      toast.success(t('flowers_catDeleted', { name: to, n: res.moved }));
+      cancel();
+    } else {
+      toast.error(res.error ?? t('flowers_catError'));
+    }
+  };
+
+  const btnSm: React.CSSProperties = {
+    fontSize: '0.72rem', padding: '0.2rem 0.55rem', borderRadius: '0.4rem',
+    fontFamily: 'var(--font-body)', border: '1px solid var(--tqf-beige-border)',
+    background: 'white', color: 'var(--tqf-muted)', cursor: 'pointer',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden" style={{ background: 'white' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--tqf-beige-border)' }}>
+          <div>
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              {t('flowers_manageCategoriesTitle')}
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              {t('flowers_manageCategoriesDesc')}
+            </p>
+          </div>
+          <button onClick={onClose} className="size-8 flex items-center justify-center rounded-lg hover:opacity-70"
+            style={{ color: 'var(--tqf-muted)' }}>
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto p-3">
+          {categories.map(cat => (
+            <div key={cat} className="rounded-xl mb-2" style={{ border: '1px solid var(--tqf-beige-border)' }}>
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm truncate" style={{ color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>{cat}</p>
+                  <p className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                    {t('flowers_catItemCount', { n: countFor(cat) })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button style={btnSm} onClick={() => startRename(cat)}>{t('flowers_catRename')}</button>
+                  <button style={btnSm} onClick={() => startMerge(cat)}>{t('flowers_catMerge')}</button>
+                  <button style={{ ...btnSm, color: '#991b1b', borderColor: '#f3d0d0' }} onClick={() => startDelete(cat)}>{t('flowers_catDelete')}</button>
+                </div>
+              </div>
+
+              {action?.cat === cat && (
+                <div className="px-3 pb-3 pt-1" style={{ borderTop: '1px solid var(--tqf-beige-border)' }}>
+                  {action.type === 'rename' && (
+                    <>
+                      <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>{t('flowers_catRenameTitle', { cat })}</label>
+                      <input type="text" value={renameValue} autoFocus
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && confirmRename()}
+                        placeholder={t('flowers_catNewName')} style={inputStyle} />
+                    </>
+                  )}
+                  {(action.type === 'merge' || action.type === 'delete') && (
+                    <>
+                      <label className="block text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                        {action.type === 'merge' ? t('flowers_catMergeTitle', { cat }) : t('flowers_catDeleteTitle', { cat })}
+                      </label>
+                      <select value={targetValue} onChange={e => setTargetValue(e.target.value)} style={inputStyle}>
+                        {others(cat).map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={action.type === 'rename' ? confirmRename : action.type === 'merge' ? confirmMerge : confirmDelete}
+                      disabled={busy}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40"
+                      style={{ background: action.type === 'delete' ? '#991b1b' : 'var(--tqf-bordeaux)', color: 'white', fontFamily: 'var(--font-body)' }}>
+                      {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                      {t('flowers_catSave')}
+                    </button>
+                    <button onClick={cancel} className="text-xs px-3 py-1.5 rounded-lg"
+                      style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', background: 'white', fontFamily: 'var(--font-body)' }}>
+                      {t('flowers_catCancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -76,5 +76,19 @@
   "cashControlLink": "Cash Control →",
   "unauthorized": "Unauthorized access.",
   "backToCashControl": "← Cash Control",
-  "projectCreated": "Project created."
+  "projectCreated": "Project created.",
+  "otro": "Other",
+  "reimbursement": "Reimbursement",
+  "registerReimbursement": "Register Reimbursement",
+  "reimburseAmount": "Amount reimbursed",
+  "reimburseDate": "Reimbursement date",
+  "reimburseMethod": "Payment method (opt.)",
+  "reimburseNote": "Note (opt.)",
+  "reimburseReceipt": "Payment proof *",
+  "reimbursePreview": "New balance after reimbursement",
+  "reimburseConfirmBtn": "Register reimbursement",
+  "reimburseExceedsWarning": "This amount exceeds the current negative balance. The new balance would be {amount}. Continue?",
+  "reimburseSuccess": "Reimbursement registered.",
+  "reimburseReceiptRequired": "Payment proof is required.",
+  "reimburseDeleteConfirm": "Delete this reimbursement? The balance will be recalculated."
 }

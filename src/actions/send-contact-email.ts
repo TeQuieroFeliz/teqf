@@ -1,6 +1,7 @@
 'use server';
 
 import { Resend } from 'resend';
+import { ADMIN_NOTIFICATION_EMAIL } from '@/lib/notification-email';
 
 interface ContactFormData {
   name: string;
@@ -18,7 +19,7 @@ export async function sendContactEmail(data: ContactFormData) {
 
     await resend.emails.send({
       from: 'Te Quiero Feliz <onboarding@resend.dev>',
-      to: 'admin@tequierofeliz.mx',
+      to: ADMIN_NOTIFICATION_EMAIL,
       subject: `New Event Inquiry – ${data.eventType} in ${data.eventCity}`,
       html: `
         <h2>New Contact Form Submission</h2>

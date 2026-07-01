@@ -28,10 +28,10 @@ export type TeqfProject = {
 
 // ── Cash Control ──────────────────────────────────────────────────────────────
 
-export type TeqfMovementType = 'income' | 'expense';
+export type TeqfMovementType = 'income' | 'expense' | 'reimbursement';
 export type TeqfMovementStatus = 'completed' | 'pending';
 // PART-3: payment method for income movements (Transferencia / Efectivo)
-export type TeqfPaymentMethod = 'efectivo' | 'transferencia';
+export type TeqfPaymentMethod = 'efectivo' | 'transferencia' | 'otro';
 
 export type TeqfCashMovement = {
   id: string;
@@ -43,6 +43,9 @@ export type TeqfCashMovement = {
   tags?: string[];                   // PART-3: FIFO-capped tags (max 8)
   photoUrls?: string[];              // PART-3: Firebase Storage download URLs
   uploadStatus?: 'pending' | 'uploaded' | 'failed' | null; // PART-3
+  receiptUrl?: string;               // reimbursement: proof-of-payment image/PDF URL
+  note?: string;                     // reimbursement: free-text note
+  reimbursedByName?: string;         // display name of superadmin who registered the reimbursement
   assignedTo: string;        // free-text name
   status: TeqfMovementStatus;
   createdBy: string;

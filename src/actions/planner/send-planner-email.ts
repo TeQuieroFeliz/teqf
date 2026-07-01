@@ -3,6 +3,7 @@
 import { Resend } from 'resend';
 import { PlannerEvent } from '@/lib/planner-types';
 import { Lang, DT, LOCALE_MAP } from '@/lib/planner-i18n';
+import { ADMIN_NOTIFICATION_EMAIL } from '@/lib/notification-email';
 
 function formatTime(t: string) {
   if (!t) return '—';
@@ -166,7 +167,7 @@ export async function sendPlannerEventEmail(
 
     await resend.emails.send({
       from: 'Te Quiero Feliz <onboarding@resend.dev>',
-      to: 'admin@tequierofeliz.mx',
+      to: ADMIN_NOTIFICATION_EMAIL,
       subject: `${dt.newEventReceived}: ${event.eventCode}${event.clientName ? ` — ${event.clientName}` : ''}`,
       html,
     });

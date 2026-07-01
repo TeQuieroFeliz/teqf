@@ -25,6 +25,7 @@ import {
   Sofa,
   Users,
   Wallet,
+  Warehouse,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -115,14 +116,21 @@ const DASHBOARD_TILES: Record<string, DashboardTile> = {
     icon: <CalendarDays className="size-5" />,
     href: '/planner/calendar',
   },
+  inventario: {
+    key: 'inventario',
+    label: 'Inventario',
+    description: 'Almacén: herramientas y elementos (Cancún / CDMX)',
+    icon: <Warehouse className="size-5" />,
+    href: '/planner/inventario',
+  },
 };
 
 // Admin-only tiles — shown exclusively to superadmin
-const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'weddings', 'orario_lavoro', 'calendario'];
+const ADMIN_TILE_KEYS       = ['richieste', 'gestione_utenti', 'cash_control', 'blog', 'portfolio', 'mobili', 'fiori', 'weddings', 'orario_lavoro', 'calendario', 'inventario'];
 const XB_TILE_KEYS          = ['weddings', 'mobili', 'fiori', 'portfolio'];
-const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'weddings', 'orario_lavoro', 'portfolio', 'calendario'];
+const TEQF_TILE_KEYS        = ['cash_control', 'mobili', 'fiori', 'weddings', 'orario_lavoro', 'portfolio', 'calendario', 'inventario'];
 // Union of XB + TeQF sections — never includes admin-only tiles (richieste, gestione_utenti, blog)
-const BOTH_TEAMS_TILE_KEYS  = ['weddings', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio', 'calendario'];
+const BOTH_TEAMS_TILE_KEYS  = ['weddings', 'cash_control', 'mobili', 'fiori', 'orario_lavoro', 'portfolio', 'calendario', 'inventario'];
 
 // ─── TileGrid ─────────────────────────────────────────────────────────────────
 

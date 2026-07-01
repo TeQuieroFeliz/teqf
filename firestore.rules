@@ -127,6 +127,11 @@ service cloud.firestore {
       allow read:  if true;
       allow write: if canEdit('portfolio');
     }
+    // Inventario TeQF — virtual warehouse. Restricted to the TeQF team and admins,
+    // same access model as cash-control (it is internal operational stock data).
+    match /inventoryItems/{id} {
+      allow read, write: if inTeam('TeQF') || isAdmin();
+    }
 
     // ── /planners/{docId} ─────────────────────────────────────────────────────
     // FIX-B: update/delete sono solo isAdmin().

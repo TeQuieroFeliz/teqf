@@ -2,17 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth as adminAuth, firestore } from '@/firebase/server';
 import { checkCashControlAdminAuth } from '@/lib/server/checkAdminAuth';
 import { FieldValue } from 'firebase-admin/firestore';
-import { Resend } from 'resend';
+import { sendEmailWithRetry } from '@/lib/server/sendEmailWithRetry';
+import { ADMIN_NOTIFICATION_EMAIL } from '@/lib/notification-email';
 
-function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error('Missing RESEND_API_KEY environment variable.');
-  }
-  return new Resend(apiKey);
-}
-
-const FROM   = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
 const SITE   = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://tequierofeliz.com';
 
 function formatCurrency(n: number) {
@@ -61,8 +53,6 @@ export async function POST(req: NextRequest) {
     if (!isOwner && !caller.isAuthorized) {
       return NextResponse.json({ error: 'Sin permisos.' }, { status: 403 });
     }
-
-    const resend = getResendClient();
 
     // Check if a closure already exists
     const existingSnap = await firestore
@@ -178,10 +168,13 @@ export async function POST(req: NextRequest) {
           </td>
         </tr>`).join('');
 
-      await resend.emails.send({
-        from: FROM,
-        to: ['admin@tequierofeliz.mx'],
+      const sendResult = await sendEmailWithRetry({
+        to: [ADMIN_NOTIFICATION_EMAIL],
         subject: `Cierre de cuenta: ${eventLabel} — ${userName}`,
+        logType: 'cash-control-event-closure',
+        projectId: eventId,
+        projectName: eventLabel,
+        sentBy: userId,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a0f0a;">
             <div style="background:#6b1a2a;padding:24px 32px;border-radius:12px 12px 0 0;">
@@ -258,7 +251,7 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .get();
       if (!closureSnap.empty) {
-        await closureSnap.docs[0].ref.update({ emailSent: true });
+        await closureSnap.docs[0].ref.update({ emailSent: sendResult.success });
       }
     } catch (emailErr) {
       console.error('[close-account] email error:', emailErr);

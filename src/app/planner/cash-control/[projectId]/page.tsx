@@ -29,6 +29,7 @@ import { format as fmtDateFns, parseISO } from 'date-fns';
 import { es as dateES, enUS as dateEN } from 'date-fns/locale';
 import {
   ArrowLeft,
+  Banknote,
   CalendarIcon,
   Camera,
   ChevronRight,
@@ -720,6 +721,298 @@ function CloseConfirmSheet({
   );
 }
 
+// ─── ReimbursementModal ───────────────────────────────────────────────────────
+// SEZIONE 1.1: superadmin registers a reimbursement already paid to the planner
+// physically (bank transfer/cash outside the app), bringing a negative saldo
+// back toward zero. Always requires a proof-of-payment upload.
+
+function ReimbursementModal({
+  projectId, saldo, createdBy, createdByName, onClose, onSaved, lang,
+}: {
+  projectId: string;
+  saldo: number;
+  createdBy: string;
+  createdByName: string;
+  onClose: () => void;
+  onSaved: () => void;
+  lang: 'en' | 'es';
+}) {
+  const { t } = useT({ en: EN, es: ES });
+  const absBalance = Math.abs(saldo);
+
+  const [amount, setAmount]     = useState<string>(absBalance > 0 ? String(absBalance) : '');
+  const [date, setDate]         = useState<string>(todayISO());
+  const [method, setMethod]     = useState<TeqfPaymentMethod>('transferencia');
+  const [note, setNote]         = useState<string>('');
+  const [receipt, setReceipt]   = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [calOpen, setCalOpen]   = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dateLocale = lang === 'es' ? dateES : dateEN;
+
+  useEffect(() => {
+    return () => { if (receiptPreview) URL.revokeObjectURL(receiptPreview); };
+  }, [receiptPreview]);
+
+  const parsedAmount = parseFloat(amount) || 0;
+  const newSaldo = saldo + parsedAmount;
+
+  function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (receiptPreview) URL.revokeObjectURL(receiptPreview);
+    setReceipt(file);
+    setReceiptPreview(URL.createObjectURL(file));
+    e.target.value = '';
+  }
+
+  function removeReceipt() {
+    if (receiptPreview) URL.revokeObjectURL(receiptPreview);
+    setReceipt(null);
+    setReceiptPreview(null);
+  }
+
+  // Path mirrors furniture/cashcontrol convention: cashcontrol/{projectId}/reimbursements/{timestamp}-{filename}
+  async function uploadReceipt(file: File): Promise<string> {
+    if (!storage) throw new Error('Firebase Storage non disponibile. Riprova.');
+    const compressed = await compressImage(file);
+    const fileToUpload = compressed.size > 0 ? compressed : file;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `cashcontrol/${projectId}/reimbursements/${Date.now()}-${safeName}`;
+    const sRef = storageRef(storage, path);
+    await new Promise<void>((resolve, reject) => {
+      const task = uploadBytesResumable(sRef, fileToUpload, {
+        contentType: fileToUpload.type || 'image/jpeg',
+      });
+      task.on('state_changed',
+        snap => setUploadPct(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+        err => { console.error('[reimbursement] upload error:', err); reject(err); },
+        () => resolve()
+      );
+    });
+    return getDownloadURL(sRef);
+  }
+
+  async function handleSave() {
+    const amt = parseFloat(amount);
+    if (!amount || isNaN(amt) || amt <= 0) { toast.error(t('invalidAmount')); return; }
+    if (!receipt) { toast.error(t('reimburseReceiptRequired')); return; }
+
+    if (newSaldo > 0) {
+      const confirmed = confirm(t('reimburseExceedsWarning').replace('{amount}', formatCurrency(newSaldo)));
+      if (!confirmed) return;
+    }
+
+    setSaving(true);
+    try {
+      const receiptUrl = await uploadReceipt(receipt);
+      setUploadPct(null);
+
+      const now = new Date().toISOString();
+      await addDoc(collection(db, 'teqfProjects', projectId, 'cashControl'), {
+        date,
+        description: `${t('reimbursement')} — ${createdByName}`,
+        amount: amt,
+        type: 'reimbursement' as TeqfMovementType,
+        paymentMethod: method,
+        note: note.trim() || null,
+        receiptUrl,
+        assignedTo: createdByName,
+        status: 'completed' as const,
+        createdBy,
+        reimbursedByName: createdByName,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      if (receiptPreview) URL.revokeObjectURL(receiptPreview);
+      toast.success(t('reimburseSuccess'));
+      onSaved(); onClose();
+    } catch (e: any) {
+      console.error('[reimbursement] save failed:', e);
+      toast.error(e.message ?? 'Error.');
+      setUploadPct(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-t-3xl overflow-y-auto"
+        style={{ background: 'white', maxHeight: '92dvh' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--tqf-beige-border)' }} />
+        </div>
+        <div className="px-5 pb-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg" style={{ fontFamily: 'var(--font-display)', color: 'var(--tqf-dark)', fontWeight: 400 }}>
+              {t('registerReimbursement')}
+            </h2>
+            <button onClick={onClose} style={{ color: 'var(--tqf-muted)' }}><X className="size-5" /></button>
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label style={lbl}>{t('reimburseAmount')} *</label>
+            <input type="number" inputMode="decimal" min="0" step="0.01"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="0.00"
+              style={{ ...inputSt, fontSize: '1.4rem', fontWeight: 700, textAlign: 'center', color: '#1d4ed8' }}
+              autoFocus />
+          </div>
+
+          {/* Saldo preview */}
+          {parsedAmount > 0 && (
+            <div className="rounded-xl px-4 py-3"
+              style={{ background: newSaldo >= 0 ? '#f0fdf4' : '#fef2f2', border: `1px solid ${newSaldo >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
+              <p className="text-xs mb-1" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                {t('reimbursePreview')}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm" style={{ color: '#991b1b', fontFamily: 'var(--font-body)' }}>
+                  {formatCurrency(saldo)}
+                </span>
+                <span className="text-xs" style={{ color: 'var(--tqf-muted)' }}>→</span>
+                <span className="text-sm font-semibold"
+                  style={{ color: newSaldo >= 0 ? '#15803d' : '#991b1b', fontFamily: 'var(--font-body)' }}>
+                  {formatCurrency(newSaldo)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Date */}
+          <div>
+            <label style={lbl}>{t('reimburseDate')}</label>
+            <Popover open={calOpen} onOpenChange={setCalOpen}>
+              <PopoverTrigger asChild>
+                <button type="button"
+                  className="w-full flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-left"
+                  style={{ border: '1px solid var(--tqf-beige-border)', background: 'white', color: 'var(--tqf-dark)', fontFamily: 'var(--font-body)' }}>
+                  <CalendarIcon className="size-4 flex-shrink-0" style={{ color: 'var(--tqf-muted)' }} />
+                  {fmtLocalDate(date, lang)}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-auto" align="start">
+                <Calendar
+                  mode="single"
+                  selected={date ? parseISO(date) : undefined}
+                  onSelect={d => {
+                    if (d) {
+                      const y = d.getFullYear();
+                      const mo = String(d.getMonth() + 1).padStart(2, '0');
+                      const day = String(d.getDate()).padStart(2, '0');
+                      setDate(`${y}-${mo}-${day}`);
+                    }
+                    setCalOpen(false);
+                  }}
+                  weekStartsOn={1}
+                  locale={dateLocale}
+                  initialFocus
+                  className="rounded-xl"
+                  style={{
+                    '--accent': 'var(--tqf-cipria-light)',
+                    '--accent-foreground': 'var(--tqf-bordeaux)',
+                    '--primary': 'var(--tqf-bordeaux)',
+                    '--primary-foreground': '#fff',
+                    '--muted': 'var(--tqf-beige)',
+                    '--radius': '0.75rem',
+                  } as React.CSSProperties}
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Payment method */}
+          <div>
+            <label style={lbl}>{t('reimburseMethod')}</label>
+            <div className="flex gap-2 flex-wrap">
+              {(['transferencia', 'efectivo', 'otro'] as TeqfPaymentMethod[]).map(m => (
+                <button key={m} type="button"
+                  onClick={() => setMethod(m)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium"
+                  style={{
+                    border: `1.5px solid ${method === m ? '#1d4ed8' : 'var(--tqf-beige-border)'}`,
+                    background: method === m ? '#eff6ff' : 'white',
+                    color: method === m ? '#1d4ed8' : 'var(--tqf-muted)',
+                    fontFamily: 'var(--font-body)',
+                  }}>
+                  {t(m)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label style={lbl}>{t('reimburseNote')}</label>
+            <input type="text" value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder={t('reimburseNote')}
+              style={inputSt} />
+          </div>
+
+          {/* Receipt upload (required) */}
+          <div>
+            <label style={lbl}>{t('reimburseReceipt')}</label>
+            <div className="flex items-start gap-2">
+              {receiptPreview ? (
+                <div className="relative size-16 rounded-xl overflow-hidden flex-shrink-0"
+                  style={{ border: '1px solid var(--tqf-beige-border)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={receiptPreview} alt="receipt" className="size-full object-cover" />
+                  <button type="button" onClick={removeReceipt}
+                    className="absolute top-0.5 right-0.5 size-4 rounded-full flex items-center justify-center"
+                    style={{ background: '#991b1b', color: 'white' }}>
+                    <X className="size-2.5" />
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileInputRef.current?.click()}
+                  className="size-16 rounded-xl flex flex-col items-center justify-center gap-1 text-xs transition-all active:scale-95 flex-shrink-0"
+                  style={{ border: '1.5px dashed #1d4ed8', background: '#eff6ff', color: '#1d4ed8', fontFamily: 'var(--font-body)' }}>
+                  <Camera className="size-5" />
+                </button>
+              )}
+              <input ref={fileInputRef} type="file"
+                accept="image/*" capture="environment"
+                className="hidden"
+                onChange={handleReceiptChange} />
+            </div>
+            {uploadPct !== null && (
+              <div className="mt-2 w-full rounded-full overflow-hidden h-1.5" style={{ background: 'var(--tqf-beige-border)' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${uploadPct}%`, background: '#1d4ed8' }} />
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold disabled:opacity-50"
+              style={{ background: '#1d4ed8', color: 'white', fontFamily: 'var(--font-body)' }}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              {uploadPct !== null ? `${uploadPct}%` : t('reimburseConfirmBtn')}
+            </button>
+            <button onClick={onClose}
+              className="px-5 py-3.5 rounded-2xl text-sm"
+              style={{ border: '1px solid var(--tqf-beige-border)', color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+              {t('cancel')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CashControlDetailPage() {
@@ -743,6 +1036,7 @@ export default function CashControlDetailPage() {
   const [showRename,   setShowRename]   = useState(false);
   const [renameDraft,  setRenameDraft]  = useState('');
   const [renaming,     setRenaming]     = useState(false);
+  const [showReimburse, setShowReimburse] = useState(false);
 
   const canAccess      = isSuperAdmin || canManageCashControl;
   const isAdmin        = isSuperAdmin;
@@ -796,10 +1090,13 @@ export default function CashControlDetailPage() {
   const createdByName = adminUser?.name ?? plannerUser?.name ?? '';
   const projectName   = project?.name ?? 'Cash Control';
 
-  const totalIncome  = movements.filter(m => m.type === 'income').reduce((s, m) => s + m.amount, 0);
-  const totalExpense = movements.filter(m => m.type === 'expense').reduce((s, m) => s + m.amount, 0);
-  const saldo        = totalIncome - totalExpense;
+  const totalIncome     = movements.filter(m => m.type === 'income').reduce((s, m) => s + m.amount, 0);
+  const totalExpense    = movements.filter(m => m.type === 'expense').reduce((s, m) => s + m.amount, 0);
+  // SEZIONE 1.1: reimbursements TeQF already paid the planner reduce the negative saldo
+  const totalReimbursed = movements.filter(m => m.type === 'reimbursement').reduce((s, m) => s + m.amount, 0);
+  const saldo        = totalIncome - totalExpense + totalReimbursed;
   const saldoColor   = saldo >= 0 ? '#15803d' : '#991b1b';
+  const canReimburse = isAdmin && saldo < 0 && !isClosed && !project?.deleted;
 
   function openAdd()  { setEditMov(undefined); setShowModal(true); }
   function openEdit(m: TeqfCashMovement) { setEditMov(m); setShowModal(true); }
@@ -825,7 +1122,10 @@ export default function CashControlDetailPage() {
   }
 
   async function handleDelete(m: TeqfCashMovement) {
-    if (!confirm(t('deleteConfirm').replace('{name}', m.description))) return;
+    const msg = m.type === 'reimbursement'
+      ? t('reimburseDeleteConfirm')
+      : t('deleteConfirm').replace('{name}', m.description);
+    if (!confirm(msg)) return;
     try {
       await deleteDoc(doc(db, 'teqfProjects', projectId, 'cashControl', m.id));
       toast.success(t('removed'));
@@ -965,6 +1265,18 @@ export default function CashControlDetailPage() {
         </div>
       </header>
 
+      {/* SEZIONE 1.1: Register reimbursement (superadmin only, negative saldo) */}
+      {canReimburse && (
+        <div className="mx-4 mt-4">
+          <button onClick={() => setShowReimburse(true)}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-semibold active:scale-[0.98] transition-all"
+            style={{ background: '#1d4ed8', color: 'white', fontFamily: 'var(--font-body)' }}>
+            <Banknote className="size-4" />
+            {t('registerReimbursement')}
+          </button>
+        </div>
+      )}
+
       {/* Closed notice */}
       {isClosed && (
         <div className="mx-4 mt-4 rounded-2xl px-5 py-4 flex items-center gap-3"
@@ -995,16 +1307,20 @@ export default function CashControlDetailPage() {
             </p>
           </div>
         ) : movements.map(m => {
-          const isInc = m.type === 'income';
+          const isInc  = m.type === 'income';
+          const isReim = m.type === 'reimbursement';
+          const amountColor = isReim ? '#1d4ed8' : (isInc ? '#15803d' : '#991b1b');
           return (
             <div key={m.id} className="rounded-2xl px-4 py-3"
-              style={{ background: 'white', border: '1px solid var(--tqf-beige-border)' }}>
+              style={{ background: 'white', border: `1px solid ${isReim ? '#bfdbfe' : 'var(--tqf-beige-border)'}` }}>
               <div className="flex items-start gap-3">
                 <div className="size-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: isInc ? '#f0fdf4' : '#fef2f2' }}>
-                  {isInc
-                    ? <TrendingUp  className="size-4" style={{ color: '#15803d' }} />
-                    : <TrendingDown className="size-4" style={{ color: '#991b1b' }} />}
+                  style={{ background: isReim ? '#eff6ff' : (isInc ? '#f0fdf4' : '#fef2f2') }}>
+                  {isReim
+                    ? <Banknote className="size-4" style={{ color: '#1d4ed8' }} />
+                    : isInc
+                      ? <TrendingUp  className="size-4" style={{ color: '#15803d' }} />
+                      : <TrendingDown className="size-4" style={{ color: '#991b1b' }} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate"
@@ -1030,7 +1346,7 @@ export default function CashControlDetailPage() {
                     <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                       {fmtLocalDate(m.date, lang)}
                     </span>
-                    {m.paymentMethod && isInc && (
+                    {m.paymentMethod && (isInc || isReim) && (
                       <span className="text-xs" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
                         · {t(m.paymentMethod)}
                       </span>
@@ -1044,6 +1360,12 @@ export default function CashControlDetailPage() {
                       <span className="text-xs" style={{ color: '#92400e', fontFamily: 'var(--font-body)' }}>· ⏳</span>
                     )}
                   </div>
+                  {/* Reimbursement note */}
+                  {isReim && m.note && (
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--tqf-muted)', fontFamily: 'var(--font-body)' }}>
+                      {m.note}
+                    </p>
+                  )}
                   {/* Photo thumbnails from Firestore */}
                   {m.photoUrls && m.photoUrls.length > 0 && (
                     <div className="flex gap-1 mt-1.5 flex-wrap">
@@ -1063,20 +1385,32 @@ export default function CashControlDetailPage() {
                       )}
                     </div>
                   )}
+                  {/* Reimbursement proof of payment */}
+                  {isReim && m.receiptUrl && (
+                    <div className="mt-1.5">
+                      <a href={m.receiptUrl} target="_blank" rel="noopener noreferrer"
+                        className="size-10 rounded-lg overflow-hidden flex-shrink-0 block"
+                        style={{ border: '1px solid #bfdbfe' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={m.receiptUrl} alt="comprobante" className="size-full object-cover" />
+                      </a>
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   {/* PART-3: MXN amount */}
-                  <p className="text-sm font-bold"
-                    style={{ color: isInc ? '#15803d' : '#991b1b', fontFamily: 'var(--font-body)' }}>
-                    {isInc ? '+' : '-'}{formatCurrency(m.amount)}
+                  <p className="text-sm font-bold" style={{ color: amountColor, fontFamily: 'var(--font-body)' }}>
+                    {isInc || isReim ? '+' : '-'}{formatCurrency(m.amount)}
                   </p>
-                  {canModify && (
+                  {canModify && (isReim ? isAdmin : true) && (
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(m)}
-                        className="p-1.5 rounded-lg"
-                        style={{ color: 'var(--tqf-bordeaux)', background: 'var(--tqf-cipria-light)' }}>
-                        <Pencil className="size-3" />
-                      </button>
+                      {!isReim && (
+                        <button onClick={() => openEdit(m)}
+                          className="p-1.5 rounded-lg"
+                          style={{ color: 'var(--tqf-bordeaux)', background: 'var(--tqf-cipria-light)' }}>
+                          <Pencil className="size-3" />
+                        </button>
+                      )}
                       <button onClick={() => handleDelete(m)}
                         className="p-1.5 rounded-lg"
                         style={{ color: '#991b1b', background: '#fef2f2' }}>
@@ -1153,6 +1487,18 @@ export default function CashControlDetailPage() {
           saldo={saldo}
           onClose={() => setShowClose(false)}
           onClosed={() => { /* reportEmailFailed persisted in Firestore via onSnapshot */ }}
+        />
+      )}
+
+      {showReimburse && (
+        <ReimbursementModal
+          projectId={projectId}
+          saldo={saldo}
+          createdBy={createdBy}
+          createdByName={createdByName}
+          onClose={() => setShowReimburse(false)}
+          onSaved={() => setShowReimburse(false)}
+          lang={lang}
         />
       )}
 
