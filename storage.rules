@@ -104,6 +104,22 @@ service firebase.storage {
             || request.auth.token.role == 'superadmin');
     }
 
+    // Wedding-level Moodboard (PDF + image, max 20 MB) — XB + both + SuperAdmin.
+    // Unique per wedding (not per function).
+    match /weddings/{weddingId}/moodboard/{fileName} {
+      allow write: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin')
+        && request.resource.size < 20 * 1024 * 1024
+        && (request.resource.contentType.matches('application/pdf')
+            || request.resource.contentType.matches('image/.*'));
+      allow delete: if request.auth != null
+        && (request.auth.token.team == 'XB'
+            || request.auth.token.team == 'both'
+            || request.auth.token.role == 'superadmin');
+    }
+
     // Layouts + Moodboard (PDF + image, max 20 MB) — XB + both + SuperAdmin
     match /weddings/{weddingId}/functions/{functionId}/layouts/{fileName} {
       allow write: if request.auth != null
